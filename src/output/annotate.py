@@ -14,12 +14,14 @@ import cv2
 import numpy as np
 
 from ..algo.detections import Detections
+from ..data.frames import DEFAULT_FPS
 from ..data.sources import IMAGES, VIDEO
 
 BOX_COLOUR = (0, 255, 0)  # BGR
 BOX_THICKNESS = 2
 LABEL_SCALE = 0.5
 LABEL_MIN_Y = 12  # keeps the text on-frame for boxes near the top edge
+LABEL_Y_OFFSET = 6  # px above the box top edge
 
 
 def draw(frame: np.ndarray, dets: Detections, names) -> np.ndarray:
@@ -29,7 +31,7 @@ def draw(frame: np.ndarray, dets: Detections, names) -> np.ndarray:
         p1, p2 = (int(x1), int(y1)), (int(x2), int(y2))
         cv2.rectangle(out, p1, p2, BOX_COLOUR, BOX_THICKNESS)
         label = f"{names.get(int(cls), int(cls))} {score:.2f}"
-        cv2.putText(out, label, (p1[0], max(LABEL_MIN_Y, p1[1] - 6)),
+        cv2.putText(out, label, (p1[0], max(LABEL_MIN_Y, p1[1] - LABEL_Y_OFFSET)),
                     cv2.FONT_HERSHEY_SIMPLEX, LABEL_SCALE, BOX_COLOUR, 1, cv2.LINE_AA)
     return out
 
@@ -100,7 +102,7 @@ def open_sink(kind: str, out_dir: Path, save_frames: bool,
     if not save_frames:
         return NullSink()
     if kind == VIDEO:
-        return VideoSink(out_dir / "annotated.mp4", fps or 30.0)
+        return VideoSink(out_dir / "annotated.mp4", fps or DEFAULT_FPS)
     if kind == IMAGES:
         return ImageDirSink(out_dir / "annotated")
     raise ValueError(f"Unknown source kind: {kind}")

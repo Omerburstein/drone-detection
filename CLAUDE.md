@@ -56,7 +56,11 @@ src/algo/     config.py     InferenceConfig
               detections.py Detections
 src/output/   recording.py  RunRecorder (JSONL + counters)
               annotate.py   AnnotationSink -> VideoSink / ImageDirSink / NullSink
-src/baseline_detect.py      CLI: parser, the single run loop, wiring
+src/eval/     labels.py     EvalFrame; ground truth paired with recorded preds
+              metrics.py    IoU matching, AP, the Metrics record
+              report.py     the printed metric block
+src/baseline_detect.py      CLI: inference — parser, run loop, wiring
+src/evaluate.py             CLI: scoring a recorded run against labels
 ```
 
 **`src/data/` is source code, not a dataset.** The gitignore rules for `data/`,
@@ -80,10 +84,20 @@ Load-bearing points:
   one place. Extend it rather than writing output elsewhere.
 - `AnnotationSink` — owns drawing as well as writing, so `--no-save-frames` skips the
   draw work entirely instead of rendering frames nobody sees.
+- `Detections.to_records` / `.from_records` — the `detections.jsonl` row schema, defined
+  once. `RunRecorder` writes through the first, `src.eval.labels` reads through the
+  second. Change the row format here, not at either end.
+- `Metrics` — frozen dataclass whose **field order is the `--json-out` schema** the
+  ledger cites. Append fields; never reorder them.
 
 `src/evaluate.py` is the second CLI: it reads a run's JSONL and scores it against
-labels. It shares the package but not the inference path — evaluation depends only on
-the recorded output, so it stays runnable without torch or a checkpoint present.
+labels. It shares the package but not the inference path — `src/eval/` imports only
+numpy, PIL and `algo.detections`, so evaluation stays runnable without torch or a
+checkpoint present. Keep it that way.
+
+Note `src.data.frames.Frame` (a frame going *into* the detector) and
+`src.eval.labels.EvalFrame` (one coming back out with labels attached) are different
+types on purpose.
 
 ### Tiled inference — why it exists
 

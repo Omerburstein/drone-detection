@@ -11,6 +11,7 @@ from ..algo.detections import Detections
 
 BBOX_DECIMALS = 1  # sub-pixel precision is noise at these target sizes
 CONF_DECIMALS = 4
+MIN_ELAPSED = 1e-9  # seconds; floor for rate division on a run too short to time
 
 
 class RunRecorder:
@@ -43,12 +44,7 @@ class RunRecorder:
         run the misses are the measurement.
         """
         row = dict(key)
-        row["detections"] = [
-            {"bbox": [round(float(v), BBOX_DECIMALS) for v in box],
-             "conf": round(float(score), CONF_DECIMALS),
-             "cls": int(cls)}
-            for box, score, cls in dets
-        ]
+        row["detections"] = dets.to_records(BBOX_DECIMALS, CONF_DECIMALS)
         self._file.write(json.dumps(row) + "\n")
         self.n_frames += 1
         self.n_dets += len(dets)
@@ -61,7 +57,7 @@ class RunRecorder:
 
     def print_progress(self, label: str) -> None:
         """One in-flight progress line, positioned by a caller-supplied label."""
-        rate = self.n_frames / max(self.elapsed, 1e-9)
+        rate = self.n_frames / max(self.elapsed, MIN_ELAPSED)
         print(f"  {label}  |  {self.n_dets} dets  |  {rate:.2f} fps")
 
     def print_summary(self) -> None:
@@ -69,7 +65,7 @@ class RunRecorder:
         elapsed = self.elapsed
         frames = max(self.n_frames, 1)
         print(f"\n{self.n_frames} frames in {elapsed:.1f}s "
-              f"({self.n_frames / max(elapsed, 1e-9):.2f} fps)")
+              f"({self.n_frames / max(elapsed, MIN_ELAPSED):.2f} fps)")
         print(f"{self.n_dets} detections, {self.n_dets / frames:.2f} per frame")
         # Most air-to-air frames contain exactly one drone, so on those datasets the
         # empty-frame rate is a rough miss rate -- the headline baseline number.
