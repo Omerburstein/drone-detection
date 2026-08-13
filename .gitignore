@@ -5,7 +5,20 @@
 /data/
 /weights/
 /runs/
-# ...but keep the metrics, which are small and are what the ledger cites.
+# ...but keep the dataset metadata. MANIFEST/data.yaml/conditions record how a
+# split was built and where it came from; that provenance is worthless if it
+# only exists on the machine that happened to run the conversion. Images and
+# labels stay ignored.
+!/data/
+/data/*
+!/data/processed/
+/data/processed/*
+!/data/processed/*/
+/data/processed/*/*
+!/data/processed/*/MANIFEST.md
+!/data/processed/*/data.yaml
+!/data/processed/*/conditions.json
+# ...and keep the metrics, which are small and are what the ledger cites.
 !/runs/
 /runs/*
 !/runs/*/

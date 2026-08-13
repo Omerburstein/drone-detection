@@ -13,6 +13,9 @@ small and fast against sky and clutter.
   every metric reported.
 - **[docs/experiments.md](docs/experiments.md)** — the experiment ledger. Every run,
   including the failed ones.
+- **[docs/prepare_ardmav.md](docs/prepare_ardmav.md)** — dataset conversion: the official
+  split, the output layout, and the two conventions that fail silently.
+- **[docs/todo.md](docs/todo.md)** — the mission sequence, M1–M7.
 
 ## Setup
 
@@ -110,11 +113,25 @@ target size** — the most diagnostic block in the report. See
 Requires ground-truth labels, so it comes after `dataset-agent` has produced a
 validated, sequence-level split.
 
+## Tests
+
+```
+py -3.13 -m pytest              # full suite
+py -3.13 -m pytest -m "not slow"
+```
+
+The eval math is covered by mutation-verified tests: every deliberate breakage of the
+IoU, matching, and AP code is caught. See [docs/todo.md](docs/todo.md) M1.
+
 ## Status
 
 - [x] Repo scaffold, baseline inference tooling
 - [x] Evaluation harness (IoU matching, AP/mAP, size breakdown)
-- [ ] Acquire a dataset (ARD-MAV via Google Drive is the least friction)
-- [ ] Convert + validate labels, build a sequence-level split
-- [ ] Run the baseline both ways, record EXP-001 / EXP-002
-- [ ] Fine-tune GLAD on a rented GPU
+- [x] ARD-MAV downloaded — 60 videos, 100,423 VOC annotations
+- [x] **M1** — eval math tested and mutation-verified
+- [ ] **M2** — convert + validate the official 15-video test split
+- [ ] **M3** — EXP-001 / EXP-002: off-the-shelf detector, whole-frame and tiled
+- [ ] **M4** — EXP-003: GLAD released weights, no training
+- [ ] **M5** — Pd / FAR / size-normalised localisation error
+- [ ] **M6** — edge budget and board decision
+- [ ] **M7** — fine-tune GLAD on a rented GPU
