@@ -130,4 +130,4 @@ These have already cost real effort. Do not rediscover them.
 recommendations. They split at the data/model boundary.
 
 `.claude/skills/` — `/clean-up` (quality only, not a bug hunt), `/test-creation`,
-`/eval`.
+`/eval`, `/todo` (captures a task in `docs/todo.md`; capture only, does not do the work).
