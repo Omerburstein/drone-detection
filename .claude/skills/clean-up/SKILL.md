@@ -21,7 +21,7 @@ cleanup; a cleanup diff that also changes behaviour is unreviewable.
 Never widen beyond the resolved scope. A cleanup that sprawls across untouched files
 buries the intended change.
 
-## The five checks
+## The six checks
 
 Work through these in order. Order matters — deleting dead code first means you don't
 waste effort refactoring something that shouldn't exist.
@@ -54,7 +54,42 @@ together.** Two superficially similar blocks that evolve independently are not
 duplication, and merging them creates a coupling that later has to be undone. State
 which of the two cases you are invoking when you extract.
 
-### 3. Single purpose, small units
+### 3. Magic numbers
+
+A bare literal carrying meaning is a parameter that was never given a name. Promote it,
+in this order of preference:
+
+1. **A parameter** — on `InferenceConfig`, or a function argument with a default. This
+   is the right answer for anything that changes the *result*: confidence and NMS
+   thresholds, `imgsz`, tile size and overlap, stride, frame budgets.
+2. **A module-level named constant** — for a fixed value the caller has no business
+   changing (box line thickness, JSONL schema version, a progress-log interval).
+3. **An inline comment giving the unit or source** — the fallback when the value is
+   genuinely local and naming it would not help.
+
+**On this project the first option matters more than usual.** A threshold hardcoded
+inside `algo/` is a parameter that never reaches the CLI, never lands in the run record,
+and so never appears in the ledger entry — which makes the run unreproducible and any
+comparison against it invalid. If a literal would change a metric, it belongs in
+`InferenceConfig` and in the recorded run parameters, not in a function body.
+
+Not every number is magic. Leave these alone:
+
+- `0`, `1`, `-1`, `2` used as indices, counts, or offsets.
+- Values fixed by an external format or convention — `255` for 8-bit pixel range, `3`
+  for BGR channels, `100` for a percentage.
+- A number used exactly once, immediately beside the name that explains it
+  (`fps=30` in a call).
+
+The signal is **meaning, not digits**: `if conf > 0.25` hides a decision, `range(3)`
+over colour channels does not. Extracting a constant named `ZERO_POINT_TWO_FIVE` is
+worse than the literal — if you cannot name what it *means*, comment the source instead.
+
+When you promote a literal to a parameter, keep the current value as the default so the
+cleanup stays behaviour-preserving, and say in your summary which values became
+parameters — the user may want them exposed on the CLI as a follow-up.
+
+### 4. Single purpose, small units
 
 - **Functions** doing more than one thing get split. The signal is not raw line count
   but the presence of several distinct responsibilities — a function that parses *and*
@@ -66,7 +101,7 @@ which of the two cases you are invoking when you extract.
 Do not split purely to hit a line target. A cohesive 60-line function that reads
 straight through is better than three fragments that force the reader to jump.
 
-### 4. OOP structure
+### 5. OOP structure
 
 Apply where it earns its place:
 
@@ -86,7 +121,7 @@ functional. Use `@dataclass` for records rather than hand-written `__init__`
 boilerplate. If a proposed OOP change makes the code longer without making it more
 testable or less coupled, skip it and say why.
 
-### 5. Descriptions
+### 6. Descriptions
 
 Every module, class, and public function gets a docstring. Cover **what it is for and
 why it exists** — the signature already says what the arguments are, so restating them
@@ -97,9 +132,9 @@ def tile_origins(total: int, tile: int, overlap: float) -> list[int]:
     """Start coordinates for overlapping tiles covering `total` pixels."""
 ```
 
-Non-obvious constants, magic numbers, and units get an inline comment. A comment
-explaining *why* is valuable; one restating *what* the line does is noise and should be
-deleted, not preserved.
+Constants that survived check 3 get an inline comment giving their unit or source. A
+comment explaining *why* is valuable; one restating *what* the line does is noise and
+should be deleted, not preserved.
 
 Private helpers whose names already say it need no docstring.
 
@@ -107,7 +142,7 @@ Private helpers whose names already say it need no docstring.
 
 1. Resolve scope. State what you are cleaning before you touch anything.
 2. Read the files in scope fully. Do not clean code you have not read.
-3. Run the five checks, collecting findings.
+3. Run the six checks, collecting findings.
 4. Apply the fixes.
 5. **Verify behaviour is unchanged** — run the test suite if one exists; otherwise
    exercise the affected entry point (for this repo, `-m dronedet.baseline_detect --help`
