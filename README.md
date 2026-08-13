@@ -61,7 +61,6 @@ src/        the package — run entry points with `py -3.13 -m src.<module>`
   data/       source classification, frame decoding, striding, frame budgets
   algo/       detector config, tiled inference, NMS merging, result type
   output/     JSONL record, run counters, annotated media
-scripts/    standalone tools that read a run's output (evaluate.py)
 data/       datasets (gitignored — never commit)
 weights/    model checkpoints (gitignored)
 runs/       inference output (gitignored)
@@ -100,7 +99,7 @@ same project without stepping on each other.
 ## Step 2 — evaluate
 
 ```
-py -3.13 scripts/evaluate.py --pred runs/exp001/detections.jsonl \
+py -3.13 -m src.evaluate --pred runs/exp001/detections.jsonl \
     --labels data/processed/ARD-MAV/labels/val --json-out runs/exp001/metrics.json
 ```
 

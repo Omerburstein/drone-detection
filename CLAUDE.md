@@ -81,8 +81,9 @@ Load-bearing points:
 - `AnnotationSink` — owns drawing as well as writing, so `--no-save-frames` skips the
   draw work entirely instead of rendering frames nobody sees.
 
-`scripts/evaluate.py` is a separate standalone tool: it reads the JSONL and compares
-against labels, importing nothing from `src`.
+`src/evaluate.py` is the second CLI: it reads a run's JSONL and scores it against
+labels. It shares the package but not the inference path — evaluation depends only on
+the recorded output, so it stays runnable without torch or a checkpoint present.
 
 ### Tiled inference — why it exists
 

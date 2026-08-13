@@ -6,7 +6,7 @@ what stop the project re-treading dead ends.
 An entry missing weights, split rule, or the exact command is incomplete. Mark unknown
 fields `UNKNOWN` explicitly rather than omitting them.
 
-Maintained by `algo-agent`. Metrics come from `scripts/evaluate.py` (see
+Maintained by `algo-agent`. Metrics come from `src.evaluate` (see
 [evaluate.md](evaluate.md)) — cite the `--json-out` file, not a terminal screenshot.
 
 ---

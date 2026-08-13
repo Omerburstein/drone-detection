@@ -7,7 +7,7 @@ description: Score a detection run against ground truth and interpret the result
 
 Turn a `detections.jsonl` into trustworthy numbers, then say what they mean.
 
-Wraps `scripts/evaluate.py`. Do not hand-roll metrics — if the script lacks something,
+Wraps `src.evaluate`. Do not hand-roll metrics — if the script lacks something,
 extend it so every run is scored identically. Metrics computed two different ways are
 not comparable, and that defeats the point of measuring.
 
@@ -38,7 +38,7 @@ it *alongside* recall, never instead of it.
 ## Running
 
 ```
-py -3.13 scripts/evaluate.py --pred runs/<exp>/detections.jsonl \
+py -3.13 -m src.evaluate --pred runs/<exp>/detections.jsonl \
     --labels data/processed/<dataset>/labels/val \
     [--iou 0.5] [--frame-size W H] [--json-out runs/<exp>/metrics.json]
 ```

@@ -79,7 +79,7 @@ differ). For each:
 3. Convert, then **visually verify**: render boxes onto a random sample of ~20 frames
    into `data/processed/<dataset>/_verify/` and inspect. This catches convention errors
    that numeric validation cannot. Do this every time, without exception.
-4. Write the conversion as a re-runnable script under `scripts/`, never as ad-hoc
+4. Write the conversion as a re-runnable module under `src/`, never as ad-hoc
    shell. It will need to run again.
 
 ## Working constraints

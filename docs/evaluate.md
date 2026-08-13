@@ -1,9 +1,9 @@
-# `scripts/evaluate.py` — reference
+# `src.evaluate` — reference
 
 Scores a `detections.jsonl` against ground-truth labels using the COCO protocol.
 
 ```
-py -3.13 scripts/evaluate.py --pred <jsonl> --labels <dir> [options]
+py -3.13 -m src.evaluate --pred <jsonl> --labels <dir> [options]
 ```
 
 ## Parameters

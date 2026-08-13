@@ -10,12 +10,12 @@ Everything below follows the COCO protocol: greedy matching in descending
 confidence order, 101-point interpolated AP, and mAP averaged over IoU
 thresholds 0.50:0.05:0.95.
 
-Consumes the `detections.jsonl` written by baseline_detect.py and YOLO-format
+Consumes the `detections.jsonl` written by `src.baseline_detect` and YOLO-format
 label files (`<cls> <xc> <yc> <w> <h>`, normalised).
 
 Example
 -------
-    py -3.13 scripts/evaluate.py \
+    py -3.13 -m src.evaluate \
         --pred runs/exp001/detections.jsonl \
         --labels data/processed/ARD-MAV/labels/val
 """
