@@ -1,12 +1,17 @@
-# `scripts/baseline_detect.py` — reference
+# `dronedet.baseline_detect` — reference
 
 Runs a pretrained detector over video or images and records what it finds. This is
 step 1 of the plan: measure how far off-the-shelf weights get *before* training
 anything, so later work has a number to beat.
 
 ```
-py -3.13 scripts/baseline_detect.py --weights <path> --source <path> [options]
+py -3.13 -m dronedet.baseline_detect --weights <path> --source <path> [options]
 ```
+
+Run it from the repository root, which is what puts `dronedet` on the import path.
+The implementation is split across `dronedet/data` (frame sources), `dronedet/algo`
+(inference and tiling) and `dronedet/output` (JSONL and annotated media); this page
+documents the CLI, which is the stable surface.
 
 ---
 
@@ -200,21 +205,21 @@ after `dataset-agent` has produced a validated split.
 
 ```bash
 # Quick look — is anything working at all?
-py -3.13 scripts/baseline_detect.py --weights weights/drone.pt \
+py -3.13 -m dronedet.baseline_detect --weights weights/drone.pt \
     --source data/ARD-MAV/video01.mp4 --stride 10 --max-frames 100 --conf 0.15
 
 # Honest whole-frame baseline at a sane resolution
-py -3.13 scripts/baseline_detect.py --weights weights/drone.pt \
+py -3.13 -m dronedet.baseline_detect --weights weights/drone.pt \
     --source data/ARD-MAV/video01.mp4 --stride 5 --imgsz 1280 --conf 0.15 \
     --out runs/exp001_whole_1280
 
 # Tiled comparison — same video, same threshold, only the strategy differs
-py -3.13 scripts/baseline_detect.py --weights weights/drone.pt \
+py -3.13 -m dronedet.baseline_detect --weights weights/drone.pt \
     --source data/ARD-MAV/video01.mp4 --stride 20 --max-frames 100 --conf 0.15 \
     --tile --tile-size 640 --out runs/exp002_tiled
 
 # Numbers only, no annotated output
-py -3.13 scripts/baseline_detect.py --weights weights/drone.pt \
+py -3.13 -m dronedet.baseline_detect --weights weights/drone.pt \
     --source data/Det-Fly/images --conf 0.15 --no-save-frames \
     --out runs/exp003_detfly
 ```

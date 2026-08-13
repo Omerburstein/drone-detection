@@ -33,7 +33,7 @@ Fetch single-class drone weights (see [docs/research-notes.md](docs/research-not
 for the shortlist) into `weights/`, then:
 
 ```
-py -3.13 scripts/baseline_detect.py \
+py -3.13 -m dronedet.baseline_detect \
     --weights weights/<drone-weights>.pt \
     --source data/ARD-MAV/video01.mp4 \
     --stride 5 --conf 0.15
@@ -57,13 +57,21 @@ It is much slower. Measured here on 720p with `yolov8n`: **11 fps whole-frame vs
 ## Layout
 
 ```
+dronedet/   the package — run entry points with `py -3.13 -m dronedet.<module>`
+  data/       source classification, frame decoding, striding, frame budgets
+  algo/       detector config, tiled inference, NMS merging, result type
+  output/     JSONL record, run counters, annotated media
 data/       datasets (gitignored — never commit)
 weights/    model checkpoints (gitignored)
 runs/       inference output (gitignored)
-scripts/    tooling
 docs/       research notes, hardware constraints
 .claude/    project skills and agents (committed)
 ```
+
+`dronedet` splits along the same data/model boundary the two agents own, so
+`dataset-agent` and `algo-agent` can work without colliding. Nothing in `algo/`
+touches the filesystem — it takes arrays and returns `Detections`, so a model
+experiment can drive it directly without going through the CLI.
 
 ## Claude Code tooling
 

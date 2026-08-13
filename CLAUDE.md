@@ -17,7 +17,8 @@ machine but runs ahead of the torch/ultralytics wheel matrix.
 py -3.13 -m pip install -r requirements.txt
 
 # Baseline inference (see docs/baseline_detect.md for every parameter)
-py -3.13 scripts/baseline_detect.py --weights <path> --source <path> [--tile] [--stride N]
+# Run from the repo root -- that is what puts `dronedet` on the import path.
+py -3.13 -m dronedet.baseline_detect --weights <path> --source <path> [--tile] [--stride N]
 
 # Tests (pytest is not yet installed: py -3.13 -m pip install pytest)
 py -3.13 -m pytest
@@ -43,18 +44,40 @@ This machine is **CPU-only**: i7-1255U, 16 GB RAM, Intel Iris Xe, no CUDA
 
 ## Architecture
 
-Currently one script plus a documentation and agent layer. `scripts/baseline_detect.py`
-is structured as:
+The `dronedet` package splits along the same data/model boundary the two agents own,
+so dataset work and model work do not collide:
 
-- `InferenceConfig` — frozen dataclass holding detector settings, built via
-  `from_args()` but constructible directly, so the pipeline is callable without a
-  command line.
-- `detect_frame()` → dispatches to whole-frame or `detect_tiled()`. Both return the
-  same `(xyxy, conf, cls)` tuple in **absolute original-frame pixels**, so the two
-  modes produce directly comparable output.
-- `RunRecorder` — context manager owning JSONL output and the run's counters. Both the
-  video and image paths funnel through it, so the record schema and statistics are
-  defined in exactly one place. Extend it rather than writing output elsewhere.
+```
+dronedet/data/     frames.py    FrameSource -> Frame; video decode, striding, budgets
+                   sources.py   classify --source as video or images
+dronedet/algo/     config.py    InferenceConfig
+                   detector.py  load_model, detect_frame, detect_tiled
+                   tiling.py    tile_origins, crop_grid, merge_boxes
+                   detections.py Detections
+dronedet/output/   recording.py RunRecorder (JSONL + counters)
+                   annotate.py  AnnotationSink -> VideoSink / ImageDirSink / NullSink
+dronedet/baseline_detect.py     CLI: parser, the single run loop, wiring
+```
+
+Load-bearing points:
+
+- `Detections` — frozen dataclass of `(boxes, scores, classes)`, always in **absolute
+  original-frame pixels**. Tiled results are mapped back before they leave `algo`, so
+  tiled and whole-frame output are directly comparable. Pass this, not loose tuples.
+- `InferenceConfig` — frozen dataclass built via `from_args()` but constructible
+  directly, so inference is callable from a notebook or test without a command line.
+  Nothing under `algo/` touches the filesystem.
+- `FrameSource` — video and stills differ in striding, progress cadence, and JSONL key;
+  each source owns those decisions and yields a fully-described `Frame`. That is what
+  lets **one** run loop serve both. Put per-source behaviour here, not in the loop.
+- `RunRecorder` — context manager owning JSONL output and the run's counters. Every
+  frame funnels through it, so the record schema and statistics are defined in exactly
+  one place. Extend it rather than writing output elsewhere.
+- `AnnotationSink` — owns drawing as well as writing, so `--no-save-frames` skips the
+  draw work entirely instead of rendering frames nobody sees.
+
+`scripts/evaluate.py` is a separate standalone tool: it reads the JSONL and compares
+against labels, importing nothing from `dronedet`.
 
 ### Tiled inference — why it exists
 
