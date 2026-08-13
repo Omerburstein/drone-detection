@@ -2,6 +2,12 @@
 data/
 weights/
 runs/
+# ...but keep the metrics, which are small and are what the ledger cites.
+!runs/
+runs/*
+!runs/*/
+runs/*/*
+!runs/*/metrics.json
 *.pt
 *.onnx
 *.engine
