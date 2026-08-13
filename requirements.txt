@@ -1,0 +1,17 @@
+# Target: Python 3.13 (3.14 is ahead of the torch/ultralytics wheel matrix -- use `py -3.13`)
+# Already present in the global 3.13 environment at the versions noted.
+
+ultralytics>=8.3.235
+torch>=2.9.1
+torchvision>=0.24.1
+opencv-python>=4.12
+numpy>=2.2
+scipy>=1.16
+pandas>=3.0
+matplotlib>=3.10
+
+# Optional, for pulling single-class drone weights off the Hub
+huggingface-hub>=0.26
+
+# Optional, for Intel Iris Xe iGPU inference acceleration (see docs/hardware.md)
+# openvino>=2025.0

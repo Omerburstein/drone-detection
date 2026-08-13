@@ -1,0 +1,23 @@
+# Datasets and weights are large and/or license-restricted -- never commit them.
+data/
+weights/
+runs/
+*.pt
+*.onnx
+*.engine
+*.xml
+*.bin
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
