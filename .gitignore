@@ -1,6 +1,7 @@
 # Datasets and weights are large and/or license-restricted -- never commit them.
 # Leading slashes anchor these to the repo root: an unanchored `data/` also
-# matches source directories like `dronedet/data/`, which silently drops code.
+# matches source directories like `src/data/`, which silently drops code.
+# Keep the slashes -- `src/data/` is a tracked package, not a dataset.
 /data/
 /weights/
 /runs/

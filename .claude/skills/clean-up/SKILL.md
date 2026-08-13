@@ -145,7 +145,7 @@ Private helpers whose names already say it need no docstring.
 3. Run the six checks, collecting findings.
 4. Apply the fixes.
 5. **Verify behaviour is unchanged** — run the test suite if one exists; otherwise
-   exercise the affected entry point (for this repo, `-m dronedet.baseline_detect --help`
+   exercise the affected entry point (for this repo, `-m src.baseline_detect --help`
    at minimum, or a short run against sample data). Cleanup that breaks the code is
    worse than no cleanup.
 6. Summarise as a short list grouped by check, and state explicitly anything you chose

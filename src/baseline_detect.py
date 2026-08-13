@@ -13,11 +13,11 @@ resize". Both numbers are worth having.
 Examples
 --------
     # Whole-frame baseline over every 5th frame of a video
-    py -3.13 -m dronedet.baseline_detect --weights weights/yolov8s_eo_drone.pt \
+    py -3.13 -m src.baseline_detect --weights weights/yolov8s_eo_drone.pt \
         --source data/ARD-MAV/video01.mp4 --stride 5
 
     # Tiled inference on 4K Det-Fly stills
-    py -3.13 -m dronedet.baseline_detect --weights weights/yolov8s_eo_drone.pt \
+    py -3.13 -m src.baseline_detect --weights weights/yolov8s_eo_drone.pt \
         --source data/Det-Fly/images --tile --tile-size 640 --conf 0.15
 """
 
@@ -37,7 +37,7 @@ from .output.recording import RunRecorder
 
 def build_parser() -> argparse.ArgumentParser:
     """Command-line interface for the baseline run."""
-    ap = argparse.ArgumentParser(prog="dronedet.baseline_detect", description=__doc__,
+    ap = argparse.ArgumentParser(prog="src.baseline_detect", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--weights", required=True,
                     help="Path to a .pt file, or an ultralytics model name.")

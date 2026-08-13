@@ -17,8 +17,8 @@ machine but runs ahead of the torch/ultralytics wheel matrix.
 py -3.13 -m pip install -r requirements.txt
 
 # Baseline inference (see docs/baseline_detect.md for every parameter)
-# Run from the repo root -- that is what puts `dronedet` on the import path.
-py -3.13 -m dronedet.baseline_detect --weights <path> --source <path> [--tile] [--stride N]
+# Run from the repo root -- that is what puts `src` on the import path.
+py -3.13 -m src.baseline_detect --weights <path> --source <path> [--tile] [--stride N]
 
 # Tests (pytest is not yet installed: py -3.13 -m pip install pytest)
 py -3.13 -m pytest
@@ -44,20 +44,25 @@ This machine is **CPU-only**: i7-1255U, 16 GB RAM, Intel Iris Xe, no CUDA
 
 ## Architecture
 
-The `dronedet` package splits along the same data/model boundary the two agents own,
+The `src` package splits along the same data/model boundary the two agents own,
 so dataset work and model work do not collide:
 
 ```
-dronedet/data/     frames.py    FrameSource -> Frame; video decode, striding, budgets
-                   sources.py   classify --source as video or images
-dronedet/algo/     config.py    InferenceConfig
-                   detector.py  load_model, detect_frame, detect_tiled
-                   tiling.py    tile_origins, crop_grid, merge_boxes
-                   detections.py Detections
-dronedet/output/   recording.py RunRecorder (JSONL + counters)
-                   annotate.py  AnnotationSink -> VideoSink / ImageDirSink / NullSink
-dronedet/baseline_detect.py     CLI: parser, the single run loop, wiring
+src/data/     frames.py     FrameSource -> Frame; video decode, striding, budgets
+              sources.py    classify --source as video or images
+src/algo/     config.py     InferenceConfig
+              detector.py   load_model, detect_frame, detect_tiled
+              tiling.py     tile_origins, crop_grid, merge_boxes
+              detections.py Detections
+src/output/   recording.py  RunRecorder (JSONL + counters)
+              annotate.py   AnnotationSink -> VideoSink / ImageDirSink / NullSink
+src/baseline_detect.py      CLI: parser, the single run loop, wiring
 ```
+
+**`src/data/` is source code, not a dataset.** The gitignore rules for `data/`,
+`weights/` and `runs/` are anchored with a leading slash for exactly this reason —
+an unanchored `data/` matches at any depth and silently drops the package. Do not
+remove those slashes.
 
 Load-bearing points:
 
@@ -77,7 +82,7 @@ Load-bearing points:
   draw work entirely instead of rendering frames nobody sees.
 
 `scripts/evaluate.py` is a separate standalone tool: it reads the JSONL and compares
-against labels, importing nothing from `dronedet`.
+against labels, importing nothing from `src`.
 
 ### Tiled inference — why it exists
 
@@ -112,8 +117,9 @@ These have already cost real effort. Do not rediscover them.
 
 ## Conventions
 
-- `data/`, `weights/`, and `runs/` are gitignored — **never commit datasets or
-  checkpoints**. `.claude/` and all docs *are* committed.
+- `/data/`, `/weights/`, and `/runs/` are gitignored — **never commit datasets or
+  checkpoints**. `.claude/` and all docs *are* committed. The rules are root-anchored,
+  so `src/data/` is tracked normally.
 - `data/raw/` is immutable. Transforms read from it and write to `data/processed/`, so
   any step can be re-derived.
 - Give every experiment its own `--out` directory; runs overwrite in place otherwise.
