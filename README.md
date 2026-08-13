@@ -9,6 +9,10 @@ small and fast against sky and clutter.
   where to rent a GPU for the training step.
 - **[docs/baseline_detect.md](docs/baseline_detect.md)** — full reference for every
   parameter of the baseline script, the output format, and how to read the metrics.
+- **[docs/evaluate.md](docs/evaluate.md)** — evaluation parameters and a glossary of
+  every metric reported.
+- **[docs/experiments.md](docs/experiments.md)** — the experiment ledger. Every run,
+  including the failed ones.
 
 ## Setup
 
@@ -69,6 +73,7 @@ Skills — invoke with `/<name>`, both take an optional file or folder to scope 
 | --- | --- |
 | `/clean-up` | Unused imports, duplication, oversized/multi-purpose functions and files, OOP structure, missing docstrings. Quality only — not a bug hunt. |
 | `/test-creation` | Audits unit + integration coverage and writes the missing tests. |
+| `/eval` | Scores a run against ground truth and interprets the result. |
 
 Agents — delegated with the Agent tool:
 
@@ -80,9 +85,25 @@ Agents — delegated with the Agent tool:
 The two agents split cleanly at the data/model boundary, so they can run against the
 same project without stepping on each other.
 
+## Step 2 — evaluate
+
+```
+py -3.13 scripts/evaluate.py --pred runs/exp001/detections.jsonl \
+    --labels data/processed/ARD-MAV/labels/val --json-out runs/exp001/metrics.json
+```
+
+Reports AP@0.50, mAP@0.50:0.95, precision/recall, mean IoU, and **recall broken down by
+target size** — the most diagnostic block in the report. See
+[docs/evaluate.md](docs/evaluate.md) for the metric glossary.
+
+Requires ground-truth labels, so it comes after `dataset-agent` has produced a
+validated, sequence-level split.
+
 ## Status
 
 - [x] Repo scaffold, baseline inference tooling
+- [x] Evaluation harness (IoU matching, AP/mAP, size breakdown)
 - [ ] Acquire a dataset (ARD-MAV via Google Drive is the least friction)
-- [ ] Run the baseline, record the number
+- [ ] Convert + validate labels, build a sequence-level split
+- [ ] Run the baseline both ways, record EXP-001 / EXP-002
 - [ ] Fine-tune GLAD on a rented GPU
