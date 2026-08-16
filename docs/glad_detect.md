@@ -114,8 +114,23 @@ like-for-like comparison available.
 
 **Read precision, recall and F1. Ignore the AP.** GLAD emits no confidence — its output
 rows are `[frame, x, y, w, h]`, and its branches are not on a common scale — so every box
-is recorded at 1.0. A ranking metric over a constant score is degenerate. This is a
-single-operating-point pipeline and it can only be scored honestly as one.
+is recorded at 1.0. A ranking metric over a constant score is degenerate: on EXP-004 the
+reported AP@0.50 of 0.705 is just P×R (0.856 × 0.771 = 0.660) plus interpolation slack,
+carrying no information the other two columns do not. This is a single-operating-point
+pipeline and it can only be scored honestly as one.
+
+**Sweep `--iou` before concluding anything from a gap.** The paper does not state its
+matching threshold, and on targets this small the choice dominates. From EXP-004, the same
+`detections.jsonl` re-scored:
+
+| Category | @0.50 | @0.40 | @0.30 | Published |
+| --- | --- | --- | --- | --- |
+| ordinary | .987/.965 | .995/.973 | .997/.975 | 0.99/0.96 |
+| complex | .907/.828 | .975/.890 | .993/.907 | 0.94/0.86 |
+| small_mav | .642/.522 | **.869/.707** | .955/.777 | **0.82/0.67** |
+
+23 points of precision in `small_mav` sit between two defensible thresholds. Re-scoring is
+free — the JSONL is persisted — so there is no reason not to look.
 
 ## Which frames are scored
 

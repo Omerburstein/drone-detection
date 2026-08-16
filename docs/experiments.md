@@ -114,11 +114,11 @@ some general benefit.
 
 Added by M2a and re-scored from the persisted JSONL, so no inference was re-run.
 
-| Category | gt | EXP-001 P/R | EXP-002 P/R | EXP-003 P/R | GLAD published P/R/F1 |
-| --- | --- | --- | --- | --- | --- |
-| ordinary | 924 | .082 / .021 | **.126 / .125** | .072 / **.266** | 0.99 / 0.96 / 0.97 |
-| complex | 957 | .076 / .016 | .026 / .042 | .022 / .108 | 0.94 / 0.86 / 0.90 |
-| small_mav | 935 | **.000 / .000** | **.000 / .000** | .0005 / .0021 | 0.82 / 0.67 / 0.73 |
+| Category | gt | EXP-001 P/R | EXP-002 P/R | EXP-003 P/R | GLAD measured (EXP-004) | GLAD published |
+| --- | --- | --- | --- | --- | --- | --- |
+| ordinary | 924 | .082 / .021 | **.126 / .125** | .072 / **.266** | .987 / .965 | 0.99 / 0.96 |
+| complex | 957 | .076 / .016 | .026 / .042 | .022 / .108 | .907 / .828 | 0.94 / 0.86 |
+| small_mav | 935 | **.000 / .000** | **.000 / .000** | .0005 / .0021 | .642 / .522 | 0.82 / 0.67 |
 
 Two things the aggregate was hiding:
 
@@ -133,8 +133,116 @@ Two things the aggregate was hiding:
 
 These are not like-for-like with GLAD's column: ours are stride-10 stills scored on
 2,834 frames, GLAD's are full-rate video with motion. The gap is large enough to be
-meaningful anyway, but it is not a measured head-to-head — M4a is.
+meaningful anyway, but it is not a measured head-to-head — EXP-004 is.
 
 **Do not compare these to the published 0.53.** That figure is YOLOv5 *trained on*
 ARD100 — a fine-tuned baseline, not an off-the-shelf model. The plan originally cited it
 as the expected value for EXP-001, which was an error.
+
+---
+
+## EXP-004 — GLAD's released weights on ARD-MAV, as a harness check
+- **Date:** 2026-08-16
+- **Question:** Do M1's evaluation math and M2's VOC→YOLO conversion reproduce a published
+  number? **This is a test of our pipeline, not of GLAD.** These weights were trained on
+  ARD-MAV's other 45 videos and the architecture was tuned against this very split, so the
+  result is optimistic by construction and must never be cited as "GLAD scores X for us".
+- **Model / weights:** GLAD (Guo et al., T-ITS 2024), released checkpoints —
+  `third_party/GLAD/weights/{yolov5s_GLAD.pt, yolov5s_GLAD-crop.pt, Net_best.pth}`.
+  CPU port at `src/algo/glad/`; see [glad_detect.md](glad_detect.md).
+- **Data:** ARD-MAV, official GLAD 15-video test split, **every frame** of the original
+  `.mp4`s — 28,337 frames / 28,160 boxes. Contiguous by necessity: both motion branches
+  difference against the previous frame.
+- **Hyperparameters:** all fixed at the released values — GAD conf 0.5, LAD-tracking conf
+  0.1 within 50 px, LAD-acquire conf 0.5 within 10 px, NMS IoU 0.4, 320×320 search region,
+  30-miss fallback. Letterbox fill **black**, reproducing the upstream padding defect.
+- **Hardware:** i7-1255U CPU, 10,602 s (2.9 h), 2.67 fps
+- **Command:** `py -3.13 -m src.glad_detect --pad released --out runs/exp004_glad`
+  then `py -3.13 -m src.evaluate --pred runs/exp004_glad/detections.jsonl --labels
+  data/processed/ARD-MAV/labels/test --conditions data/processed/ARD-MAV/conditions.json
+  --frame-size 1920 1080 --json-out runs/exp004_glad/metrics.json`
+- **Metrics:** `runs/exp004_glad/metrics.json` — P **0.8559** | R **0.7713** | F1 **0.8114**
+  | mean IoU 0.7255 | TP 21,721 / FP 3,658 | recall by size: tiny **0.6624**, small 0.9783,
+  medium 0.9487. AP@0.5 0.7046 — **ignore it**, see caveats.
+
+  | Category | Ours P/R/F1 | Published P/R/F1 |
+  | --- | --- | --- |
+  | ordinary | 0.987 / 0.965 / 0.976 | 0.99 / 0.96 / 0.97 |
+  | complex | 0.907 / 0.828 / 0.866 | 0.94 / 0.86 / 0.90 |
+  | small_mav | 0.642 / 0.522 / 0.576 | 0.82 / 0.67 / 0.73 |
+  | total | 0.856 / 0.771 / 0.811 | 0.91 / 0.81 / 0.86 † |
+
+  † the released code is the paper's `GAD+GMD+LAD+LMD` ablation row, not full GLAD — there
+  is no Kalman filter and the search region is a fixed 320×320, not `L = 300 + 4·T_lost`.
+  That row, not the 0.92/0.82/0.87 headline, is the honest target.
+
+- **Result:** **The harness is validated.** `ordinary` reproduces the published row almost
+  exactly (0.987/0.965 against 0.99/0.96), and the aggregate lands within 0.054 precision
+  and 0.039 recall of the released-code ablation. A conversion or scoring bug could not
+  produce a near-exact `ordinary` row — coordinate, normalisation and frame-numbering
+  errors are all scale-free and would damage every category alike.
+- **The residual gap is a scoring threshold, not a detector.** It is concentrated entirely
+  in the smallest targets, and re-scoring the same JSONL at looser IoU shows why:
+
+  | Category | @0.50 | @0.40 | @0.30 | Published |
+  | --- | --- | --- | --- | --- |
+  | ordinary | .987/.965 | .995/.973 | .997/.975 | 0.99/0.96 |
+  | complex | .907/.828 | .975/.890 | .993/.907 | 0.94/0.86 |
+  | small_mav | .642/.522 | .869/.707 | .955/.777 | 0.82/0.67 |
+
+  At **IoU 0.40 our numbers bracket the published ones in all three categories**, slightly
+  above rather than below. The shortfall at 0.50 scales inversely with target size, which
+  is the signature of a matching-criterion difference: at 12 px a 2 px centre offset drops
+  IoU under 0.5 while the detection is unambiguously correct. Mean IoU of 0.726 says the
+  matched boxes are well placed, so these are marginal misses, not bad ones.
+
+  **We do not know GLAD's threshold** — the paper does not state one, and this is inference
+  from the shape of the discrepancy, not a fact. Treat it as the leading explanation.
+- **Branch attribution** (the paper's ablation measured on our own run): `local yolo`
+  88.4%, `local miss` 7.4%, `global miss` 2.9%, `local mod` 1.0%, `global mod` 0.1%,
+  `global yolo` 0.1%. Acquisition happens **42 times in 28,337 frames**; LAD inside the
+  search region does essentially all the work thereafter. This is the clearest possible
+  statement of why the local regime is the architecture's whole idea.
+- **Supporting measurement — the letterbox fill is worth nothing.** Porting exposed an
+  upstream defect: `copyMakeBorder`'s seventh positional parameter is `dst`, not `value`,
+  so GLAD's requested 128 grey is discarded and the bars are black — over 44% of a 1080p
+  frame at 640×640, against weights yolov5 trained with 114. GAD alone, every 60th frame
+  (473 frames / 468 targets, IoU 0.50): black **0.717/0.152**, 114 **0.726/0.147**, 128
+  **0.719/0.147**. Two detections separate them. The intuitive "44% out-of-distribution
+  input must cost recall" argument is wrong. `--pad` now defaults to the correct 114
+  because it is free, not because it helps. That same run reproduces the paper's `GAD only`
+  ablation (0.76/0.17) at 0.72/0.15 — a second, independent harness check.
+- **Caveats:**
+  - **Not a measurement of GLAD's quality.** Trained on the same capture campaign and
+    tuned against this split. It says nothing about generalisation — that is M4b.
+  - **AP is meaningless here and is not comparable to EXP-001–003.** GLAD emits no
+    confidence, so every box is recorded at 1.0; with constant scores AP degenerates to
+    roughly P×R (0.856 × 0.771 = 0.660 against the reported 0.705). Likewise
+    mAP@0.50:0.95 of 0.296. Score this run on P/R/F1 only.
+  - **Single-target by construction.** `MOD2_global` breaks on its first accepted
+    candidate and the state machine tracks one box, so recall is capped at one drone per
+    frame. Harmless on ARD-MAV, fatal for a multi-intruder use case.
+  - fp32 on CPU against the engines' build precision, and one NMS pass where upstream runs
+    the plugin's and then `cv2.dnn.NMSBoxes` again. Neither is expected to move a
+    detection, but neither has been isolated.
+- **Next:** M4b — GLAD on video it has never seen, where the number finally means
+  something about the model rather than about us.
+
+### What EXP-004 changes
+
+1. **The harness is trustworthy.** Every number EXP-001–003 produced can now be read as a
+   statement about the detector rather than a possible artefact of our conversion. This is
+   the whole reason M4a existed.
+2. **Published P/R cannot be compared without knowing the IoU threshold.** On tiny targets
+   the choice between 0.40 and 0.50 moves precision by 23 points and recall by 19 in the
+   `small_mav` category — larger than most architectural differences this project will ever
+   measure. Every future comparison against a paper must state the threshold or be marked
+   uncertain.
+3. **Motion + local search is worth ~30x over off-the-shelf appearance.** Against EXP-003's
+   best tiled run: recall 0.771 vs 0.125, precision 0.856 vs 0.030, and tiny-target recall
+   0.662 vs 0.029. EXP-001–003 concluded from failure that the discriminating signal at
+   10–30 px is motion, not appearance; this measures the same conclusion from success.
+4. **The real ceiling is acquisition, not tracking.** 2,958 frames end with no detection
+   and 3,080 targets are never found even at IoU 0.25, while the local regime holds lock
+   88% of the time. Effort belongs on the branch that finds a target from cold — which is
+   also the branch the authors' own hovering-target failure mode attacks.

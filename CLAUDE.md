@@ -125,6 +125,14 @@ These have already cost real effort. Do not rediscover them.
   targets make mAP unusually sensitive to input resolution — a resolution change alone
   can move mAP@0.5 by tens of points and masquerade as an architectural win. Say a
   comparison is invalid rather than producing a table with a caveat under it.
+- **A published P/R is meaningless without its IoU threshold.** Measured in EXP-004:
+  moving the match threshold from 0.50 to 0.40 moves `small_mav` precision by 23 points
+  and recall by 19 — larger than any architectural difference this project has measured.
+  Tiny targets are why: at 12 px a 2 px centre offset drops IoU below 0.5 while the
+  detection is plainly correct. Before concluding "we are worse than the paper", re-score
+  the same JSONL across thresholds; if the gap closes and scales with target size, it is
+  the protocol, not the detector. State the threshold in any comparison or mark it
+  uncertain.
 - **Empty-frame rate is a recall proxy, not accuracy.** A model boxing random sky
   scores 0%. Read it alongside detections-per-frame.
 - **Drone-vs-Bird requires a signed DUA and is non-commercial.** YOLOMG is GPL-3.0;
