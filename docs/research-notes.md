@@ -3,6 +3,10 @@
 Carried over from an earlier planning conversation. This is the reference list the
 project plan is built on.
 
+> **Shortlist, not the detail.** [datasets.md](datasets.md) has the full entry for every
+> dataset below — contents, how it was physically captured, what the labels contain,
+> download commands and licensing. [glad-model.md](glad-model.md) does the same for GLAD.
+
 ## 1. Datasets
 
 ### Air-to-air (camera mounted on a flying drone) — primary match for this use case
