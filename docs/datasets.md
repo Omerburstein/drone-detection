@@ -375,6 +375,37 @@ Useful for airframe variety and bird negatives. **Never** for benchmarking this 
 | **USC-Drone** | video | **handheld, from the ground**; single viewpoint, many frames unlabelled | boxes (incomplete) | research | noted for exclusion |
 | **"Real World" (RWOQ)** | 56,821 images / 55,539 boxes | **scraped from YouTube**, hand-labelled; low res, flat/elevation views | boxes | research | widest airframe variety, worst image quality |
 
+### Which of these are actually *video* of a ground camera tracking a multirotor
+
+Six of the ten are video; the rest are stills or a non-video format. Ranked by usefulness
+here:
+
+| Dataset | Video volume | Modality | Friction |
+| --- | --- | --- | --- |
+| **Anti-UAV** | **318 RGB+IR sequence pairs**, ~580k boxes, MP4 @ 25 fps | **RGB** + thermal | open — **best RGB volume** |
+| **Drone-vs-Bird** | 77 videos, 95k+ frames | RGB | **signed DUA, non-commercial** |
+| **DUT Anti-UAV** | 20 videos (its tracking half) | RGB | **Apache-2.0**, Google Drive — easiest |
+| **Anti-UAV410** | 410 videos, 438k boxes | **thermal only** | Drive/Baidu |
+| **MM-UAV** | 1,321 sequences | RGB 640×360 + IR + event | **not yet released** |
+| **USC-Drone** | handheld ground video | RGB | single viewpoint, many frames unlabelled |
+| VisioDECT · LRDDv2/v3 · UETT4K | — | **still images**, not video | — |
+| MMAUD | — | **rosbags**, not video files | — |
+
+**Anti-UAV** is the answer if you want the most ground-shot RGB video of multirotors: 318
+sequences, DJI and Parrot targets, day and night, varied backgrounds (buildings, cloud,
+trees). Its known weakness is that the RGB and IR streams are **not aligned in time or
+space**, which only matters if you wanted the fusion. *(The 25 fps / MP4 / DJI-and-Parrot
+details come from the UAVSwarm paper's related-work section, not the Anti-UAV paper itself
+— unverified at source.)*
+
+**DUT Anti-UAV** is the one to grab first if you just want something working today —
+Apache-2.0, Google Drive, no DUA, no Baidu — but its video half is only 20 sequences.
+
+Remember what this data can and cannot do: a **static ground camera** makes frame
+differencing trivial and removes the ego-motion the whole motion-compensation stage exists
+to cancel. Use these for airframe appearance and bird discrimination, never to measure
+detection performance for this project.
+
 **The two worth actually using:**
 
 - **VisioDECT** — the best airframe-diversity source. Six labelled models (Anafi-Extended,
@@ -447,6 +478,26 @@ MOT-FLY/
 └── test/  … 8 sequences
 ```
 
+### If the Drive link fails
+
+Confirmed failing as of 2026-08-16. I could not diagnose it remotely — Drive's `/view`
+pages reject non-browser fetchers, so the 404 I get is not evidence either way. Ranked by
+likelihood:
+
+1. **Download quota exceeded** (most common for a popular shared research file; Google caps
+   per-file downloads and resets after ~24 h). The message appears *after* you click
+   download, not on the page itself. **Fix: copy it into your own Drive first** — open the
+   link, click **Add shortcut to Drive** or **Make a copy**, then download from your copy,
+   which carries its own quota. This is the most reliable workaround and needs no tooling.
+2. **`gdown` invoked on the share URL rather than the file id.** Use `--fuzzy` if passing
+   the full URL. When quota is the real cause, `gdown` writes a small HTML file instead of
+   the zip — `file MOT-FLY.zip` showing "HTML document" confirms it.
+3. **The file was moved or removed.** Then only the author can fix it.
+
+**Fallback that actually works: email the author** — `3120210041@bit.edu.cn` (Beijing
+Institute of Technology). MOT-FLY is **Apache-2.0** and only ~11k images, so a fresh link
+costs them nothing. Say which paper you are citing and that the Drive link is quota-blocked.
+
 **Converting to our canonical layout.** `gt.txt` is `frame,id,x,y,w,h,…` in **absolute
 top-left pixel** coords, whereas our YOLO labels are normalised centre-xywh — the same
 conversion `src.data.prepare_ardmav` already does for VOC, just from a different source.
@@ -486,6 +537,48 @@ aws s3 ls --no-sign-request s3://airborne-obj-detection-challenge-training/
 ```
 
 Pull onto the GPU instance, never here. ~13 TB full; use the starter kit's partial flag.
+
+---
+
+## ARD100, and Baidu-gated data generally, from outside China
+
+ARD100's only published link is Baidu, with **no mirror**:
+`https://pan.baidu.com/s/1ycAoKbzQ1rlzvKr8VRakgw?pwd=1x2z` (code `1x2z`).
+
+**Baidu is not geo-blocked from Israel.** The obstacles are different, and the second one
+is the real problem:
+
+| Obstacle | Reality |
+| --- | --- |
+| **Registration** | Historically required a mainland `+86` number. The usual workaround is registering with a **Chinese email** (`@qq.com`, `@163.com`) as the login instead of a phone. |
+| **Throttling** | **This is the blocker.** Without a paid SVIP account, Baidu throttles browser downloads to roughly 100 KB/s. ARD100 is 100 videos of 1080p footage — tens of GB. At that rate the download runs for **days to weeks**, and resuming is unreliable. |
+
+So even a successful registration does not make ARD100 practically obtainable this way.
+
+**On third-party "Baidu downloader" sites:** not recommended. They are frequently paywalled
+or outright malicious, you hand a stranger the share link, and none of them solve the size
+problem. Some also breach Baidu's terms. If you try one, treat it as untrusted.
+
+### The route that actually works: ask the authors
+
+**ARD100's lead author is Hanqing Guo — the same lead author as GLAD, same lab** (Westlake
+University, senior author Shiyu Zhao). Two things make this a strong ask:
+
+- That group **already publishes a Google Drive mirror for ARD-MAV**, so they are plainly
+  willing to host outside Baidu.
+- The GLAD README carries an explicit invitation: *"If you have any problem when using this
+  dataset, please feel free to contact: **guohanqing@westlake.edu.cn**."*
+
+**Ask for the subset, not the whole thing.** M4b does not need all 202,467 frames — it needs
+only the ARD100 videos that are **not** among our local ARD-MAV 60. That is a much smaller
+transfer, a far more answerable request, and precisely what the experiment calls for. Say
+which paper you are citing, that Baidu is not usable from your location, and offer to accept
+a Drive/OneDrive link or a subset.
+
+**Same pattern for the other Baidu-gated sets:** Det-Fly lists a OneDrive mirror alongside
+Baidu (`zhengye@westlake.edu.cn` — same institution), and Anti-UAV410 and DUT Anti-UAV both
+already offer Google Drive. **ARD100 is the only one in this survey with no non-Baidu
+option**, which is exactly why the email is worth sending.
 
 ---
 
