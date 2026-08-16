@@ -201,15 +201,24 @@ Ordered by (our expected gain) ÷ (effort). Items 1–4 are cheap and low-risk.
    runs up to 50 times per frame ([Functions.py:464-484](third_party/GLAD/Functions.py#L464-L484)).
    Hoisting it to a module-level singleton is a few lines and should account for much of
    why GMD costs 41 FPS against LMD's 184. Batch the surviving crops while there.
-2. **Fix the letterbox padding.** `detector*_trt.py` calls
+2. ~~**Fix the letterbox padding.**~~ **Done** — `--pad` in
+   [`src.glad_detect`](glad_detect.md). `detector*_trt.py` calls
    `copyMakeBorder(img, t, b, l, r, BORDER_CONSTANT, (128, 128, 128))`, but that
    function's seventh positional parameter is `dst`, not `value`. The tuple is discarded
    and the border comes out **black**. At 640×640 a 1080p frame is 44% padding and yolov5
-   trained these weights against 114 grey, so the *global* detector — the one whose recall
-   is 0.17 — runs on a train/test mismatch across nearly half its input. A one-word fix
-   (`value=`) with a plausible claim on GAD's recall. Found while porting; reproduced
-   deliberately in [`src.glad_detect`](glad_detect.md), which measures the released code.
-   The local detectors take square 320×320 crops and never pad, so they are unaffected.
+   v6.0 trained these weights against 114 grey, so the *global* detector — the one whose
+   recall is 0.17 — ran on a train/test mismatch across nearly half its input. Note the
+   correct fill is yolov5's **114**, not the 128 upstream intended: 128 is tensorrtx's
+   C++ constant, and the weights never saw it. The local detectors take square 320×320
+   crops and never pad, so they were unaffected. `--pad released` restores the defect for
+   comparisons against the published numbers.
+
+   **It is worth no accuracy.** Measured on GAD alone over 473 frames: P/R of
+   0.717/0.152 black, 0.726/0.147 at 114, 0.719/0.147 at 128 — a two-detection spread out
+   of 468 targets. The "44% of the input is out of distribution, so recall must suffer"
+   argument is intuitive and wrong, which is why it was measured rather than assumed. The
+   fix is kept because it is correct and free, not because it helps. Ranked second here on
+   an expected gain that did not materialise; it belongs last.
 3. **Fix the angle statistic.** `ratio_theta = std(theta)/mean(theta)` with `theta` in
    degrees from `arctan2` over (−180, 180]. The mean can pass through zero, making the
    ratio explode, and the wrap at ±180° gives a target moving left a huge spurious std —

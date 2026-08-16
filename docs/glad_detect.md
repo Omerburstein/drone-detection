@@ -25,6 +25,7 @@ py -3.13 -m src.glad_detect [options]
 | `--out` | `runs/glad` | Output directory. Give every experiment its own. |
 | `--max-frames-per-video` | none | Stop each video after N frames. A **contiguous prefix**, so the motion branches still work — for smoke tests, not for results. |
 | `--glad-repo` | `third_party/GLAD` | Clone of the GLAD release. Its `weights/` must hold `yolov5s_GLAD.pt`, `yolov5s_GLAD-crop.pt` and `Net_best.pth`. |
+| `--pad` | `trained` | Letterbox fill for the global detector. `trained` (114) is the value yolov5 v6.0 trained these weights against. `released` (black) reproduces upstream including its padding bug. `tensorrtx` (128) is what upstream intended. See "The letterbox fill" below. |
 
 **There is no `--stride`, `--conf`, `--imgsz` or `--tile`, deliberately.** Every threshold
 is fixed at the value in the released source, because the point is to reproduce it. And
@@ -32,11 +33,72 @@ striding is not merely discouraged but incoherent here: both motion branches dif
 the current frame against the previous one, so a strided sample measures a different
 algorithm.
 
+`--pad` is the one exception, and it exists because the released value is a defect rather
+than a choice.
+
+## The letterbox fill
+
+A 1920×1080 frame cannot enter a 640×640 network, so it is scaled to 640×360 and 140 blank
+rows are added above and below. **That is 44% of the input**, and the colour of those rows
+has to be one the network learned to ignore.
+
+Upstream writes:
+
+```python
+cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, (128, 128, 128))
+```
+
+OpenCV's signature is `copyMakeBorder(src, top, bottom, left, right, borderType[, dst[,
+value]])`. The seventh positional parameter is **`dst`**, not `value` — the tuple is
+discarded, `value` falls back to its default of 0, and the bars come out **black**. There
+is no error and no warning.
+
+The right fill is not the 128 upstream intended either. These weights were trained by
+yolov5 v6.0, which fills with **114** in `letterbox`, in the mosaic base image and in the
+warp border alike. So `trained` is the correct value and is the default; `tensorrtx` is
+provided only to separate "upstream's intent" from "what the weights actually saw".
+
+Two further traps in the same call, both silent: passing the fill positionally (the
+upstream bug) and passing it as a bare scalar, which OpenCV widens to `(v, 0, 0)` and uses
+to tint the bars. `tests/unit/test_glad_geometry.py` pins both across all three styles.
+
+> **A run compared against the paper must use `--pad released`.** The published numbers
+> were produced by the released code, black bars included.
+
+Only the global detector is affected. The local detectors take square 320×320 search-region
+crops, which scale to 640×640 with no padding at all.
+
+### What the fix is worth: nothing measurable
+
+Measured directly, GAD alone over every 60th frame of the test split (473 frames,
+468 targets, IoU 0.50):
+
+| Fill | P | R | F1 | TP / FP |
+| --- | --- | --- | --- | --- |
+| `released` (0) | 0.717 | 0.152 | 0.250 | 71 / 28 |
+| `trained` (114) | 0.726 | 0.147 | 0.245 | 69 / 26 |
+| `tensorrtx` (128) | 0.719 | 0.147 | 0.245 | 69 / 27 |
+| *paper, `GAD only`* | *0.76* | *0.17* | *0.28* | — |
+
+Two detections separate the three, out of 468 targets. **The defect is real and the fix is
+correct, but it buys nothing** — the reasonable-sounding argument that a 44% train/test
+mismatch must cost recall does not survive contact with the measurement. Kept as the
+default anyway, because it is the correct preprocessing and costs nothing to run, and
+because M7 will fine-tune from these weights and should not inherit a defect.
+
+The last row is the more valuable one: **GAD alone lands within 0.04 precision and 0.02
+recall of the paper's own ablation figure**, which is independent evidence that the port,
+M1's evaluation math and M2's conversion are all sound. Per-category recall is
+0.42 ordinary / 0.03 complex / 0.01 small_mav — the same shape the full pipeline is
+expected to show, and a reminder that GAD's job is acquisition, not detection.
+
 ## Scoring a run
 
 Every row is keyed by an image path, so no run-specific flags are needed:
 
 ```
+py -3.13 -m src.glad_detect --pad released --out runs/exp004_glad   # to match the paper
+
 py -3.13 -m src.evaluate \
     --pred runs/exp004_glad/detections.jsonl \
     --labels data/processed/ARD-MAV/labels/test \
@@ -96,16 +158,13 @@ checkpoint reload (`src/algo/glad/classifier.py`); the `imshow` display loop
 **Unchanged:** `MOD2.py`'s two motion modules, imported and called verbatim; every
 threshold, region size, selection rule and state transition.
 
-Three upstream defects are reproduced rather than fixed, because fixing any of them would
-change what is being measured:
+Three upstream defects were found while porting. The first is fixed and selectable via
+`--pad`, because it is a plain mistake with a correct answer. The other two are reproduced
+rather than fixed, because fixing them would change what is being measured and neither has
+an obviously right replacement:
 
-1. **The letterbox pads black, not grey.** Upstream writes
-   `copyMakeBorder(img, t, b, l, r, BORDER_CONSTANT, (128, 128, 128))`, but that
-   function's seventh positional parameter is `dst`, not `value` — the tuple is discarded
-   and the border defaults to 0. At 640×640 a 1080p frame is 44% padding, and yolov5
-   trained these weights against 114 grey, so the global detector runs on a train/test
-   mismatch over nearly half its input. The local detectors take square 320×320 crops and
-   are unaffected.
+1. **The letterbox padded black, not grey** — fixed, see "The letterbox fill" above.
+   `--pad released` restores the released behaviour for comparisons against the paper.
 2. **The tracked position is not re-based.** After a local hit the search region recentres
    on the new box, but the stored relative position still refers to the *old* region, so
    the next frame's anchor is stale by one frame of target motion. Small against radii of

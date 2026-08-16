@@ -38,7 +38,8 @@ from ..detections import Detections
 from .classifier import load_gate
 from .vendor import (GLAD_DIR, GLOBAL_WEIGHTS, LOCAL_WEIGHTS, add_import_roots,
                      import_motion, weights_dir)
-from .yolo import AcquireDetector, GlobalDetector, TrackingDetector, Yolov5Backend
+from .yolo import (TRAINED_PAD, AcquireDetector, GlobalDetector, TrackingDetector,
+                   Yolov5Backend)
 
 REGION_HALF = 160  # upstream `a`; the search region is 2a x 2a = 320x320
 MAX_LOCAL_MISSES = 30  # consecutive local failures before falling back to global
@@ -143,13 +144,19 @@ class GladPipeline:
         self.reset()
 
     @classmethod
-    def from_release(cls, glad_dir: Path = GLAD_DIR) -> GladPipeline:
-        """Build the pipeline from the checkpoints in a GLAD clone."""
+    def from_release(cls, glad_dir: Path = GLAD_DIR,
+                     pad_value: int = TRAINED_PAD) -> GladPipeline:
+        """Build the pipeline from the checkpoints in a GLAD clone.
+
+        `pad_value` reaches only the global detector — the local ones take square
+        crops and never pad. Pass `RELEASED_PAD` to reproduce upstream exactly,
+        bug included; see `src.algo.glad.yolo.PAD_STYLES`.
+        """
         add_import_roots(glad_dir)  # first call wins, so this fixes the clone in use
         weights = weights_dir(glad_dir)
-        global_backend = Yolov5Backend(weights / GLOBAL_WEIGHTS)
+        global_backend = Yolov5Backend(weights / GLOBAL_WEIGHTS, pad_value)
         # Detector2 and Detector3 upstream load the same crop-trained engine.
-        local_backend = Yolov5Backend(weights / LOCAL_WEIGHTS)
+        local_backend = Yolov5Backend(weights / LOCAL_WEIGHTS, pad_value)
         return cls(
             global_detector=GlobalDetector(global_backend),
             tracking_detector=TrackingDetector(local_backend),

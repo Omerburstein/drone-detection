@@ -12,7 +12,8 @@ import numpy as np
 import pytest
 
 from src.algo.glad.pipeline import REGION_HALF, search_region
-from src.algo.glad.yolo import INPUT_H, INPUT_W, PAD_VALUE, _letterbox, _to_original
+from src.algo.glad.yolo import (INPUT_H, INPUT_W, PAD_STYLES, TRAINED_PAD, _letterbox,
+                                _to_original)
 
 FRAME_W, FRAME_H = 1920, 1080
 CROP = 320  # the search region, which is square and so takes the other pad branch
@@ -84,33 +85,42 @@ class TestLetterbox:
     """tensorrtx's preprocessing, which is not yolov5's."""
 
     def test_shape_and_range(self):
-        out = _letterbox(np.zeros((FRAME_H, FRAME_W, 3), dtype=np.uint8))
+        out = _letterbox(np.zeros((FRAME_H, FRAME_W, 3), dtype=np.uint8), TRAINED_PAD)
         assert out.shape == (3, INPUT_H, INPUT_W)
         assert out.dtype == np.float32
         assert 0.0 <= out.min() and out.max() <= 1.0
 
-    def test_pads_with_black_as_the_released_code_does(self):
-        """Upstream asks for 128 grey and gets black — see `PAD_VALUE`.
+    @pytest.mark.parametrize("pad_value", sorted(PAD_STYLES.values()))
+    def test_fills_the_bars_with_the_requested_value(self, pad_value):
+        """The bug this replaces passed `value` positionally, into `dst`.
 
-        Pinned rather than corrected: this is the input the published runs used,
-        so changing it would change what M4a is measuring.
+        OpenCV silently discarded it and filled with 0, so every style produced
+        black. Parametrised over all three to keep that from coming back.
         """
-        out = _letterbox(np.full((FRAME_H, FRAME_W, 3), 255, dtype=np.uint8))
+        out = _letterbox(np.full((FRAME_H, FRAME_W, 3), 255, dtype=np.uint8), pad_value)
         # 1920x1080 scales to 640x360, leaving 140 pad rows top and bottom.
-        assert out[:, 0, 0] == pytest.approx(PAD_VALUE / 255.0)
-        assert out[:, -1, -1] == pytest.approx(PAD_VALUE / 255.0)
+        assert out[:, 0, 0] == pytest.approx(pad_value / 255.0)
+        assert out[:, -1, -1] == pytest.approx(pad_value / 255.0)
         assert out[:, INPUT_H // 2, INPUT_W // 2] == pytest.approx(1.0)
 
-    def test_square_input_is_not_padded(self):
-        """A search-region crop fills the input exactly, taking the other branch."""
+    def test_styles_are_the_three_values_that_matter(self):
+        """`released` is upstream's actual output; `trained` is what yolov5 used."""
+        assert PAD_STYLES == {"released": 0, "trained": 114, "tensorrtx": 128}
+
+    @pytest.mark.parametrize("pad_value", sorted(PAD_STYLES.values()))
+    def test_square_input_is_never_padded(self, pad_value):
+        """A search-region crop fills the input exactly, so the fill cannot reach it.
+
+        This is why the bug only ever touched the global detector.
+        """
         image = np.full((CROP, CROP, 3), 200, dtype=np.uint8)
-        out = _letterbox(image)
+        out = _letterbox(image, pad_value)
         assert out.min() == pytest.approx(200 / 255.0)
 
     def test_channels_are_swapped_to_rgb(self):
         image = np.zeros((CROP, CROP, 3), dtype=np.uint8)
         image[:, :, 0] = 255  # blue in the BGR frame
-        out = _letterbox(image)
+        out = _letterbox(image, TRAINED_PAD)
         assert out[2].max() == pytest.approx(1.0)  # ...is channel 2 in RGB
         assert out[0].max() == pytest.approx(0.0)
 

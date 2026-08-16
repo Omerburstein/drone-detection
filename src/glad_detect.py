@@ -39,6 +39,7 @@ import cv2
 
 from .algo.glad.pipeline import GladPipeline
 from .algo.glad.vendor import GLAD_DIR
+from .algo.glad.yolo import PAD_STYLES
 from .data.prepare_ardmav import OFFICIAL_TEST_VIDEOS
 from .output.recording import RunRecorder
 
@@ -73,6 +74,13 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--glad-repo", type=Path, default=GLAD_DIR,
                     help="Clone of the GLAD release holding weights/ (default: "
                          "third_party/GLAD).")
+    ap.add_argument("--pad", choices=sorted(PAD_STYLES), default="trained",
+                    help="Letterbox fill for the global detector, which sees 44%% "
+                         "padding on a 1080p frame. 'trained' (114) is what yolov5 "
+                         "trained these weights against and is the default. "
+                         "**'released' (black) reproduces upstream, bug and all, and "
+                         "is what a comparison against the paper must use.** "
+                         "'tensorrtx' (128) is what upstream intended.")
     return ap
 
 
@@ -132,7 +140,8 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading GLAD from {args.glad_repo} ...")
-    pipeline = GladPipeline.from_release(args.glad_repo)
+    print(f"Letterbox fill: {args.pad} ({PAD_STYLES[args.pad]})")
+    pipeline = GladPipeline.from_release(args.glad_repo, PAD_STYLES[args.pad])
 
     branches: Counter = Counter()
     with RunRecorder(args.out / "detections.jsonl") as recorder:

@@ -44,14 +44,23 @@ INPUT_W = 640
 INPUT_H = 640
 IOU_THRESHOLD = 0.4  # identical across all three upstream detectors
 
-# Upstream *means* to pad with tensorrtx's 128 grey, and writes
-# `copyMakeBorder(img, t, b, l, r, BORDER_CONSTANT, (128, 128, 128))`. The
-# seventh positional parameter of that function is `dst`, not `value`, so the
-# tuple is silently discarded and the border comes out **black**. Reproduced
-# here on purpose: this is the input GLAD's own published runs fed the network,
-# and M4a measures the released code. It is not free — a 1080p frame is 44%
-# padding at 640x640, and yolov5 trained these weights against 114 grey.
-PAD_VALUE = 0
+# What fills the letterbox bars. Only the *global* detector is affected: the
+# local detectors take square 320x320 crops, which scale to 640x640 with no
+# padding at all. A 1080p frame, by contrast, is 44% padding.
+#
+# Upstream means to use tensorrtx's 128 and writes
+# `copyMakeBorder(img, t, b, l, r, BORDER_CONSTANT, (128, 128, 128))`. That
+# function's seventh positional parameter is `dst`, not `value`, so the tuple is
+# discarded and the bars come out black. The weights themselves were trained by
+# yolov5 v6.0, which fills with 114 in `letterbox`, in the mosaic base image and
+# in the warp border alike -- so 114 is what the network actually learned to
+# ignore, and TRAINED is the correct value rather than merely the intended one.
+RELEASED_PAD = 0  # what GLAD's released code produces, bug included
+TRAINED_PAD = 114  # what yolov5 v6.0 trained these weights against
+TENSORRTX_PAD = 128  # what upstream intended, and what its C++ preprocessing uses
+
+PAD_STYLES = {"released": RELEASED_PAD, "trained": TRAINED_PAD,
+              "tensorrtx": TENSORRTX_PAD}
 
 
 class Candidate(NamedTuple):
@@ -84,13 +93,14 @@ class Yolov5Backend:
     selection rule — loading `yolov5s_GLAD-crop.pt` twice would just cost memory.
     """
 
-    def __init__(self, weights: Path) -> None:
+    def __init__(self, weights: Path, pad_value: int = TRAINED_PAD) -> None:
         add_import_roots()
         from models.experimental import attempt_load  # noqa: PLC0415
 
         with trusted_torch_load():
             self.model = attempt_load(str(weights), map_location="cpu")
         self.model.eval()
+        self.pad_value = pad_value
 
     def raw_predictions(self, image: np.ndarray) -> tuple[np.ndarray, int, int]:
         """Decoded boxes for one image, plus its original height and width.
@@ -100,7 +110,7 @@ class Yolov5Backend:
         post-processing expects.
         """
         height, width = image.shape[:2]
-        tensor = torch.from_numpy(_letterbox(image)).unsqueeze(0)
+        tensor = torch.from_numpy(_letterbox(image, self.pad_value)).unsqueeze(0)
         with torch.no_grad():
             pred = self.model(tensor)[0][0].numpy()
 
@@ -109,8 +119,8 @@ class Yolov5Backend:
         return np.column_stack([pred[:, :4], conf, classes]), height, width
 
 
-def _letterbox(image: np.ndarray) -> np.ndarray:
-    """tensorrtx's preprocessing: RGB, fit inside 640x640, pad 128, scale to [0,1]."""
+def _letterbox(image: np.ndarray, pad_value: int) -> np.ndarray:
+    """tensorrtx's preprocessing: RGB, fit inside 640x640, pad, scale to [0,1]."""
     height, width = image.shape[:2]
     rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
@@ -127,8 +137,12 @@ def _letterbox(image: np.ndarray) -> np.ndarray:
         pad_y1 = pad_y2 = 0
 
     resized = cv2.resize(rgb, (target_w, target_h))
+    # Two things this call has to get right, both of which fail silently:
+    # `value=` by keyword, because the positional slot is `dst` (the upstream
+    # bug), and a full triple, because a bare scalar widens to (v, 0, 0) and
+    # tints the bars.
     padded = cv2.copyMakeBorder(resized, pad_y1, pad_y2, pad_x1, pad_x2,
-                                cv2.BORDER_CONSTANT, value=PAD_VALUE)
+                                cv2.BORDER_CONSTANT, value=(pad_value,) * 3)
     chw = np.transpose(padded.astype(np.float32) / 255.0, [2, 0, 1])
     return np.ascontiguousarray(chw)
 
