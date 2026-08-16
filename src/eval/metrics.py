@@ -14,10 +14,11 @@ thresholds 0.50:0.05:0.95.
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
+from .conditions import group_by_condition
 from .labels import EvalFrame
 
 # Ground-truth area buckets in pixels^2, as (label, lo, hi).
@@ -35,6 +36,30 @@ IOU_SWEEP = np.arange(0.5, 0.96, 0.05)  # COCO's 0.50:0.05:0.95
 AP_RECALL_POINTS = 101  # COCO's 101-point interpolation grid
 EPS = 1e-12  # floor for divisions whose denominator can legitimately be zero
 INELIGIBLE = -1.0  # IoU sentinel for a candidate that may not be matched
+
+
+def f1_score(precision: float, recall: float) -> float:
+    """Harmonic mean of precision and recall.
+
+    Defined here rather than in the report so the per-condition table and the
+    headline block cannot drift apart.
+    """
+    return 2 * precision * recall / max(precision + recall, EPS)
+
+
+@dataclass(frozen=True)
+class ConditionScore:
+    """One scene category's scores, for comparison against published per-category
+    figures. GLAD reports precision/recall/F1 per category, so those are carried
+    explicitly rather than left to be recomputed by a reader."""
+
+    label: str
+    n_frames: int
+    n_gt: int
+    precision: float
+    recall: float
+    f1: float
+    ap50: float
 
 
 @dataclass(frozen=True)
@@ -58,6 +83,7 @@ class Metrics:
     mean_iou: float
     frames_with_miss: int
     by_size: list[tuple[str, int, float]]
+    by_condition: list[ConditionScore] = field(default_factory=list)
 
 
 def _concat(chunks: list[np.ndarray], dtype: type = float) -> np.ndarray:
@@ -198,8 +224,8 @@ def _recall_by_size(areas: np.ndarray,
     return by_size
 
 
-def evaluate(frames: list[EvalFrame], primary_iou: float,
-             iou_sweep: np.ndarray = IOU_SWEEP) -> Metrics:
+def _score(frames: list[EvalFrame], primary_iou: float,
+           iou_sweep: np.ndarray = IOU_SWEEP) -> Metrics:
     """Full metric sweep over already-paired frames."""
     n_gt = sum(len(f.gt_boxes) for f in frames)
     if n_gt == 0:
@@ -226,3 +252,48 @@ def evaluate(frames: list[EvalFrame], primary_iou: float,
         frames_with_miss=primary.frames_with_miss,
         by_size=_recall_by_size(primary.gt_areas, primary.gt_found),
     )
+
+
+def _score_condition(label: str, frames: list[EvalFrame], primary_iou: float,
+                     iou_sweep: np.ndarray) -> ConditionScore:
+    """Score one scene category.
+
+    A category with no ground truth is reported with NaN scores rather than
+    skipped: an empty category usually means the conditions file and the run
+    disagree about which frames exist, and that is worth seeing.
+    """
+    n_gt = sum(len(f.gt_boxes) for f in frames)
+    if n_gt == 0:
+        return ConditionScore(label, len(frames), 0, float("nan"), float("nan"),
+                              float("nan"), float("nan"))
+
+    scored = _score(frames, primary_iou, iou_sweep)
+    return ConditionScore(
+        label=label,
+        n_frames=scored.n_frames,
+        n_gt=scored.n_gt,
+        precision=scored.precision,
+        recall=scored.recall,
+        f1=f1_score(scored.precision, scored.recall),
+        ap50=scored.ap50,
+    )
+
+
+def evaluate(frames: list[EvalFrame], primary_iou: float,
+             iou_sweep: np.ndarray = IOU_SWEEP,
+             conditions: dict[str, str] | None = None) -> Metrics:
+    """Score a run, optionally broken down by scene category.
+
+    The per-category pass reuses the same scorer on each subset, so a category's
+    numbers are computed exactly as the headline ones are -- there is no second
+    implementation to drift.
+    """
+    metrics = _score(frames, primary_iou, iou_sweep)
+    if not conditions:
+        return metrics
+
+    grouped = group_by_condition(frames, conditions)
+    return replace(metrics, by_condition=[
+        _score_condition(label, subset, primary_iou, iou_sweep)
+        for label, subset in sorted(grouped.items())
+    ])

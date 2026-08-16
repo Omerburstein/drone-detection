@@ -110,6 +110,31 @@ some general benefit.
    not. Independently re-derives the conclusion Rozantsev et al. reached in 2015 and that
    GLAD and YOLOMG are built on.
 
+### Scores by scene condition
+
+Added by M2a and re-scored from the persisted JSONL, so no inference was re-run.
+
+| Category | gt | EXP-001 P/R | EXP-002 P/R | EXP-003 P/R | GLAD published P/R/F1 |
+| --- | --- | --- | --- | --- | --- |
+| ordinary | 924 | .082 / .021 | **.126 / .125** | .072 / **.266** | 0.99 / 0.96 / 0.97 |
+| complex | 957 | .076 / .016 | .026 / .042 | .022 / .108 | 0.94 / 0.86 / 0.90 |
+| small_mav | 935 | **.000 / .000** | **.000 / .000** | .0005 / .0021 | 0.82 / 0.67 / 0.73 |
+
+Two things the aggregate was hiding:
+
+- **The domain-shift signature is visible directly.** At 1280, precision on *ordinary*
+  backgrounds is 5x that on *complex* (0.126 vs 0.026). A model trained on drones against
+  sky does relatively better against sky and collapses against urban clutter — which is
+  exactly what inspecting the false positives showed (window recesses, AC units).
+- **`small_mav` is a total wipeout**, not merely weak: zero detections at both whole-frame
+  resolutions, and 2 correct out of 935 when tiled. GLAD reports F1 0.73 on this same
+  category. That gap is the single clearest statement of what an appearance-only detector
+  cannot do at this scale.
+
+These are not like-for-like with GLAD's column: ours are stride-10 stills scored on
+2,834 frames, GLAD's are full-rate video with motion. The gap is large enough to be
+meaningful anyway, but it is not a measured head-to-head — M4a is.
+
 **Do not compare these to the published 0.53.** That figure is YOLOv5 *trained on*
 ARD100 — a fine-tuned baseline, not an off-the-shelf model. The plan originally cited it
 as the expected value for EXP-001, which was an error.

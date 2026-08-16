@@ -6,7 +6,7 @@ single headline number hides which one is failing.
 
 from __future__ import annotations
 
-from .metrics import EPS, Metrics
+from .metrics import ConditionScore, Metrics, f1_score
 
 BANNER_WIDTH = 52  # characters, sized to the widest metric line below
 
@@ -21,10 +21,23 @@ def _print_size_table(by_size: list[tuple[str, int, float]]) -> None:
     print()
 
 
+def _print_condition_table(by_condition: list[ConditionScore]) -> None:
+    """Scores per scene category, in the shape published papers report them.
+
+    Aggregates hide the failure that matters: a detector can look acceptable
+    overall while collapsing on complex backgrounds or the smallest targets.
+    """
+    print("\n  by scene condition:")
+    print(f"    {'category':<16}{'frames':>7}{'gt':>7}{'P':>8}{'R':>8}{'F1':>8}{'AP@.5':>8}")
+    for score in by_condition:
+        print(f"    {score.label:<16}{score.n_frames:>7}{score.n_gt:>7}"
+              f"{score.precision:>8.4f}{score.recall:>8.4f}"
+              f"{score.f1:>8.4f}{score.ap50:>8.4f}")
+
+
 def report(metrics: Metrics, primary_iou: float) -> None:
     """Print the full metric block for one scored run."""
-    f1 = (2 * metrics.precision * metrics.recall
-          / max(metrics.precision + metrics.recall, EPS))
+    f1 = f1_score(metrics.precision, metrics.recall)
     print(f"\n{'=' * BANNER_WIDTH}")
     print(f"{metrics.n_frames} frames | {metrics.n_gt} ground-truth boxes "
           f"| {metrics.n_pred} predictions")
@@ -41,3 +54,6 @@ def report(metrics: Metrics, primary_iou: float) -> None:
     print(f"  frames w/ a miss {metrics.frames_with_miss}/{metrics.n_frames}")
 
     _print_size_table(metrics.by_size)
+    if metrics.by_condition:
+        _print_condition_table(metrics.by_condition)
+        print()

@@ -14,6 +14,7 @@ py -3.13 -m src.evaluate --pred <jsonl> --labels <dir> [options]
 | `--labels` | required | Directory of YOLO-format `.txt` label files. Matched to predictions by **filename stem** — `img042.jpg` pairs with `img042.txt`. Video runs pair frame index to `<idx>.txt`. |
 | `--iou` | `0.5` | IoU threshold for the precision/recall/size breakdowns. AP@0.50 and mAP@0.50:0.95 always use the standard sweep regardless of this. |
 | `--frame-size W H` | none | Frame dimensions in pixels. **Required for video-keyed predictions** — the JSONL stores frame indices, not sizes. For image runs it is read from the image file, and this flag overrides it. |
+| `--conditions` | none | `conditions.json` from `src.data.prepare_ardmav`. Adds a per-scene-category breakdown. Required to compare against papers that report by category. |
 | `--json-out` | none | Also write metrics as JSON. Pass it for anything you intend to cite in the ledger. |
 
 A missing label file is read as "no ground-truth boxes in this frame," not an error —
@@ -57,6 +58,20 @@ COCO's, because on air-to-air data nearly everything would otherwise land in one
 > **This is the most diagnostic block in the report.** Strong recall on medium/large
 > collapsing to near-zero on tiny means the problem is input resolution, not
 > architecture. Raise `--imgsz` or turn on `--tile` before reaching for a bigger model.
+
+**Scores by scene condition** — precision, recall, F1 and AP@0.50 within each scene
+category (`ordinary` / `complex` / `small_mav` for ARD-MAV), enabled by `--conditions`.
+
+> Aggregates hide the failure that matters. A detector can look uniformly mediocre
+> overall while actually being adequate on sky and useless against urban clutter — two
+> situations needing completely different fixes. This is also the only form in which
+> results can be compared against GLAD, which publishes per category and not in
+> aggregate.
+
+A category with no ground truth reports **NaN**, not 0.0: NaN says "not measured",
+whereas 0.0 would claim the detector was tried there and failed. Frames whose video is
+absent from `conditions.json` are bucketed as `uncategorised` rather than dropped —
+discarding them would silently change every per-category denominator.
 
 ## Matching rules
 

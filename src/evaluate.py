@@ -28,6 +28,7 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
+from .eval.conditions import load_conditions
 from .eval.labels import load_frames
 from .eval.metrics import evaluate
 from .eval.report import report
@@ -46,6 +47,10 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--frame-size", type=int, nargs=2, metavar=("W", "H"),
                     default=None,
                     help="Frame dimensions. Required for video-keyed predictions.")
+    ap.add_argument("--conditions", type=Path, default=None,
+                    help="conditions.json from prepare_ardmav; adds a per-scene-category "
+                         "breakdown. Needed to compare against papers that report by "
+                         "category.")
     ap.add_argument("--json-out", type=Path, default=None,
                     help="Also write metrics as JSON, for the experiment ledger.")
     return ap
@@ -59,7 +64,8 @@ def main() -> None:
 
     frames = load_frames(args.pred, args.labels,
                          tuple(args.frame_size) if args.frame_size else None)
-    metrics = evaluate(frames, args.iou)
+    conditions = load_conditions(args.conditions) if args.conditions else None
+    metrics = evaluate(frames, args.iou, conditions=conditions)
     report(metrics, args.iou)
 
     if args.json_out:
