@@ -176,8 +176,10 @@ future."* That is still true as of this survey.
   `.engine` files via `detector*_trt.py` (TensorRT 7.2, `libmyplugins.so`, and a hardcoded
   `cuda.Device(1)` — the *second* GPU). None of that runs here. But `yolov5s_GLAD.pt` and
   `yolov5s_GLAD-crop.pt` are in the same folder and load cleanly on CPU through
-  `third_party/yolov5` (v6.0, verified). **M4a is unblocked on this laptop** — it needs a
-  detector shim swapping the three TRT classes for yolov5 CPU inference, not a GPU rental.
+  `third_party/yolov5` (v6.0, verified). That shim is
+  [`src/algo/glad/`](../src/algo/glad/), driven by
+  [`src.glad_detect`](glad_detect.md) — no GPU rental required, ~4.8 fps on this laptop.
+  It replaces the three TRT classes and the display loop and leaves `MOD2.py` untouched.
 - **No training code.** Retraining means driving yolov5 v6.0 ourselves plus writing the
   classifier training loop and the crop/patch mining. The checkpoints do carry `optimizer`
   and `ema` state, so they are fine-tune-ready for M7.
@@ -192,37 +194,46 @@ future."* That is still true as of this survey.
 
 ## 6. How to improve it
 
-Ordered by (our expected gain) ÷ (effort). Items 1–3 are cheap and low-risk.
+Ordered by (our expected gain) ÷ (effort). Items 1–4 are cheap and low-risk.
 
 1. **Cache the classifier.** `Mynet_infer` constructs `Net()` and `torch.load()`s
    `Net_best.pth` from disk **on every candidate box, on every frame** — inside a loop that
    runs up to 50 times per frame ([Functions.py:464-484](third_party/GLAD/Functions.py#L464-L484)).
    Hoisting it to a module-level singleton is a few lines and should account for much of
    why GMD costs 41 FPS against LMD's 184. Batch the surviving crops while there.
-2. **Fix the angle statistic.** `ratio_theta = std(theta)/mean(theta)` with `theta` in
+2. **Fix the letterbox padding.** `detector*_trt.py` calls
+   `copyMakeBorder(img, t, b, l, r, BORDER_CONSTANT, (128, 128, 128))`, but that
+   function's seventh positional parameter is `dst`, not `value`. The tuple is discarded
+   and the border comes out **black**. At 640×640 a 1080p frame is 44% padding and yolov5
+   trained these weights against 114 grey, so the *global* detector — the one whose recall
+   is 0.17 — runs on a train/test mismatch across nearly half its input. A one-word fix
+   (`value=`) with a plausible claim on GAD's recall. Found while porting; reproduced
+   deliberately in [`src.glad_detect`](glad_detect.md), which measures the released code.
+   The local detectors take square 320×320 crops and never pad, so they are unaffected.
+3. **Fix the angle statistic.** `ratio_theta = std(theta)/mean(theta)` with `theta` in
    degrees from `arctan2` over (−180, 180]. The mean can pass through zero, making the
    ratio explode, and the wrap at ±180° gives a target moving left a huge spurious std —
    so **leftward motion is penalised**. Use circular statistics (mean resultant length)
    instead. This is a correctness bug in a rejection test, not a tuning choice.
-3. **Make the constants scale-relative.** `area 30–3000`, `a = 160`, `dist_ref = 200`,
+4. **Make the constants scale-relative.** `area 30–3000`, `a = 160`, `dist_ref = 200`,
    blur kernel 11, `local_num == 30` are all absolute pixels tuned for 1920×1080.
    Anything at another resolution silently mis-filters. **This directly threatens M4b** —
    FL-Drones is not 1080p, so a naive run there would measure our failure to rescale, not
    GLAD's generalisation. Normalise by frame diagonal before that experiment.
-4. **Attack the hovering failure.** The authors' own worst case. The appearance branch is
+5. **Attack the hovering failure.** The authors' own worst case. The appearance branch is
    the only thing that can see a stationary target, and it is the weak branch. Options:
    accumulate the difference over a longer baseline (frame *t* vs *t−k*) so slow relative
    motion integrates above threshold, or let the local regime fall back to appearance-only
    with a lowered threshold when motion returns nothing for several frames.
-5. **Replace the LeNet gate.** It is the last thing standing between motion clutter and the
+6. **Replace the LeNet gate.** It is the last thing standing between motion clutter and the
    output, and it is a 61k-parameter 1998-era network on 32×32 inputs. A small modern
    backbone at 64×64, trained on the same mined-negative distribution, is a cheap upgrade
    to the stage that determines precision. Keep the mining strategy — that is the good part.
-6. **Add a P2 head to the global detector.** GAD's 0.17 recall is largely a stride problem
+7. **Add a P2 head to the global detector.** GAD's 0.17 recall is largely a stride problem
    (§2). A P2/stride-4 head, or simply running GAD tiled at native resolution the way our
    `--tile` path does, addresses the cause rather than patching around it with the local
    regime.
-7. **Emit confidences and support N targets.** Needed before GLAD can be scored on the same
+8. **Emit confidences and support N targets.** Needed before GLAD can be scored on the same
    footing as everything else in our ledger, and before it could handle a multi-drone
    scenario.
 

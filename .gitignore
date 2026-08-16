@@ -43,3 +43,6 @@ venv/
 Thumbs.db
 .vscode/
 .idea/
+
+# Cloned upstream repos (GLAD, yolov5) -- large, not ours to version.
+/third_party/
