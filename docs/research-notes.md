@@ -15,15 +15,23 @@ project plan is built on.
 | --- | --- | --- |
 | **ARD100** (supersedes ARD-MAV) | 100 videos / 202,467 frames | `github.com/Irisky123/YOLOMG` → Baidu (code `1x2z`) |
 | **ARD-MAV** (original 60-video set) | 60 videos / 107,497 frames | GitHub · Google Drive · MIT |
-| **NPS-Drones** | 50 videos / 70,250 frames @ 1080p & 1280×760, GoPro-3 on a delta-wing | `engineering.purdue.edu/~bouman/UAV_Dataset/` |
+| **MOT-FLY** | 16 videos / 11,186 frames @ 1080p; Phantom 4 + Mavic + 2 custom targets, camera on a Mavic; Apache-2.0 | `github.com/CZC-123/MOT-FLY` |
+| **NPS-Drones** ⚠️ **fixed-wing targets** | 50 videos / 70,250 frames @ 1080p & 1280×960, GoPro-3 on a delta-wing | `engineering.purdue.edu/~bouman/UAV_Dataset/` |
 | **Det-Fly** | 13,271 images @ 3840×2160, single DJI Mavic target | `github.com/Jake-WU/Det-Fly` (OneDrive + Baidu links inside) |
 | **FL-Drones** | 14 videos / 38,948 frames | via TransVisDrone repo prep instructions |
 | **AOT** (Airborne Object Tracking) | 4,943 sequences / 5.9M images / 3.3M boxes | `registry.opendata.aws/airborne-object-tracking/` |
 
-**NPS-Drones** was the notable omission from the first pass. It is the second standard
-air-to-air benchmark — GLAD, YOLOMG, Dogfight and TransVisDrone all report on it, so it is
-the cheapest way to place a result against published numbers. Targets are tiny (10×8 min,
-~16 px average). Standard split is 40 train / 10 test.
+**Only four real datasets** put a multirotor target, contiguous video, and a moving airborne
+camera together: **ARD-MAV, ARD100, MOT-FLY and FL-Drones**. Everything else fails at least
+one of those. See [datasets.md](datasets.md) for the filter table.
+
+**MOT-FLY** was the notable omission from the first pass and is the easiest useful addition:
+Apache-2.0, Google Drive, no Baidu, heterogeneous multirotor targets shot from a DJI Mavic.
+
+**NPS-Drones** is the second standard air-to-air benchmark — GLAD, YOLOMG, Dogfight and
+TransVisDrone all report on it — but ⚠️ **its targets are delta-wing fixed-wing UAVs, not
+multirotors.** Treat it as small-object pretraining, never as a multirotor benchmark.
+Standard split is 40 train / 10 test; use annotation **v2**.
 
 **AOT** is by far the largest air-to-air set and the only one with a permissive bulk
 download (CDLA-Permissive-1.0, public S3, `aws s3 ls --no-sign-request
@@ -68,10 +76,9 @@ ones are **ARD-MAV** (Google Drive), **NPS-Drones** (direct HTTP from Purdue), *
 **SynDroneVision**. Start there if Baidu is a blocker.
 
 For M4b specifically, the ranking is: **FL-Drones** (genuinely held out from GLAD) >
-**NPS-Drones** (video, but GLAD published on it, so partly designed-against) >
-**ARD100-extra**. NPS-Drones was not considered in the original M4b note because it was
-missing from this list; it does not displace FL-Drones, but it is far easier to obtain and
-comes with published GLAD numbers to sanity-check against.
+**MOT-FLY** (also held out, multirotor, Apache-2.0, no Baidu — but only 11k frames) >
+**ARD100-extra** (format-identical, so a drop is attributable to generalisation, but same
+lab). **NPS-Drones is not on this list** — fixed-wing targets.
 
 ### ⚠️ Name trap
 
