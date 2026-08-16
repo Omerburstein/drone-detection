@@ -1,0 +1,4 @@
+path: data/processed/ARD-MAV
+test: images/test
+nc: 1
+names: ['drone']

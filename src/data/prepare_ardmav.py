@@ -15,10 +15,15 @@ frames are near-identical -- so it cannot be caught numerically. That is what
 `--verify` renders exist for.
 
 **Unlabelled frames are not negatives.** Each video's XMLs run contiguously
-from 1 to N, and N is at or below the video's frame count; the shortfall is
-always *trailing* frames. Those frames were never annotated, so scoring a
-detection on them as a false positive would understate precision. Extraction
-stops at N.
+from 1 to N. A frame with no XML was never annotated, so emitting it with an
+empty label would count any detection there as a false positive and understate
+precision; extraction skips it instead.
+
+On the test 15 this guard never fires: every decodable frame has an
+annotation. `CAP_PROP_FRAME_COUNT` claims 28,644 frames against 28,337 XMLs,
+but that is container metadata and it overstates -- decoding yields exactly
+28,337. Trust the decoder, not the header. The guard stays because the
+training videos have not been checked and it costs nothing.
 
 Example
 -------
@@ -69,7 +74,7 @@ class Stats:
     frames: int = 0
     boxes: int = 0
     empty_labels: int = 0
-    trailing_skipped: int = 0
+    unannotated_skipped: int = 0
     areas: list[float] = field(default_factory=list)
     class_names: Counter = field(default_factory=Counter)
     size_mismatch: list[str] = field(default_factory=list)
@@ -81,7 +86,7 @@ class Stats:
         self.frames += other.frames
         self.boxes += other.boxes
         self.empty_labels += other.empty_labels
-        self.trailing_skipped += other.trailing_skipped
+        self.unannotated_skipped += other.unannotated_skipped
         self.areas += other.areas
         self.class_names += other.class_names
         self.size_mismatch += other.size_mismatch
@@ -115,8 +120,9 @@ def convert_video(raw: Path, video: str, images_dir: Path, labels_dir: Path) -> 
 
             xml = annotation_path(raw, video, frame_index)
             if not xml.exists():
-                # Trailing unannotated frames: not negatives, so not emitted.
-                stats.trailing_skipped += 1
+                # Unannotated, which is not the same as confirmed-empty, so the
+                # frame is dropped rather than emitted with an empty label.
+                stats.unannotated_skipped += 1
                 continue
 
             stem = f"{video}_{frame_index:04d}"
@@ -155,7 +161,11 @@ def _write_frame(frame, xml: Path, stem: str, images_dir: Path, labels_dir: Path
 
     cv2.imwrite(str(images_dir / f"{stem}.jpg"), frame,
                 [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
-    (labels_dir / f"{stem}.txt").write_text("\n".join(lines) + ("\n" if lines else ""))
+    # Explicit encoding on every write: Path.write_text defaults to the system
+    # ANSI codepage on Windows, which mangles non-ASCII (it corrupted the em
+    # dashes in a generated MANIFEST before this was pinned).
+    (labels_dir / f"{stem}.txt").write_text(
+        "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
     stats.frames += 1
     stats.boxes += len(lines)
@@ -177,7 +187,7 @@ def render_verify(processed: Path, split: str, sample: int, seed: int) -> Path:
         if image is None:
             continue
         height, width = image.shape[:2]
-        for line in label_path.read_text().splitlines():
+        for line in label_path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
             _, cx, cy, box_w, box_h = (float(v) for v in line.split())
@@ -203,7 +213,7 @@ def report(stats: Stats, videos: list[str]) -> bool:
     print(f"\n{'=' * 58}")
     print(f"{len(videos)} videos | {stats.frames} frames | {stats.boxes} boxes")
     print(f"{'=' * 58}")
-    print(f"  trailing frames skipped   {stats.trailing_skipped} (unannotated, not negatives)")
+    print(f"  unannotated frames skipped {stats.unannotated_skipped}")
     print(f"  frames with no box        {stats.empty_labels}")
     print(f"  class names in source     {dict(stats.class_names)}")
 
@@ -237,13 +247,15 @@ def write_metadata(processed: Path, split: str, videos: list[str], stats: Stats)
         f"path: {processed.as_posix()}\n"
         f"{split}: images/{split}\n"
         f"nc: {len(CLASS_NAMES)}\n"
-        f"names: {list(CLASS_NAMES)}\n"
+        f"names: {list(CLASS_NAMES)}\n",
+        encoding="utf-8",
     )
 
     category_of = {v: cat for cat, members in SCENE_CATEGORIES.items() for v in members}
     (processed / "conditions.json").write_text(json.dumps(
         {"scene_category": category_of,
-         "categories": {k: list(v) for k, v in SCENE_CATEGORIES.items()}}, indent=2))
+         "categories": {k: list(v) for k, v in SCENE_CATEGORIES.items()}}, indent=2),
+        encoding="utf-8")
 
     histogram = "\n".join(f"| {label.strip()} | {count} |"
                           for label, count in _area_histogram(stats.areas))
@@ -280,7 +292,7 @@ Scene categories (GLAD reports separately for each, see `conditions.json`):
 | Frames | {stats.frames} |
 | Boxes | {stats.boxes} |
 | Frames with no box | {stats.empty_labels} |
-| Trailing frames skipped | {stats.trailing_skipped} |
+| Unannotated frames skipped | {stats.unannotated_skipped} |
 
 ### Target size
 
@@ -290,14 +302,17 @@ Scene categories (GLAD reports separately for each, see `conditions.json`):
 
 ## Known issues
 
-- **Annotations cover a prefix of each video.** XMLs run contiguously from 1 to
-  N with N at or below the frame count; the shortfall is always trailing
-  frames. Those are *unlabelled*, not confirmed-empty, so they are excluded
-  rather than emitted as negatives — scoring detections against them would
-  understate precision.
+- **`CAP_PROP_FRAME_COUNT` overstates.** The container header reports more
+  frames than actually decode (28,644 vs 28,337 on the test 15). Every
+  decodable frame does have an annotation. Any frame-count reconciliation
+  should use the decoder, not the header.
+- **Unlabelled frames are skipped, not emitted as negatives.** A frame with no
+  XML was never annotated rather than confirmed empty, so scoring detections
+  against it would understate precision. Frames whose XML contains zero objects
+  *are* genuine negatives and are kept.
 - Frame numbering is one-based and four-digit (`phantom05_0001`), matching the
   XML stems exactly. Verified visually via `_verify/`.
-""")
+""", encoding="utf-8")
 
 
 def build_parser() -> argparse.ArgumentParser:

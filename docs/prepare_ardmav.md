@@ -57,16 +57,21 @@ Decoded frame *i* (zero-based) pairs with `i + 1`. An off-by-one still puts boxe
 the drone — consecutive frames barely differ — so no numeric check catches it. That is
 what `_verify/` is for; look at the renders.
 
-**Unlabelled frames are not negatives.** Each video's XMLs run contiguously from 1 to N,
-where N is at or below the frame count. The shortfall is always *trailing* frames:
+**Unlabelled frames are not negatives.** A frame with no XML was never annotated rather
+than confirmed empty, so emitting it with an empty label would count any detection there
+as a false positive and understate precision. Extraction skips it.
 
-| | Frames | Annotated | Trailing |
-| --- | --- | --- | --- |
-| Test 15 total | 28,644 | 28,337 | 307 |
+On the test 15 this guard never actually fires — and the reason is worth recording:
 
-Those frames were never annotated, so they are excluded rather than emitted with empty
-labels. Treating them as confirmed-empty would count any detection there as a false
-positive and understate precision.
+| | Header claims | XMLs | Actually decoded | Written |
+| --- | --- | --- | --- | --- |
+| Test 15 total | 28,644 | 28,337 | 28,337 | 28,337 |
+
+`CAP_PROP_FRAME_COUNT` reads the container header and **overstates by 307**. Every frame
+that actually decodes has an annotation. Reconcile against the decoder, never the header.
+
+Distinct from that: **177 frames have an XML containing zero objects.** Those are genuine
+negatives and are kept, with an empty label file.
 
 ## Validation battery
 
@@ -84,8 +89,19 @@ Printed at the end of every run; a failure exits non-zero.
 
 ### What the size histogram showed
 
-Measured over the test split, **every target is under 32 px**; roughly 59% are under
-16 px. There are no medium or large targets at all. This is the strongest available
-confirmation that the project's difficulty is small-object detection specifically —
-and it means any evaluation reported only as an aggregate mAP is really reporting
-tiny-target performance under another name.
+Measured over the full test split — 28,160 boxes across 28,337 frames:
+
+| Bucket | Count | Share |
+| --- | --- | --- |
+| tiny (<16 px) | 18,261 | 64.8% |
+| small (16–32 px) | 7,931 | 28.2% |
+| medium (32–96 px) | 1,968 | 7.0% |
+| large (>96 px) | 0 | 0% |
+
+**93% of targets are under 32 px and nothing exceeds 96 px.** This is the strongest
+available confirmation that the project's difficulty is small-object detection
+specifically, and it means an aggregate mAP on this split is largely reporting
+tiny-target performance under another name — read the size breakdown, not the headline.
+
+The 7% medium bucket is useful rather than noise: it is the control. If a model scores
+well there and collapses on tiny, the limit is resolution, not architecture.

@@ -1,0 +1,42 @@
+{
+  "scene_category": {
+    "phantom09": "ordinary",
+    "phantom10": "ordinary",
+    "phantom30": "ordinary",
+    "phantom47": "ordinary",
+    "phantom70": "ordinary",
+    "phantom05": "complex",
+    "phantom08": "complex",
+    "phantom58": "complex",
+    "phantom65": "complex",
+    "phantom86": "complex",
+    "phantom19": "small_mav",
+    "phantom41": "small_mav",
+    "phantom43": "small_mav",
+    "phantom46": "small_mav",
+    "phantom63": "small_mav"
+  },
+  "categories": {
+    "ordinary": [
+      "phantom09",
+      "phantom10",
+      "phantom30",
+      "phantom47",
+      "phantom70"
+    ],
+    "complex": [
+      "phantom05",
+      "phantom08",
+      "phantom58",
+      "phantom65",
+      "phantom86"
+    ],
+    "small_mav": [
+      "phantom19",
+      "phantom41",
+      "phantom43",
+      "phantom46",
+      "phantom63"
+    ]
+  }
+}
