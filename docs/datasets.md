@@ -30,16 +30,16 @@ three independent requirements, and most "drone datasets" fail at least one:
 | --- | :---: | :---: | :---: | --- |
 | **ARD-MAV** | ✅ | ✅ | ✅ | **In use.** Our test set |
 | **ARD100** | ✅ | ✅ | ✅ | **Get this next** |
-| **MOT-FLY** | ✅ | ✅ | ✅ | **New find — best free addition** |
+| **MOT-FLY** | ✅ | ✅ | ✅ | **Best free addition** |
 | **FL-Drones** | ✅ | ✅ | ✅ | Held-out test for M4b; low-res |
 | Det-Fly | ✅ | ❌ stills | ✅ | Appearance only |
-| MAV-VID | ✅ | ✅ | ⚠️ mixed | Targets too large |
-| UAVSwarm | ✅ | ✅ | ⚠️ unverified | Swarm/MOT focus |
+| MAV-VID | ✅ | ✅ | ⚠️ mixed | Targets ~33× too large; terminal-phase only |
 | AIRMOT | ✅ | ✅ | ✅ simulated | Synthetic, tiny |
-| **NPS-Drones** | ❌ **fixed-wing** | ✅ | ✅ | **Demoted — see below** |
+| **NPS-Drones** | ❌ **fixed-wing** | ✅ | ✅ | **Demoted — pretraining only** |
 | AOT | ❌ manned aircraft | ✅ | ✅ | Pretraining only |
+| **UAVSwarm** | ✅ | ✅ | ❌ **ground-to-air + air-to-ground** | **Ruled out — verified** |
 | MMFW-UAV | ❌ fixed-wing | ✅ | ✅ | Excluded |
-| DUT / VisioDECT / Drone-vs-Bird / Anti-UAV* / LRDDv2-3 / MMAUD / MM-UAV | ✅ | mixed | ❌ ground | Auxiliary only |
+| DUT / VisioDECT / Drone-vs-Bird / Anti-UAV* / LRDDv2-3 / MMAUD / MM-UAV / USC-Drone | ✅ | mixed | ❌ ground | Auxiliary only |
 | SynDroneVision / SimD3 | ✅ | ✅ | ✅ | Synthetic |
 
 ---
@@ -156,8 +156,8 @@ occupy under 5% of image area.**
 track IDs, plus `seqinfo.ini`. That is a tracking schema, so converting to our YOLO layout
 means dropping IDs (or keeping them for future track-level evaluation).
 
-**Access.** `github.com/CZC-123/MOT-FLY` — **Google Drive** and Baidu (password `pe53`).
-**Apache-2.0**, commercially usable.
+**Access.** `github.com/CZC-123/MOT-FLY` — **Apache-2.0**, commercially usable. Full
+download recipe in [§ Download recipes](#mot-fly-recommended-first-addition) below.
 
 **Verdict.** Small (11k frames), but it is free of Baidu friction, permissively licensed,
 multi-target, multi-model, and captured from a multirotor. **Best available complement to
@@ -213,36 +213,83 @@ bottom-up views against terrain are exactly what a chase produces and what most 
 **But sparse stills with no stated frame ordering**, so motion methods cannot run; it
 benchmarks the appearance path alone. ~50 GB at 4K — pull directly onto the GPU instance.
 
-## MAV-VID — fails "targets are small", partially "moving camera"
+## MAV-VID — wrong size regime, but see the caveat
 
-**Contents.** 64 videos / **40,232 images**; 53 videos (29,500) train, 11 (10,732) val.
-Single multirotor target per frame. Name is literally *Multirotor Aerial Vehicle VID*.
+**Contents.** 64 videos / **40,232 images**: 53 videos (29,500) train, 11 videos (10,732)
+val. **Single** multirotor target per frame. Originally from Rodriguez-Ramos et al., *IEEE
+Access* 8:124451-124466 (2020); the numbers here are as the ICCVW-2021 benchmark defines it.
 
-**How it was captured.** **Mixed sources** — some from other drones, some from ground-based
-surveillance cameras, some handheld mobile devices. So filter 3 holds only for part of it,
-and the subset is not cleanly separable.
+**How it was captured.** Quoting that benchmark:
 
-**The disqualifier:** average object size is **136×77 px (0.66% of image)**, with another
-source reporting 215×128 (3.28%). That is **one to two orders of magnitude larger** than
-our targets. A model tuned here learns nothing about 10–30 px detection.
+> "It contains videos captured from **other drones, ground based surveillance cameras and
+> handheld mobile devices**." … "UAVs usually move across the *x* axis and are **recorded
+> from the bottom**."
 
-**Access.** Kaggle ("multirotor aerial vehicle vid mavvid"), YOLO annotations. License
-unstated in the benchmark repo. **Verdict.** Useful only for close-range appearance.
+So filter 3 holds for only part of it, the subset is not cleanly separable, and the dominant
+framing — looking up at a target from below — is the ground-based signature, not a chase.
 
-## UAVSwarm — fails "verified viewpoint"
+**The disqualifier.** Average object size is **136×77 px = 0.66% of image area**. Ours
+averages **0.02%** (ARD-MAV) and **0.01%** (ARD100). That is a **~33–66× difference in
+target area**. For scale, the same benchmark measures Drone-vs-Bird at 34×23 px (0.10%) —
+so MAV-VID's targets are large even by ground-dataset standards. A detector tuned here
+learns large-object features and tells us nothing about the 10–30 px regime that is the
+entire problem.
 
-**Contents.** **72 sequences, 12,598 annotated images**, 13 scenarios, **more than 19 UAV
-models**, with **3 to 23 UAVs per sequence**. Split 36/36 sequences (6,844 / 5,754 images).
-MDPI *Remote Sensing* 2022.
+### Is it worth a shot anyway? One specific case.
 
-**How it was captured.** Described as diverse camera perspectives with "dynamic camera
-movements" and micro-UAV rapid motion. **Whether the footage is airborne or ground-based is
-unverified** — the MDPI page returns 403 and secondary sources disagree; SCT-MOT groups it
-with air-to-air benchmarks. *(Resolution and provenance also unverified.)*
+Not for detection benchmarking — the size gap makes any number from it non-transferable.
 
-**Verdict.** By far the widest **airframe variety** (19+ models) and the densest
-multi-target scenes. Worth chasing down if swarm/multi-intruder ever becomes a requirement
-— which would also break GLAD's single-target design. Verify the viewpoint before using.
+**But there is a genuine hole it fills.** Our ARD-MAV test split contains **zero targets
+over 96 px** (`large` bucket: 0, see [MANIFEST.md](data/processed/ARD-MAV/MANIFEST.md)).
+We have *no data at all* for the close-range regime. If the mission ends in an intercept,
+a lock-on, or any terminal phase where the target grows to fill a meaningful part of the
+frame, then the current data covers none of it — and MAV-VID is precisely that regime,
+with multirotor targets and real video.
+
+So: **not a training or benchmark set, but the only candidate for terminal-phase coverage.**
+Worth revisiting if and when the requirement extends past detection-at-range. Until then it
+is out of scope.
+
+**Access.** Kaggle, "multirotor aerial vehicle vid mavvid". YOLO annotations; the benchmark
+repo `github.com/KostadinovShalon/UAVDetectionTrackingBenchmark` ships
+`convert_mav_vid_to_coco.py`. *(License unstated in the benchmark repo — unverified.)*
+
+## UAVSwarm — resolved: **not air-to-air**. Fails filters 1 and 3.
+
+Previously listed as "viewpoint unverified". **Now verified from the paper itself** (MDPI
+*Remote Sensing* 14(11):2601). It does not qualify, on three independent counts.
+
+**1. The viewpoint is explicitly the wrong two.** Quoting the dataset section:
+
+> "The UAVSwarm dataset includes both **ground-to-air** UAV swarm and **air-to-ground** UAV
+> swarm, which makes the background have complex and dynamic changes in the sky, ground,
+> sky and ground, as well as background and light."
+
+Ground-to-air is a camera on the ground looking up. Air-to-ground is a camera aloft looking
+*down at the ground*. **Neither is air-to-air** — there is no chase geometry anywhere in it.
+
+**2. Most cameras are static.** Tables 1 and 2 label every sequence `static` or `moving`,
+and the clear majority are **static**. Ego-motion is the thing motion compensation exists
+to cancel; a mostly-static set does not exercise it.
+
+**3. The resolutions are sub-HD and ragged.** Per-sequence: 812×428, 446×270, 639×328,
+847×412, 640×352, 863×467, 625×291, 720×479, 764×479, 844×455, 863×364, 810×475, 863×472 …
+No two agree, none is HD, and the aspect ratios are inconsistent. That is the signature of
+**footage cropped and rescaled from web video**, not a controlled capture — the same paper
+criticises the "Real World" dataset for exactly this, noting its low resolution "because all
+the data are obtained from YouTube videos, while other datasets are collected by researchers
+themselves."
+
+Its own **Data Availability Statement reads "Not applicable"**, so even the distribution
+story is unclear.
+
+**Contents, for the record.** 72 sequences, 12,598 images, 13 scenarios, 19+ UAV models,
+3–23 UAVs per sequence, 30 fps, split 36/36 (6,844 / 5,754 images).
+
+**Verdict. Do not use.** The airframe variety is real, but it is bought with the wrong
+viewpoint, static cameras and sub-HD web footage. **Note that SCT-MOT groups it with
+"air-to-air" benchmarks — that is wrong**, and is a good reminder to check the originating
+paper rather than a citing one.
 
 ## AIRMOT — simulated air-to-air
 
@@ -279,22 +326,54 @@ rediscovered.
 
 ---
 
+# How to check a dataset's viewpoint yourself
+
+Papers advertise "UAV dataset" and "aerial" for four incompatible geometries, and **citing
+papers get it wrong** — SCT-MOT calls UAVSwarm air-to-air; the originating paper says
+ground-to-air and air-to-ground. Always go to the source. This is the order that resolves
+it fastest:
+
+1. **Read the originating paper's dataset section, not a citing one.** Search the PDF for
+   `ground-to-air`, `air-to-air`, `air-to-ground`, `mounted on`, `static`, `handheld`. One
+   sentence usually settles it. If the publisher blocks fetching (MDPI returns 403), the
+   `mdpi-res.com/d_attachment/...` PDF mirror generally works, or use the arXiv version.
+2. **Look for a per-sequence table.** The good datasets publish one, and it often has a
+   literal **`Camera: static / moving`** column — that is what settled UAVSwarm. It also
+   exposes resolution inconsistency.
+3. **Check resolution consistency.** A controlled capture is one or two fixed resolutions
+   (ARD-MAV: 1920×1080 throughout). A ragged spread of sub-HD sizes with mismatched aspect
+   ratios means **footage scraped from web video** and rescaled.
+4. **Check the target's aspect ratio in the label statistics.** ~1:1 to 1.5:1 is a
+   multirotor; ~3:1 is a fixed-wing planform. This is how NPS-Drones was caught (65×21).
+5. **Look at the background, not the target.** Air-to-air footage swings between sky and
+   terrain within a single sequence and the horizon tilts with ego-motion. Ground-to-air is
+   sky-dominated with a stable horizon. Air-to-ground has no sky at all.
+6. **Last resort — measure it.** Pull ten frames and run the homography step of a motion
+   compensator over consecutive pairs (`src/algo` has no such helper yet; GLAD's
+   `motion_compensate` in [third_party/GLAD/Functions.py](third_party/GLAD/Functions.py) is
+   a working reference). A static camera gives a near-identity homography; a flying platform
+   does not. This is objective and takes minutes.
+
+---
+
 # Tier 3 — ground-based (auxiliary only)
 
 Useful for airframe variety and bird negatives. **Never** for benchmarking this project.
 
-| Dataset | Contents | Capture | Labels | License |
-| --- | --- | --- | --- | --- |
-| **DUT Anti-UAV** | 10,000 images + 20 videos | ground/upward cameras, varied outdoor scenes, day & night | boxes, train/val/test provided | **Apache-2.0** |
-| **Anti-UAV410** | 410 **thermal IR** videos, 438k boxes, split 200/90/120 | ground thermal cameras "in the wild"; **>half of targets under 50 px** | boxes | research |
-| **Anti-UAV** | 318 **paired RGB+IR** sequences, ~580k boxes | ground, registered dual-sensor | boxes | research |
-| **VisioDECT** | 20,924 images, **6 airframes** | ground, 30–100 m, 3 weather/lighting scenarios; 20 months, 12+ locations | boxes in `.txt`/`.xml`/`.csv` | IEEE DataPort |
-| **Drone-vs-Bird** | 77 videos, **95k+ frames** | ground static & pan-tilt, long range, **real birds in frame** | boxes incl. birds | **DUA, non-commercial** |
-| **LRDDv2** | **39,516 still images** @1080p, range on 8k+ | DJI Mavic Air 2 + iPhone/Pixel; targets DJI Mini 3, Mavic Pro; to ~107 m | **YOLO boxes + range in metres** | request form |
-| **LRDDv3** | adds **thermal** + range | ICRA 2026 | boxes + range | ICRA 2026 |
-| **MMAUD** | ~15 sequences, **rosbags** | stereo + Livox Avia + Mid-360 + mmWave + 4 mic arrays; targets Mavic 2/3, Phantom 4, Avata, M300 | **Leica 3D ground truth**, type + trajectory | **CC BY-NC-SA** |
-| **MM-UAV** | 1,321 seq, ~2.8M frames/modality | ground **RGB + IR + event camera**; RGB only 640×360 | boxes + persistent IDs | CC BY-NC-SA |
-| **UETT4K** | 4K images | ground, diverse conditions | boxes | IEEE |
+| Dataset | Contents | Capture | Labels | License | Get it |
+| --- | --- | --- | --- | --- | --- |
+| **DUT Anti-UAV** | 10,000 images + 20 videos | ground/upward cameras, varied outdoor scenes, day & night | boxes, train/val/test provided | **Apache-2.0** | [github.com/wangdongdut/DUT-Anti-UAV](https://github.com/wangdongdut/DUT-Anti-UAV) — Google Drive + Baidu |
+| **Anti-UAV410** | 410 **thermal IR** videos, 438k boxes, split 200/90/120 | ground thermal cameras "in the wild"; **>half of targets under 50 px** | boxes | research | [github.com/HwangBo94/Anti-UAV410](https://github.com/HwangBo94/Anti-UAV410) — Drive, Baidu code `a410` |
+| **Anti-UAV** | 318 **paired RGB+IR** sequences, ~580k boxes, 25 fps MP4 | ground, registered dual-sensor; DJI + Parrot targets, day & night | boxes | research | [github.com/ZhaoJ9014/Anti-UAV](https://github.com/ZhaoJ9014/Anti-UAV) · [anti-uav.github.io](https://anti-uav.github.io) |
+| **VisioDECT** | 20,924 images, **6 airframes** | ground, 30–100 m, 3 weather/lighting scenarios; 20 months, 12+ locations | boxes in `.txt`/`.xml`/`.csv` | IEEE DataPort | [ieee-dataport.org](https://ieee-dataport.org/) — search "VisioDECT" |
+| **Drone-vs-Bird** | 77 videos, **95k+ frames** | ground static & pan-tilt, long range, **real birds in frame** | boxes incl. birds | **DUA, non-commercial** | [github.com/wosdetc/challenge](https://github.com/wosdetc/challenge) — signed DUA |
+| **LRDDv2** | **39,516 still images** @1080p, range on 8k+ | DJI Mavic Air 2 + iPhone/Pixel; targets DJI Mini 3, Mavic Pro; to ~107 m | **YOLO boxes + range in metres** | see page | [research.coe.drexel.edu/ece/imaple/lrddv2](https://research.coe.drexel.edu/ece/imaple/lrddv2/) — **Google Forms request**, `kp3275@drexel.edu` |
+| **LRDDv3** | adds **thermal** + range | ICRA 2026 | boxes + range | ICRA 2026 | [arXiv:2605.25942](https://arxiv.org/abs/2605.25942) |
+| **MMAUD** | ~15 sequences, **rosbags**, 11.1–19.7 GB each | stereo + Livox Avia + Mid-360 + mmWave + 4 mic arrays; targets Mavic 2/3, Phantom 4, Avata, M300 | **Leica 3D ground truth**, type + trajectory | **CC BY-NC-SA** | [github.com/ntu-aris/MMAUD](https://github.com/ntu-aris/MMAUD) — OneDrive + Drive |
+| **MM-UAV** | 1,321 seq, ~2.8M frames/modality | ground **RGB + IR + event camera**; RGB only 640×360 | boxes + persistent IDs | CC BY-NC-SA | [xuefeng-zhu5.github.io/MM-UAV](https://xuefeng-zhu5.github.io/MM-UAV/) — pending release |
+| **UETT4K** | 4K images | ground, diverse conditions | boxes | IEEE | [IEEE Xplore 10971965](https://ieeexplore.ieee.org/document/10971965/) |
+| **USC-Drone** | video | **handheld, from the ground**; single viewpoint, many frames unlabelled | boxes (incomplete) | research | noted for exclusion |
+| **"Real World" (RWOQ)** | 56,821 images / 55,539 boxes | **scraped from YouTube**, hand-labelled; low res, flat/elevation views | boxes | research | widest airframe variety, worst image quality |
 
 **The two worth actually using:**
 
@@ -336,17 +415,49 @@ augmentation, never validation.
 
 ## MOT-FLY (recommended first addition)
 
-`github.com/CZC-123/MOT-FLY` → Google Drive link in the README (or Baidu, password `pe53`).
-Apache-2.0. Small enough to stage locally. Arrives in MOTChallenge layout:
+Repo: `github.com/CZC-123/MOT-FLY` · **Apache-2.0** · contact `3120210041@bit.edu.cn`
+
+**Two mirrors — Google Drive needs no account:**
+
+| Mirror | URL | Note |
+| --- | --- | --- |
+| **Google Drive** | `https://drive.google.com/file/d/1GiWLF8B18FGDcCSuSuvGokczCkP_NEgo/view?usp=sharing` | **use this one** |
+| Baidu | `https://pan.baidu.com/s/1eS84Ooz0URojz1tAJNZ5Eg?pwd=pe53` | password `pe53` |
+
+It is a single Drive file. Browser download is simplest; for a headless GPU instance use
+`gdown`, which handles Drive's large-file confirmation page:
+
+```bash
+py -3.13 -m pip install gdown
+gdown 1GiWLF8B18FGDcCSuSuvGokczCkP_NEgo -O MOT-FLY.zip
+unzip MOT-FLY.zip -d data/raw/
+```
+
+**Layout** — MOTChallenge, already split into `train/` and `test/`:
 
 ```
-<seq>/img1/000001.jpg ...
-<seq>/gt/gt.txt          # frame, id, x, y, w, h, conf, class, visibility
-<seq>/seqinfo.ini
+MOT-FLY/
+├── train/
+│   ├── DJI_0003_D_S_E/          # sequence names carry the DJI source clip id
+│   │   ├── img1/000001.jpg …    # frames, 1-based 6-digit, 1920×1080
+│   │   ├── gt/gt.txt            # frame, id, x, y, w, h, conf, class, visibility
+│   │   ├── det/det.txt          # supplied detections (ignore; we run our own)
+│   │   └── seqinfo.ini          # frame count, resolution, image extension
+│   └── … 8 sequences total
+└── test/  … 8 sequences
 ```
 
-Converting to our canonical YOLO layout means dropping the `id` column — keep it in a
-sidecar if track-level evaluation is ever wanted.
+**Converting to our canonical layout.** `gt.txt` is `frame,id,x,y,w,h,…` in **absolute
+top-left pixel** coords, whereas our YOLO labels are normalised centre-xywh — the same
+conversion `src.data.prepare_ardmav` already does for VOC, just from a different source.
+Two things to decide up front:
+
+- **The `id` column.** Dropping it loses the track association. Keep it in a sidecar
+  (`tracks.jsonl`) — MOT-FLY is the only multi-target set we would hold, so it is the only
+  data that could ever support track-level evaluation.
+- **Genuine negatives.** Unlike ARD-MAV, absence of a `gt.txt` row for a frame means the
+  target is absent, not unannotated — `seqinfo.ini` gives the authoritative frame count, so
+  frames with no row are real negatives and should be emitted as empty labels.
 
 ## NPS-Drones (fixed-wing — pretraining only)
 
