@@ -177,7 +177,7 @@ class TestEvaluate:
                               ([10, 10, 60, 60], 0.3, 0)]),
             make_frame(key="c", gt=[[270, 270, 370, 370]], preds=None),
         ]
-        return evaluate(frames, primary_iou=0.5)
+        return evaluate(frames, 0.5)
 
     def test_counts(self, scored):
         assert (scored.n_frames, scored.n_gt, scored.n_pred) == (3, 3, 3)

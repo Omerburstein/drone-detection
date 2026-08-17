@@ -246,3 +246,52 @@ as the expected value for EXP-001, which was an error.
    and 3,080 targets are never found even at IoU 0.25, while the local regime holds lock
    88% of the time. Effort belongs on the branch that finds a target from cold — which is
    also the branch the authors' own hovering-target failure mode attacks.
+
+---
+
+### EXP-004 re-scored on centre distance
+
+Added after EXP-004 landed, on the observation that IoU is the wrong ruler for a
+false-alarm rate at 10–30 px. `--match center --match-tol 1.0`: a prediction claims a
+target when their centres are within one target size (`sqrt(w*h)`), whatever the box
+dimensions. Free — the JSONL is persisted, so no inference was re-run. See
+[evaluate.md](evaluate.md#matching-criteria).
+
+| | IoU@0.50 | centre@1× |
+| --- | --- | --- |
+| precision | 0.8559 | **0.9926** |
+| recall | 0.7713 | **0.8946** |
+| F1 | 0.8114 | **0.9410** |
+| TP / FP | 21,721 / 3,658 | 25,191 / **188** |
+| mean IoU | 0.7255 | 0.6829 |
+| recall, tiny | 0.6624 | **0.8493** |
+| ordinary P/R | .987 / .965 | .998 / .976 |
+| complex P/R | .907 / .828 | .998 / .912 |
+| small_mav P/R | .642 / .522 | **.980 / .797** |
+
+**GLAD produces 188 false alarms in 28,337 frames, not 3,658.** 95% of what IoU@0.50
+charged as false positives were GLAD's own boxes sitting slightly off a real drone —
+counted twice over, once as a false alarm and once as a miss.
+
+**The criterion does not simply inflate everything.** Re-scored the same way, the
+off-the-shelf baselines barely move:
+
+| Run | FP @ IoU 0.50 | FP @ centre | Change |
+| --- | --- | --- | --- |
+| EXP-004 GLAD | 3,658 | 188 | **−95%** |
+| EXP-001 whole @640 | 610 | 609 | −0.2% |
+| EXP-002 whole @1280 | 3,293 | 3,287 | −0.2% |
+| EXP-003 tiled | 11,353 | 11,325 | −0.2% |
+
+That asymmetry is the criterion working as intended: it distinguishes "the box is a few
+pixels off the drone" from "the box is on an air-conditioning unit", and forgives only the
+first. EXP-001–003's conclusions are unchanged under either rule.
+
+**mean IoU is the check that keeps this honest.** It falls slightly (0.726 → 0.683)
+because centre matching admits pairs IoU would have rejected, and it is still computed as
+real IoU under both criteria. Localisation quality is measured, not assumed — the boxes are
+simply no longer required to be well-sized in order to count as detections.
+
+**Not comparable to the published table.** GLAD's figures are IoU-based (whatever their
+threshold), so the centre-matched column belongs only in comparisons against our own runs.
+`mAP@0.50:0.95` is reported as `n/a`: it is an IoU sweep by definition.

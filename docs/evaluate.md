@@ -12,7 +12,9 @@ py -3.13 -m src.evaluate --pred <jsonl> --labels <dir> [options]
 | --- | --- | --- |
 | `--pred` | required | `detections.jsonl` written by `baseline_detect.py`. |
 | `--labels` | required | Directory of YOLO-format `.txt` label files. Matched to predictions by **filename stem** — `img042.jpg` pairs with `img042.txt`. Video runs pair frame index to `<idx>.txt`. |
-| `--iou` | `0.5` | IoU threshold for the precision/recall/size breakdowns. AP@0.50 and mAP@0.50:0.95 always use the standard sweep regardless of this. |
+| `--iou` | `0.5` | IoU threshold for the precision/recall/size breakdowns, when `--match iou`. AP@0.50 and mAP@0.50:0.95 always use the standard sweep regardless of this. |
+| `--match` | `iou` | How a prediction claims a target: `iou` (COCO overlap) or `center` (centre-to-centre distance). See **Matching criteria** below. |
+| `--match-tol` | `1.0` | For `--match center`: the centre-distance tolerance in multiples of the target's own size. `1.0` means "more than one drone-width off centre is a miss". |
 | `--frame-size W H` | none | Frame dimensions in pixels. **Required for video-keyed predictions** — the JSONL stores frame indices, not sizes. For image runs it is read from the image file, and this flag overrides it. |
 | `--conditions` | none | `conditions.json` from `src.data.prepare_ardmav`. Adds a per-scene-category breakdown. Required to compare against papers that report by category. |
 | `--json-out` | none | Also write metrics as JSON. Pass it for anything you intend to cite in the ledger. |
@@ -79,6 +81,55 @@ discarding them would silently change every per-category denominator.
 - **Each ground-truth box can be claimed once.** A second box on an already-matched
   drone becomes a false positive — this is what penalises duplicate detections.
 - **Class-aware.** A `bird` prediction cannot satisfy a `drone` ground truth.
+
+These hold under either criterion below.
+
+## Matching criteria
+
+One number cannot do both jobs at these target sizes, so the criterion is a choice.
+
+### `--match iou` (default)
+
+A prediction claims a target when their IoU is at least `--iou`. COCO's rule, and **the
+only setting comparable to a published mAP**.
+
+Its weakness is exactly this project's regime. IoU falls off with *relative* offset, so a
+fixed threshold gets stricter as targets shrink. Measured on EXP-004: moving the threshold
+from 0.50 to 0.40 moved `small_mav` precision 23 points and recall 19, while barely
+touching `ordinary`. A 3 px error on a 12 px drone is scored a miss *and* a false alarm;
+the same 3 px on a 100 px target is a clean hit.
+
+### `--match center`
+
+A prediction claims a target when their **centres are within `--match-tol` target sizes**
+of each other, where size is `sqrt(w*h)` of the ground-truth box — the same notion of size
+the recall-by-size buckets use.
+
+This answers *did the detector find the drone*, which is the question a false-alarm rate is
+actually asking. It is size-relative by construction, so it is equally strict on a 10 px
+and a 100 px target. Box dimensions are ignored entirely: a correctly centred but badly
+sized box is a detection, and its sizing error shows up in **mean IoU** instead.
+
+**mAP@0.50:0.95 is reported as `n/a` under this criterion.** That metric is defined by
+averaging over IoU thresholds; sweeping the distance tolerance instead would produce a
+number that looks like mAP, is not, and would eventually be compared to one.
+
+### Which to use
+
+| Question | Criterion |
+| --- | --- |
+| How well are the boxes placed? (regression quality) | `iou`, plus **mean IoU** |
+| Did we find the drone? Is this a false alarm? | `center` |
+| Comparing to a published mAP | `iou`, and state the threshold |
+
+**P/R/F1 from the two criteria are different measurements and must never be compared.**
+The criterion is recorded in the printed report and in the `criterion` field of
+`--json-out` for exactly that reason.
+
+The criterion does not simply flatter a detector. Re-scoring the four runs in the ledger,
+false alarms fell 95% for GLAD (3,658 → 188) — its "false alarms" were mostly its own boxes
+sitting just off a real drone — and by 0.2% for the off-the-shelf baselines, whose false
+alarms are genuinely on air-conditioning units and window recesses.
 
 ## Comparability
 
