@@ -17,10 +17,38 @@ three independent requirements, and most "drone datasets" fail at least one:
 | # | Filter | Why it is load-bearing |
 | --- | --- | --- |
 | 1 | **Target is a multirotor** | A quadcopter silhouette is roughly square (aspect ~1:1–1.5:1) and its motion signature is hover-capable. A fixed-wing target is a 3:1 wing planform that cannot hover and shows a distinctive V-shape blur. Detectors trained on one do not transfer to the other. |
-| 2 | **Video, not stills** | Every method that works at this target size (GLAD, YOLOMG, Dogfight, TransVisDrone) uses inter-frame motion. Sparse stills cannot drive a motion branch at all. |
+| 2 | **Contiguous frames, not sparse stills** | Every method that works at this target size (GLAD, YOLOMG, Dogfight, TransVisDrone) uses inter-frame motion. Sparse stills cannot drive a motion branch at all. |
 | 3 | **Camera on a moving airborne platform** | A static camera makes frame differencing trivial and removes the ego-motion that motion compensation exists to cancel. Ground footage also lacks the sky/terrain background swing that causes our false positives. |
 
 **Only four real datasets pass all three.** They are in Tier 1 below.
+
+### "Video" here means contiguous frames, not a container format
+
+Most of these datasets ship as **extracted numbered frames** (`000001.jpg, 000002.jpg …`)
+rather than MP4 files. **That is fine** — arguably better, since it skips a decode and any
+re-encoding artefacts. What a motion branch needs is *ordered consecutive frames at a known
+rate*, not a video container.
+
+The real dividing line is therefore:
+
+| | Example | Motion branch |
+| --- | --- | --- |
+| **MP4 / video files** | ARD-MAV, ARD100, Anti-UAV300 | ✅ works |
+| **Extracted frame sequences** | MOT-FLY, DUT *tracking*, Anti-UAV410 | ✅ works |
+| **Sparse independent stills** | Det-Fly, VisioDECT, LRDDv2, UETT4K, DUT *detection* | ❌ cannot run |
+
+So "DUT Anti-UAV is pictures" is both right and incomplete: it ships **two separate
+subsets**, and only one of them is usable —
+
+- **detection subset** — 10,000 *independent* images. Sparse stills. Motion methods cannot
+  use it.
+- **tracking subset** — 20 sequences delivered as an **Images** archive plus a **Ground
+  Truth** archive, i.e. contiguous extracted frames. Usable.
+
+Same for **Drone-vs-Bird**: its annotations are frame-indexed
+(`framenum num_objs obj1_x obj1_y obj1_w obj1_h obj1_class …`), which only makes sense over
+contiguous sequences. What arrives after the DUA is the sequence data, not a shuffled image
+set. *(Exact container unverified — it is only visible post-DUA.)*
 
 ---
 
@@ -30,7 +58,7 @@ three independent requirements, and most "drone datasets" fail at least one:
 | --- | :---: | :---: | :---: | --- |
 | **ARD-MAV** | ✅ | ✅ | ✅ | **In use.** Our test set |
 | **ARD100** | ✅ | ✅ | ✅ | **Get this next** |
-| **MOT-FLY** | ✅ | ✅ | ✅ | **Best free addition** |
+| **MOT-FLY** | ✅ | ✅ | ✅ | ❌ **download dead since 2024** |
 | **FL-Drones** | ✅ | ✅ | ✅ | Held-out test for M4b; low-res |
 | Det-Fly | ✅ | ❌ stills | ✅ | Appearance only |
 | MAV-VID | ✅ | ✅ | ⚠️ mixed | Targets ~33× too large; terminal-phase only |
@@ -41,6 +69,65 @@ three independent requirements, and most "drone datasets" fail at least one:
 | MMFW-UAV | ❌ fixed-wing | ✅ | ✅ | Excluded |
 | DUT / VisioDECT / Drone-vs-Bird / Anti-UAV* / LRDDv2-3 / MMAUD / MM-UAV / USC-Drone | ✅ | mixed | ❌ ground | Auxiliary only |
 | SynDroneVision / SimD3 | ✅ | ✅ | ✅ | Synthetic |
+
+---
+
+# Download index
+
+Every direct URL, verified against the source repo/page on 2026-08-17 unless marked.
+**Status** is whether the link resolves, not whether the download completes.
+
+## Air-to-air
+
+| Dataset | Host | URL | Status |
+| --- | --- | --- | --- |
+| **ARD-MAV** | Google Drive | `https://drive.google.com/file/d/1_I5jR-a-Jlan96s7XD3QeLLddb51rDT_/view` | ✅ in use |
+| ARD-MAV | Baidu | `https://pan.baidu.com/s/1SmbyjC0l6uye_ghWhEErsQ` code `z1xb` | ✅ |
+| **ARD100** | Baidu **only** | `https://pan.baidu.com/s/1ycAoKbzQ1rlzvKr8VRakgw?pwd=1x2z` code `1x2z` | ⚠️ no mirror — see below |
+| **NPS-Drones** | Purdue HTTP | `https://engineering.purdue.edu/~bouman/UAV_Dataset/Videos.zip` | ✅ ⚠️ fixed-wing targets |
+| NPS-Drones labels | Purdue HTTP | `…/UAV_Dataset/Video_Annotation-v2.zip` (use v2) | ✅ |
+| **MOT-FLY** | Google Drive | `https://drive.google.com/file/d/1GiWLF8B18FGDcCSuSuvGokczCkP_NEgo/view` | ❌ **dead** |
+| MOT-FLY | Baidu | `https://pan.baidu.com/s/1eS84Ooz0URojz1tAJNZ5Eg?pwd=pe53` code `pe53` | ❓ untested |
+| **Det-Fly** | repo → OneDrive/Baidu | `https://github.com/Jake-WU/Det-Fly` | ✅ sparse stills |
+| **FL-Drones** | via TransVisDrone prep | `https://github.com/tusharsangam/TransVisDrone` | ⚠️ indirect |
+| **AOT** | open S3 | `aws s3 ls --no-sign-request s3://airborne-obj-detection-challenge-training/` | ✅ 13 TB |
+
+## Ground-based
+
+| Dataset | Host | URL | Format |
+| --- | --- | --- | --- |
+| **Anti-UAV300** ⭐ | Google Drive | `https://drive.google.com/file/d/1NPYaop35ocVTYWHOYQQHn8YHsM9jmLGr/view` | **RGB + IR video**, Full HD |
+| Anti-UAV300 | Baidu | `https://pan.baidu.com/s/1dJR0VKyLyiXBNB_qfa2ZrA` code `sagx` | ” |
+| **Anti-UAV410** | Google Drive | `https://drive.google.com/file/d/1zsdazmKS3mHaEZWS2BnqbYHPEcIaH5WR/view` | **IR only**, train/val/test dirs |
+| Anti-UAV410 | Baidu | `https://pan.baidu.com/s/1R-L9gKIRowMgjjt52n48-g?pwd=a410` code `a410` | ” |
+| Anti-UAV410 results | Google Drive | `https://drive.google.com/file/d/1AlLpoMorj-7bKA1zqo1DkuEZ9h0jQs_-/view` | tracking outputs |
+| **Anti-UAV600** | ModelScope | `https://modelscope.cn/datasets/ly261666/3rd_Anti-UAV/files` | IR only |
+| **DUT** detection train | Google Drive | `https://drive.google.com/open?id=1RVsSGPUKTdmoyoPTBTWwroyulLek1eTj` | sparse stills |
+| DUT detection val | Google Drive | `https://drive.google.com/open?id=1333uEQfGuqTKslRkkeLSCxylh6AQ0X6n` | sparse stills |
+| DUT detection test | Google Drive | `https://drive.google.com/open?id=1L1zeW1EMDLlXHClSDcCjl3rs_A6sVai0` | sparse stills |
+| **DUT tracking images** ⭐ | Google Drive | `https://drive.google.com/open?id=1dlSPDggg6TRFMcC1jlYIJxxzUQS1mIh9` | **frame sequences** |
+| DUT tracking GT | Google Drive | `https://drive.google.com/open?id=16PE3tBhT0lUGZLA8-zIRYvNUvxfhFZJq` | labels for the above |
+| DUT (Baidu mirrors) | Baidu | det: `1-ogC7P_K6lwYAqIS8bgIUQ` `u955` · `15sekmPn0hYNQS05Makbmtw` `wkzs` · `1GiA-bKlvMSBkzUwYvo-RiA` `ik4d` · trk: `1OTExqKgvUnqpENtTDu_gGQ` `oine` · `1nkGNERDVgmYIAiwFTdj2xA` `e8mr` | prefix `https://pan.baidu.com/s/` |
+| **Drone-vs-Bird** | email DUA | `wosdetc@googlegroups.com` · repo `https://github.com/wosdetc/challenge` | frame-indexed annos |
+| **LRDDv2** | request form | `https://research.coe.drexel.edu/ece/imaple/lrddv2/` · `kp3275@drexel.edu` | **stills** |
+| **VisioDECT** | IEEE DataPort | search "VisioDECT" | **stills** |
+| **MMAUD** | OneDrive/Drive | `https://github.com/ntu-aris/MMAUD` | **rosbags** |
+| **SynDroneVision** | Zenodo | `https://zenodo.org/records/13360116` | synthetic stills |
+
+⭐ = the two worth grabbing first for ground-shot multirotor sequences.
+
+**Google Drive `open?id=` links** are the old form; they still resolve. To fetch on a
+headless GPU instance, the id is the part after `id=`:
+
+```bash
+py -3.13 -m pip install gdown
+gdown 1dlSPDggg6TRFMcC1jlYIJxxzUQS1mIh9 -O dut_tracking_images.zip
+gdown 16PE3tBhT0lUGZLA8-zIRYvNUvxfhFZJq -O dut_tracking_gt.zip
+```
+
+If a Drive link reports quota exceeded (as opposed to "does not exist"), open it in a
+browser, **Add shortcut to Drive**, and download from your own copy — your copy carries its
+own quota.
 
 ---
 
@@ -380,26 +467,31 @@ Useful for airframe variety and bird negatives. **Never** for benchmarking this 
 Six of the ten are video; the rest are stills or a non-video format. Ranked by usefulness
 here:
 
-| Dataset | Video volume | Modality | Friction |
+| Dataset | Sequence volume | Modality | Friction |
 | --- | --- | --- | --- |
-| **Anti-UAV** | **318 RGB+IR sequence pairs**, ~580k boxes, MP4 @ 25 fps | **RGB** + thermal | open — **best RGB volume** |
-| **Drone-vs-Bird** | 77 videos, 95k+ frames | RGB | **signed DUA, non-commercial** |
-| **DUT Anti-UAV** | 20 videos (its tracking half) | RGB | **Apache-2.0**, Google Drive — easiest |
-| **Anti-UAV410** | 410 videos, 438k boxes | **thermal only** | Drive/Baidu |
+| **Anti-UAV300** ⭐ | ~300 sequence pairs, Full HD | **RGB + IR** | **Google Drive, open** — best RGB volume |
+| **DUT tracking** ⭐ | 20 sequences (frames + GT archives) | RGB | **Apache-2.0**, Google Drive — easiest |
+| **Drone-vs-Bird** | 77 sequences, 95k+ frames | RGB | **signed DUA, non-commercial** |
+| **Anti-UAV410** | 410 sequences, 438k boxes | **IR only** | Drive/Baidu |
+| **Anti-UAV600** | — | **IR only** | ModelScope (Chinese host) |
 | **MM-UAV** | 1,321 sequences | RGB 640×360 + IR + event | **not yet released** |
-| **USC-Drone** | handheld ground video | RGB | single viewpoint, many frames unlabelled |
-| VisioDECT · LRDDv2/v3 · UETT4K | — | **still images**, not video | — |
-| MMAUD | — | **rosbags**, not video files | — |
+| **USC-Drone** | handheld ground | RGB | single viewpoint, many frames unlabelled |
+| DUT *detection* · VisioDECT · LRDDv2/v3 · UETT4K | — | **sparse stills** | unusable for motion |
+| MMAUD | — | **rosbags** | different pipeline entirely |
 
-**Anti-UAV** is the answer if you want the most ground-shot RGB video of multirotors: 318
-sequences, DJI and Parrot targets, day and night, varied backgrounds (buildings, cloud,
-trees). Its known weakness is that the RGB and IR streams are **not aligned in time or
-space**, which only matters if you wanted the fusion. *(The 25 fps / MP4 / DJI-and-Parrot
-details come from the UAVSwarm paper's related-work section, not the Anti-UAV paper itself
-— unverified at source.)*
+**Anti-UAV300 is the answer** to "ground camera tracking a multirotor, in sequence form,
+downloadable now": Full HD, RGB **and** IR, DJI and Parrot targets, day and night, varied
+backgrounds — and it has a plain Google Drive link. Note the family splits by modality:
+**300 = RGB+IR, 410 = IR only, 600 = IR only.** Only the 300 gives you RGB. Its known
+weakness is that the RGB and IR streams are **not aligned in time or space**, which matters
+only if you wanted the fusion.
 
-**DUT Anti-UAV** is the one to grab first if you just want something working today —
-Apache-2.0, Google Drive, no DUA, no Baidu — but its video half is only 20 sequences.
+**DUT's tracking half** is the fastest thing to get working today — Apache-2.0, Google
+Drive, no DUA, no Baidu — but it is only 20 sequences, and you must take the **tracking**
+archives, not the 10,000-image detection subset.
+
+*(The DJI-and-Parrot / day-and-night details come from the UAVSwarm paper's related-work
+section rather than the Anti-UAV paper itself — unverified at source.)*
 
 Remember what this data can and cannot do: a **static ground camera** makes frame
 differencing trivial and removes the ego-motion the whole motion-compensation stage exists
@@ -478,25 +570,28 @@ MOT-FLY/
 └── test/  … 8 sequences
 ```
 
-### If the Drive link fails
+### ⚠️ The Drive link is dead — treat MOT-FLY as unobtainable for now
 
-Confirmed failing as of 2026-08-16. I could not diagnose it remotely — Drive's `/view`
-pages reject non-browser fetchers, so the 404 I get is not evidence either way. Ranked by
-likelihood:
+**Status 2026-08-17: the Google Drive file returns "file does not exist"** — deleted or
+moved, not a quota block. My earlier quota diagnosis was wrong.
 
-1. **Download quota exceeded** (most common for a popular shared research file; Google caps
-   per-file downloads and resets after ~24 h). The message appears *after* you click
-   download, not on the page itself. **Fix: copy it into your own Drive first** — open the
-   link, click **Add shortcut to Drive** or **Make a copy**, then download from your copy,
-   which carries its own quota. This is the most reliable workaround and needs no tooling.
-2. **`gdown` invoked on the share URL rather than the file id.** Use `--fuzzy` if passing
-   the full URL. When quota is the real cause, `gdown` writes a small HTML file instead of
-   the zip — `file MOT-FLY.zip` showing "HTML document" confirms it.
-3. **The file was moved or removed.** Then only the author can fix it.
+This is not a transient failure. Repository **issue #1, titled 「链接失效」 ("link
+invalid"), was opened 2024-12-27** asking the author to re-share, and **has received no
+reply in ~20 months.** The repo has no other activity, and no mirror exists anywhere I
+could find.
 
-**Fallback that actually works: email the author** — `3120210041@bit.edu.cn` (Beijing
-Institute of Technology). MOT-FLY is **Apache-2.0** and only ~11k images, so a fresh link
-costs them nothing. Say which paper you are citing and that the Drive link is quota-blocked.
+Remaining routes, in order:
+
+1. **Try the Baidu link** — `https://pan.baidu.com/s/1eS84Ooz0URojz1tAJNZ5Eg?pwd=pe53`
+   (password `pe53`). It is a separate host and may still be live; the issue does not say
+   which link broke. Subject to the Baidu access problems below.
+2. **Email the author** — `3120210041@bit.edu.cn` (Beijing Institute of Technology). Cite
+   the paper (*"An Experimental Evaluation Based on New Air-to-Air Multi-UAV Tracking
+   Dataset"*) and mention issue #1. Given the silence on GitHub, set expectations low.
+
+**Consequence: MOT-FLY cannot be planned around.** It was listed as the best free addition
+and as the easy M4b option — **both claims are withdrawn** until a link is confirmed
+working. M4b falls back to **FL-Drones** (primary) and **ARD100-extra** (secondary).
 
 **Converting to our canonical layout.** `gt.txt` is `frame,id,x,y,w,h,…` in **absolute
 top-left pixel** coords, whereas our YOLO labels are normalised centre-xywh — the same
