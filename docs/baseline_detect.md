@@ -8,6 +8,9 @@ anything, so later work has a number to beat.
 py -3.13 -m src.baseline_detect --weights <path> --source <path> [options]
 ```
 
+**Inference is tiled by default** — the whole-frame letterbox is opt-in via
+`--no-tile`. The rationale is in [`--tile`](#--tile--no-tile-default-tiled) below.
+
 Run it from the repository root, which is what puts `src` on the import path.
 The implementation is split across `src/data` (frame sources), `src/algo`
 (inference and tiling) and `src/output` (JSONL and annotated media); this page
@@ -45,12 +48,20 @@ Output directory. Created if missing. Gitignored.
 
 ### `--imgsz` (default `640`)
 
-The square size every frame is letterboxed to before inference. **The single most
-important knob in this project.**
+The square size a frame is letterboxed to before inference. **Applies to the
+whole-frame path only** — under the default tiled path each crop is fed at
+`--tile-size` and this value is ignored entirely.
 
-A 1080p frame at `--imgsz 640` is scaled by 0.59, so a 20 px drone becomes 12 px. At
-4K the same drone becomes 3 px — gone. Raising this preserves small targets at
-quadratic cost in compute.
+Ultralytics fits the frame's **longest side** to `--imgsz` and pads the rest, so the
+scale factor is `imgsz / max(width, height)`:
+
+| Source | Scale at `--imgsz 640` | A 20 px drone becomes |
+| --- | --- | --- |
+| 1280×720 | 0.50 | 10 px |
+| 1920×1080 | 0.33 | ~7 px |
+| 3840×2160 (4K) | 0.17 | ~3 px — gone |
+
+Raising it preserves small targets at quadratic cost in compute.
 
 | Value | Effect |
 | --- | --- |
@@ -59,6 +70,10 @@ quadratic cost in compute.
 | 1920+ | Diminishing returns unless the source is 4K. Slow on CPU. |
 
 Must be a multiple of 32. Ultralytics silently rounds up if not.
+
+> Raising `--imgsz` past the resolution the weights were trained at upscales sky
+> along with the target and hits diminishing returns. `--tile` is the principled
+> fix; `--imgsz 1280` is the cheap one.
 
 ### `--conf` (default `0.25`)
 
@@ -102,26 +117,39 @@ for baseline measurement.
 Stop after this many processed frames. Combine with `--stride` for a quick
 representative sample: `--stride 10 --max-frames 200` covers 2000 frames of source.
 
-### `--tile` (flag, default off)
+### `--tile` / `--no-tile` (default: **tiled**)
 
-Run the detector over **overlapping crops at native resolution** and merge the results
-with class-aware NMS, instead of letterboxing the whole frame.
+Tiled inference runs the detector over **overlapping crops at native resolution** and
+merges the results with class-aware NMS. Nothing is rescaled. This is the default
+because it is the only path that does not throw the target away before the detector
+runs: at 10–30 px, an air-to-air drone does not survive a letterbox.
 
-This exists because a whole-frame run conflates two very different failures: the
-detector being weak on small objects, and the target being destroyed by the resize
-before the detector ever saw it. **Run both ways.** The gap between them tells you
-which problem you actually have — and if the gap is large, the fix is resolution, not
-a bigger model.
+`--no-tile` letterboxes the whole frame to `--imgsz` instead.
 
-Costs roughly (number of tiles) × the single-pass time. Measured on this machine, 720p
-with `yolov8n`: **11 fps whole-frame vs 0.72 fps tiled.** Always pair `--tile` with
-`--stride` and `--max-frames`.
+**Run both ways when benchmarking.** A whole-frame run conflates two very different
+failures — the detector being weak on small objects, and the target being destroyed by
+the resize before the detector ever saw it. The gap between the two tells you which
+problem you actually have, and if the gap is large the fix is resolution, not a bigger
+model.
+
+Tiling costs roughly (number of tiles) × the single-pass time. Measured on this
+machine, 720p with `yolov8n`: **11 fps whole-frame vs 0.72 fps tiled.** Pair the
+default with `--stride` and `--max-frames`, or pass `--no-tile` when you only want a
+fast smoke test.
+
+> The default flipped on 2026-08-18. Ledger commands recorded before that date omit
+> `--no-tile` on their whole-frame runs; add it to reproduce them.
 
 ### `--tile-size` (default `640`)
 
-Edge length in pixels of each crop. Should match the `--imgsz` the weights were trained
-at — crops are fed at native resolution, so a 640 crop into a model expecting 640 means
-no rescaling at all, which is the entire point.
+Edge length in pixels of each crop, **and the size each crop is fed to the model at**.
+Set it to the resolution the weights were trained at: a 640 crop into a model expecting
+640 means no rescaling at all, which is the entire point.
+
+`--imgsz` does not apply here. Feeding a `--tile-size 1280` crop at `--imgsz 640` would
+halve every crop — reintroducing exactly the rescaling tiling exists to avoid, while
+paying the tiling cost to do it — so the tiled path ignores `--imgsz` and uses
+`--tile-size`.
 
 ### `--tile-overlap` (default `0.2`)
 
@@ -204,19 +232,21 @@ after `dataset-agent` has produced a validated split.
 ## Recipes
 
 ```bash
-# Quick look — is anything working at all?
+# Quick look — is anything working at all? --no-tile keeps it fast.
 py -3.13 -m src.baseline_detect --weights weights/drone.pt \
-    --source data/ARD-MAV/video01.mp4 --stride 10 --max-frames 100 --conf 0.15
+    --source data/ARD-MAV/video01.mp4 --stride 10 --max-frames 100 --conf 0.15 \
+    --no-tile
 
-# Honest whole-frame baseline at a sane resolution
-py -3.13 -m src.baseline_detect --weights weights/drone.pt \
-    --source data/ARD-MAV/video01.mp4 --stride 5 --imgsz 1280 --conf 0.15 \
-    --out runs/exp001_whole_1280
-
-# Tiled comparison — same video, same threshold, only the strategy differs
+# The default: tiled at native resolution, nothing thrown away
 py -3.13 -m src.baseline_detect --weights weights/drone.pt \
     --source data/ARD-MAV/video01.mp4 --stride 20 --max-frames 100 --conf 0.15 \
-    --tile --tile-size 640 --out runs/exp002_tiled
+    --tile-size 640 --out runs/exp002_tiled
+
+# Whole-frame comparison at a sane resolution -- same video, same threshold,
+# only the strategy differs
+py -3.13 -m src.baseline_detect --weights weights/drone.pt \
+    --source data/ARD-MAV/video01.mp4 --stride 5 --imgsz 1280 --conf 0.15 \
+    --no-tile --out runs/exp001_whole_1280
 
 # Numbers only, no annotated output
 py -3.13 -m src.baseline_detect --weights weights/drone.pt \

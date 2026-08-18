@@ -48,13 +48,16 @@ exactly one drone, that approximates the miss rate.
 
 ### On tiling
 
-`--tile` runs the detector over overlapping native-resolution crops and merges the
-results with class-aware NMS. This matters because an air-to-air target is often
-10–30 px; a 640 px letterbox of a 4K frame destroys it before the detector sees it.
-Run both ways — the gap between them tells you how much of the baseline's failure is
-resolution loss versus genuine small-object weakness.
+**Tiling is the default.** The detector runs over overlapping native-resolution crops,
+merged with class-aware NMS, and nothing is rescaled. This matters because an air-to-air
+target is often 10–30 px; a 640 px letterbox of a 4K frame destroys it before the
+detector sees it.
 
-It is much slower. Measured here on 720p with `yolov8n`: **11 fps whole-frame vs
+`--no-tile` letterboxes the whole frame to `--imgsz` instead. Run both ways — the gap
+between them tells you how much of the baseline's failure is resolution loss versus
+genuine small-object weakness.
+
+Tiling is much slower. Measured here on 720p with `yolov8n`: **11 fps whole-frame vs
 0.72 fps tiled**. Use `--stride` and `--max-frames` to sample rather than grind.
 
 ## Layout

@@ -9,6 +9,12 @@ fields `UNKNOWN` explicitly rather than omitting them.
 Maintained by `algo-agent`. Metrics come from `src.evaluate` (see
 [evaluate.md](evaluate.md)) — cite the `--json-out` file, not a terminal screenshot.
 
+> **Reproducing a pre-2026-08-18 command:** `src.baseline_detect` tiled only when
+> given `--tile` until 2026-08-18; it now tiles by default. Whole-frame entries below
+> (EXP-001, EXP-002) record commands with no tiling flag at all — **add `--no-tile`**
+> to re-run them as they were run. Every entry from EXP-004 on states its flag
+> explicitly.
+
 ---
 
 ## Template

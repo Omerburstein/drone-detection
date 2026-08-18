@@ -44,7 +44,7 @@ def unpack_result(result) -> Detections:
 def detect_tiled(model, frame: np.ndarray, cfg: InferenceConfig) -> Detections:
     """Detect on overlapping native-resolution crops, merged to frame coordinates."""
     crops, offsets = crop_grid(frame, cfg.tile_size, cfg.tile_overlap)
-    predict_kw = cfg.predict_kwargs()
+    predict_kw = cfg.tile_predict_kwargs()
 
     all_boxes, all_scores, all_classes = [], [], []
     # Chunked so a 4K frame's ~32 tiles don't balloon peak memory on a 16 GB box.

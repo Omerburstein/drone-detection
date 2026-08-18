@@ -1,24 +1,28 @@
-"""Run a pretrained detector over video or images and record what it finds.
+r"""Run a pretrained detector over video or images and record what it finds.
 
 This is step 1 of the plan: establish a baseline with off-the-shelf weights
 before training anything. See docs/research-notes.md.
 
-The important switch is --tile. Air-to-air drone targets are often 10-30 px in a
-1080p or 4K frame; feeding that through a 640 px letterbox destroys the target
-before the detector ever sees it. Tiled inference runs the detector over
-overlapping crops at native resolution and merges the results, which separates
-"the detector is weak on small targets" from "we threw the target away in a
-resize". Both numbers are worth having.
+Inference is **tiled by default**. Air-to-air drone targets are often 10-30 px
+in a 1080p or 4K frame; feeding that through a 640 px letterbox destroys the
+target before the detector ever sees it, so the honest default is the one that
+does not rescale. Tiled inference runs the detector over overlapping crops at
+native resolution and merges the results.
+
+--no-tile letterboxes the whole frame to --imgsz instead. It is an order of
+magnitude faster, and it answers a different question: the gap between the two
+separates "the detector is weak on small targets" from "we threw the target away
+in a resize". Both numbers are worth having.
 
 Examples
 --------
-    # Whole-frame baseline over every 5th frame of a video
+    # Tiled inference on 4K Det-Fly stills -- the default, nothing to pass
     py -3.13 -m src.baseline_detect --weights weights/yolov8s_eo_drone.pt \
-        --source data/ARD-MAV/video01.mp4 --stride 5
+        --source data/Det-Fly/images --tile-size 640 --conf 0.15
 
-    # Tiled inference on 4K Det-Fly stills
+    # Whole-frame comparison over every 5th frame of a video
     py -3.13 -m src.baseline_detect --weights weights/yolov8s_eo_drone.pt \
-        --source data/Det-Fly/images --tile --tile-size 640 --conf 0.15
+        --source data/ARD-MAV/video01.mp4 --stride 5 --no-tile
 """
 
 from __future__ import annotations
@@ -45,7 +49,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Video file, image file, or directory of images.")
     ap.add_argument("--out", type=Path, default=Path("runs/baseline"),
                     help="Output directory (default: runs/baseline).")
-    ap.add_argument("--imgsz", type=int, default=640)
+    ap.add_argument("--imgsz", type=int, default=640,
+                    help="Letterbox size for the whole-frame path. Ignored under "
+                         "--tile, where each crop is fed at --tile-size.")
     ap.add_argument("--conf", type=float, default=0.25,
                     help="Confidence threshold. Drop to ~0.1 to see whether the "
                          "target is being found weakly rather than not at all.")
@@ -55,8 +61,10 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--stride", type=int, default=1,
                     help="Process every Nth video frame. Raise this on CPU.")
     ap.add_argument("--max-frames", type=int, default=None)
-    ap.add_argument("--tile", action="store_true",
-                    help="Overlapping tiled inference at native resolution.")
+    ap.add_argument("--tile", action=argparse.BooleanOptionalAction, default=True,
+                    help="Overlapping tiled inference at native resolution (default). "
+                         "Pass --no-tile to letterbox the whole frame to --imgsz "
+                         "instead: far faster, and it destroys small targets.")
     ap.add_argument("--tile-size", type=int, default=640)
     ap.add_argument("--tile-overlap", type=float, default=0.2)
     ap.add_argument("--tile-batch", type=int, default=8)
