@@ -431,3 +431,70 @@ The figure `runs/exp004_glad/precision_by_size.png` plots the first row of this 
 precision against the size of the box being claimed, under both criteria, with the
 per-bin sample counts under it. Regenerate with
 [`src.plot_eval`](plot_eval.md); the binned numbers are in `precision_by_size.csv`.
+
+---
+
+### EXP-001–003 re-scored with dumps — resize vs tiled, by feature
+
+Added 2026-08-18. No inference re-run: all three `detections.jsonl` were persisted, so
+this is `src.evaluate --dump` over each, under both criteria. Headline numbers reproduce
+the entries above exactly. Figure: `runs/compare_resize_vs_tile/precision_by_size.png`.
+
+**These three are the resize-vs-tile axis, and they are the *baseline* model, not GLAD.**
+GLAD has no such switch — see the note below.
+
+Distance (same buckets as EXP-004; p95 closest approach 34.2 px), centre@1× matching:
+
+| Range | targets | resize @640 P/R | resize @1280 P/R | tiled, 8 crops P/R |
+| --- | --- | --- | --- | --- |
+| near (<2×) | 924 | .128 / .038 | .125 / .173 | **.075 / .315** |
+| mid (2–3×) | 583 | .000 / .000 | .001 / .002 | .027 / .129 |
+| far (3–5×) | 1,028 | .000 / .000 | .000 / .000 | .003 / .012 |
+| very far (>5×) | 281 | .000 / .000 | .000 / .000 | .001 / .004 |
+
+Background:
+
+| Category | targets | resize @640 P/R | resize @1280 P/R | tiled P/R |
+| --- | --- | --- | --- | --- |
+| ordinary | 924 | .087 / .022 | .124 / .132 | **.077 / .283** |
+| complex | 957 | .076 / .016 | .026 / .043 | .025 / .120 |
+| small_mav | 935 | .000 / .000 | .000 / .000 | .001 / .003 |
+
+Target size:
+
+| Size | targets | resize @640 R | resize @1280 R | tiled R |
+| --- | --- | --- | --- | --- |
+| tiny (<16 px) | 1,835 | 0.0000 | 0.0000 | **0.0387** |
+| small (16–32) | 782 | 0.0090 | 0.1240 | **0.3095** |
+| medium (32–96) | 199 | 0.1407 | 0.3216 | 0.3317 |
+
+#### What this adds over the original entries
+
+1. **Tiling buys recall everywhere and costs precision everywhere.** Under centre
+   matching — which forgives loose boxes and therefore cannot be blamed for the drop —
+   tiled recall beats resize@640 in every distance bucket and every category, while
+   precision falls in all but the nearest. 8 crops per frame is 8 independent chances to
+   false-alarm, and against a model this far out of domain that is what dominates.
+2. **Neither mode works past ~3× closest approach.** Every configuration is at or below
+   0.02 recall in the two far buckets. The resize/tile choice moves the near-range
+   numbers; it does not extend the range at which this detector functions at all.
+3. **Resize@640 has no tiny-target detections to bin.** Its `tiny` row is `nan` precision
+   over zero predictions — it never emits a box that small. Its false alarms are large:
+   478 in the `medium` bucket and 120 above 96 px, against 199 medium targets and no
+   large ones in the split at all. That is the 1.7×-too-large box distribution from the
+   original entry, now visible per bucket.
+4. **The comparison is not confounded by the matching rule.** Re-scored under centre
+   matching the baselines' false alarms fall by 0.2% (see the EXP-004 centre-distance
+   section), so these are genuine misplacements, not localisation slack.
+
+#### Note: GLAD has no resize/tile switch
+
+Worth recording because it has come up twice. The "8 crops per frame" path is
+`src.baseline_detect --tile`, a property of **our baseline harness**. GLAD's two regimes
+— global (whole frame letterboxed to 640) and local (one 320×320 crop around the previous
+box, upscaled to 640) — are *states of one state machine*, alternating automatically on
+detection success, not modes a user selects. There is no configuration of `src.glad_detect`
+that makes GLAD tiled, and no flag that disables its resize. Running GAD alone
+(`--pad`-style measurements in [glad_detect.md](glad_detect.md)) is the closest thing to
+"GLAD in resize mode", and running GAD over tiles is item 7 in
+[glad-model.md §6](glad-model.md) — an unbuilt experiment, not an option.

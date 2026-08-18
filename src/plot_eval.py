@@ -79,27 +79,40 @@ def _plot_curve(ax, curve: Curve, color: str, label: str) -> None:
             markeredgewidth=2, zorder=4)
 
 
-def _plot_counts(ax, curve: Curve, labels: list[str]) -> None:
+def _plot_counts(ax, curves: dict[str, Curve], labels: list[str]) -> None:
     """How many predictions each bin was computed from, on its own panel.
 
     A second y-scale on the precision axes would be the classic dual-axis
     mistake; a shared x and a separate panel says the same thing without
     inviting the two to be read against each other.
+
+    One bar group per series, in the series' own colour. Showing only the first
+    run's counts would be worse than showing none: the runs being overlaid can
+    differ in prediction count by an order of magnitude — EXP-001 emits 644
+    boxes where EXP-003 emits 11,704 — and a single grey bar would silently
+    attribute one run's sample size to all of them.
     """
-    x = np.arange(len(curve.total))
+    x = np.arange(len(labels))
+    n_series = len(curves)
+    width = 0.8 / n_series
     # Linear, not log: these bars are a sample-size cue, and a log height would
     # make 357 and 6,560 predictions look like the same amount of evidence.
-    ax.bar(x, curve.total, width=0.62, color=INK_MUTED, zorder=2)
+    for i, ((_, curve), color) in enumerate(zip(curves.items(), SERIES_COLORS)):
+        offset = (i - (n_series - 1) / 2) * width
+        ax.bar(x + offset, curve.total, width=width * 0.88, color=color, zorder=2)
+        if n_series == 1:
+            for j, total in enumerate(curve.total):
+                ax.annotate(f"{int(total):,}", (j, total), textcoords="offset points",
+                            xytext=(0, 3), ha="center", fontsize=7.5,
+                            color=INK_SECONDARY)
+
     ax.set_ylabel("predictions\nin bin", color=INK_SECONDARY, fontsize=9)
     ax.set_xticks(x, labels, color=INK_SECONDARY)
     ax.set_xlabel("predicted box size, $\\sqrt{w \\times h}$  (pixels)",
                   color=INK, fontsize=10.5)
-    for i, total in enumerate(curve.total):
-        ax.annotate(f"{int(total):,}", (i, total), textcoords="offset points",
-                    xytext=(0, 3), ha="center", fontsize=7.5, color=INK_SECONDARY)
 
 
-def render(curves: dict[str, Curve], counts: Curve, out: Path, title: str,
+def render(curves: dict[str, Curve], out: Path, title: str,
            subtitle: str) -> None:
     """Draw the figure and write it to `out`."""
     fig, (top, bottom) = plt.subplots(
@@ -116,14 +129,19 @@ def render(curves: dict[str, Curve], counts: Curve, out: Path, title: str,
     top.set_ylim(-0.03, 1.05)
     top.set_yticks(np.arange(0, 1.01, 0.2))
     top.set_ylabel("precision", color=INK, fontsize=10.5)
-    top.legend(frameon=False, loc="lower right", fontsize=9.5,
-               labelcolor=INK_SECONDARY)
-    top.set_title(title, color=INK, fontsize=13, loc="left", pad=18, weight="bold")
-    top.annotate(subtitle, xy=(0, 1.015), xycoords="axes fraction", fontsize=9.5,
+    # Legend in a row above the axes, never inside them: these lines can sit
+    # anywhere between 0 and 1 depending on the run, so any in-plot corner is a
+    # collision waiting for the next dataset.
+    top.legend(frameon=False, fontsize=9.5, labelcolor=INK_SECONDARY,
+               ncol=min(len(curves), 3), loc="lower left",
+               bbox_to_anchor=(0, 1.0, 1, 0.1), handlelength=1.6,
+               columnspacing=1.8, borderaxespad=0)
+    top.set_title(title, color=INK, fontsize=13, loc="left", pad=44, weight="bold")
+    top.annotate(subtitle, xy=(0, 1.075), xycoords="axes fraction", fontsize=9.5,
                  color=INK_SECONDARY, ha="left", va="bottom")
 
-    _plot_counts(bottom, counts, next(iter(curves.values())).labels)
-    bottom.set_ylim(0, max(counts.total.max() * 1.28, 10))
+    _plot_counts(bottom, curves, next(iter(curves.values())).labels)
+    bottom.set_ylim(0, max(c.total.max() for c in curves.values()) * 1.28 or 10)
     bottom.set_yticks([])
     bottom.spines["left"].set_visible(False)
 
@@ -188,15 +206,14 @@ def main() -> None:
     """Load each dump, bin it, and render the figure."""
     args = build_parser().parse_args()
 
-    precision, recall, counts = {}, {}, None
+    precision, recall = {}, {}
     for label, path in args.dump:
         rows = load_dump(path)
         precision[label] = precision_by_size(rows, SIZE_EDGES)
         recall[f"{label} (recall)"] = recall_by_size(rows, SIZE_EDGES)
-        counts = counts or precision[label]
         print(f"{label}: {len(rows)} rows from {path}")
 
-    render(precision, counts, args.out, args.title, args.subtitle)
+    render(precision, args.out, args.title, args.subtitle)
     print(f"Wrote {args.out}")
 
     data_out = args.data_out or args.out.with_suffix(".csv")
