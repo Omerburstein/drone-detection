@@ -685,7 +685,9 @@ Pull onto the GPU instance, never here. ~13 TB full; use the starter kit's parti
 > to me, and I will paste it in the readme."
 >
 > ```bash
-> wget -c "https://zenodo.org/records/15870538/files/ARD100.zip?download=1" -O ARD100.zip
+> # --read-timeout is essential: without a stall guard the transfer hangs
+> # forever on a half-open socket (cost 2.6 h at 45% when the machine idled).
+> wget -c --tries=0 --waitretry=15 --read-timeout=60 \n>   "https://zenodo.org/records/15870538/files/ARD100.zip?download=1" -O ARD100.zip
 > ```
 >
 > Verified directly: `HTTP 200`, `content-length: 27351535415`, and range requests return
