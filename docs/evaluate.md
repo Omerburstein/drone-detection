@@ -20,6 +20,7 @@ py -3.13 -m src.evaluate --pred <jsonl> --labels <dir> [options]
 | `--conditions` | none | `conditions.json` from `src.data.prepare_ardmav`. Adds one breakdown table per axis the file declares — `scene_category` (required to compare against papers that report by category), plus the measured `lighting` and `relative_range`. See [scene_stats.md](scene_stats.md). |
 | `--json-out` | none | Also write metrics as JSON — one snapshot, overwritten each run. Pass it for anything you intend to cite in the ledger. |
 | `--save` | none | Append this result **and the settings that produced it** to a results log (JSONL). See **The results log** below. |
+| `--dump` | none | Write one CSV row per true positive, false positive and missed target — the table the metric block is a `GROUP BY` over. See **The per-object dump** below. |
 
 A missing label file is read as "no ground-truth boxes in this frame," not an error —
 that is how legitimate negative frames are represented. A missing *image* when the size
@@ -197,6 +198,61 @@ itself is worse than one that says it is broken.
 `--json-out` is unchanged: one file, overwritten, holding the bare `Metrics` schema the
 ledger cites. Use it for the number being cited and `--save` for the history behind it;
 they are independent and can be passed together.
+
+## The per-object dump
+
+`--json-out` and `--save` store *summaries*. A summary answers one question and discards
+what the next one needs: `precision 0.9926` cannot be re-cut by target size, `recall by
+size` cannot be re-cut by video, and neither survives a change of criterion without
+re-running the scorer.
+
+`--dump` writes the table those summaries are computed from — **one row per prediction
+and one row per ground-truth box, each appearing exactly once**:
+
+```bash
+py -3.13 -m src.evaluate     --pred runs/exp004_glad/detections.jsonl     --labels data/processed/ARD-MAV/labels/test     --conditions data/processed/ARD-MAV/conditions.json     --frame-size 1920 1080     --dump runs/exp004_glad/matches_center.csv
+```
+
+| Column | What it is |
+| --- | --- |
+| `key`, `video` | Frame stem and the sequence it belongs to. Grouping by video needs no lookup. |
+| `outcome` | `tp` (both boxes), `fp` (prediction only), `fn` (target only). |
+| `score` | Prediction confidence. Blank on `fn`. Constant 1.0 for GLAD, which emits none. |
+| `pred_x0…pred_y1`, `pred_size`, `pred_area` | The emitted box. `pred_size` is `sqrt(w*h)`. |
+| `gt_x0…gt_y1`, `gt_size`, `gt_area` | The target. `gt_size` is what the recall buckets bin on. |
+| `gt_class`, `pred_class` | Class ids, so a class-confusion cut is possible. |
+| `iou` | **Real IoU of the pair, whatever criterion matched them.** Under centre matching this is the only column still measuring how well the box was placed. |
+| `center_dx`, `center_dy`, `center_dist` | Offset between the two centres, px. |
+| `center_dist_rel` | The same in multiples of `gt_size` — *the quantity `--match center` thresholds on*. A tolerance of *t* accepts exactly the rows below *t*, so the effect of a different `--match-tol` can be read off the file without re-scoring. |
+| one column per axis | `scene_category`, and `lighting` / `relative_range` when `--conditions` declares them. |
+| one column per recorded field | Whatever the run wrote per frame. GLAD writes `branch` — the state-machine path that produced the box. |
+
+CSV, not JSONL, unlike the rest of the pipeline: this file exists to be loaded by
+something else, and its rows are genuinely flat. It is **overwritten**, not appended —
+two criteria's rows in one file would be silently double-counted by anything grouping it,
+so give each criterion its own path.
+
+Because every object appears exactly once, counting rows reproduces the headline numbers
+rather than approximating them:
+
+```bash
+# precision, from the file alone
+py -3.13 -c "import csv,collections; c=collections.Counter(r['outcome'] for r in csv.DictReader(open('runs/exp004_glad/matches_center.csv'))); print(c['tp']/(c['tp']+c['fp']))"
+```
+
+```python
+# every other cut, in pandas
+import pandas as pd
+d = pd.read_csv("runs/exp004_glad/matches_center.csv")
+
+d.groupby("video").outcome.value_counts().unstack()        # false alarms per sequence
+d.groupby("branch").outcome.value_counts().unstack()       # which GLAD branch is wrong
+d[d.outcome == "tp"].groupby("scene_category").iou.mean()  # localisation by background
+d[d.outcome == "tp"].center_dist_rel.quantile([.5, .9])    # how tight the centres are
+```
+
+`tests/unit/test_records.py` pins the claim that matters: the `tp`/`fp`/`fn` row counts
+equal what `evaluate` reports, under either criterion.
 
 ## Comparability
 

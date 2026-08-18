@@ -57,10 +57,15 @@ src/algo/     config.py     InferenceConfig
 src/output/   recording.py  RunRecorder (JSONL + counters)
               annotate.py   AnnotationSink -> VideoSink / ImageDirSink / NullSink
 src/eval/     labels.py     EvalFrame; ground truth paired with recorded preds
-              metrics.py    IoU matching, AP, the Metrics record
+              metrics.py    matching, AP, the Metrics record
+              conditions.py Axis; grouping frames by capture conditions
               report.py     the printed metric block
+              results.py    the append-only results log (settings + metrics)
+              records.py    the per-object dump: one row per tp / fp / fn
+              curves.py     binning that dump into precision/recall vs size
 src/baseline_detect.py      CLI: inference — parser, run loop, wiring
 src/evaluate.py             CLI: scoring a recorded run against labels
+src/plot_eval.py            CLI: precision-against-size figure from a dump
 ```
 
 **`src/data/` is source code, not a dataset.** The gitignore rules for `data/`,
@@ -89,6 +94,13 @@ Load-bearing points:
   second. Change the row format here, not at either end.
 - `Metrics` — frozen dataclass whose **field order is the `--json-out` schema** the
   ledger cites. Append fields; never reorder them.
+- `records.write_dump` — the per-object CSV every later cut is taken from. Every
+  prediction and every target appears **exactly once**, so counting rows reproduces the
+  metric block rather than approximating it; `tests/unit/test_records.py` pins that.
+  Add a column here rather than re-deriving one downstream.
+- `MatchCriterion` — the one place a match is decided. `records` and `curves` call
+  `match_frame`, they do not reimplement it, so a dump's `outcome` cannot disagree with
+  the metric block it explains.
 
 `src/evaluate.py` is the second CLI: it reads a run's JSONL and scores it against
 labels. It shares the package but not the inference path — `src/eval/` imports only

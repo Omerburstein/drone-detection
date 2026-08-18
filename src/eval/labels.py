@@ -15,6 +15,10 @@ from ..algo.detections import Detections
 
 LABEL_FIELDS = 5  # `<cls> <cx> <cy> <w> <h>` per YOLO label line
 
+# Row keys that are the record's structure rather than something the run chose
+# to record about the frame.
+RESERVED_KEYS = frozenset({"image", "frame", "detections"})
+
 
 @dataclass
 class EvalFrame:
@@ -29,6 +33,10 @@ class EvalFrame:
     gt_boxes: np.ndarray = field(default_factory=lambda: np.zeros((0, 4)))
     gt_classes: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=int))
     preds: Detections = field(default_factory=Detections.empty)
+    # Whatever else the run recorded on this frame -- GLAD writes `branch`, the
+    # state-machine path that produced the box. Carried rather than dropped so
+    # `src.eval.records` can put it in the dump; nothing in the metrics reads it.
+    extras: dict[str, Any] = field(default_factory=dict)
 
 
 def yolo_to_xyxy(rows: np.ndarray, width: int, height: int) -> np.ndarray:
@@ -100,5 +108,6 @@ def load_frames(pred_path: Path, labels_dir: Path,
             gt_boxes=yolo_to_xyxy(rows, width, height),
             gt_classes=gt_classes,
             preds=Detections.from_records(record.get("detections", [])),
+            extras={k: v for k, v in record.items() if k not in RESERVED_KEYS},
         ))
     return frames

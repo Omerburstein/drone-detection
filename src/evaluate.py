@@ -47,6 +47,7 @@ from .eval.conditions import load_conditions
 from .eval.labels import load_frames
 from .eval.metrics import CENTER, IOU, MatchCriterion, evaluate
 from .eval.report import report
+from .eval.records import write_dump
 from .eval.results import EvalSettings, append_result
 
 
@@ -89,6 +90,14 @@ def build_parser() -> argparse.ArgumentParser:
                          "--match/--iou/--match-tol into the same file and the log "
                          "accumulates instead of overwriting, so the settings can be "
                          "read back and compared.")
+    ap.add_argument("--dump", type=Path, default=None, metavar="CSV",
+                    help="Write one row per true positive, false positive and missed "
+                         "target: both boxes, their sizes, the offset between them, "
+                         "every condition-axis label and every per-frame field the run "
+                         "recorded. The metric block is a GROUP BY over this file, so "
+                         "any other cut of the same run -- precision against predicted "
+                         "box size, false alarms per video -- can be taken later "
+                         "without re-scoring.")
     return ap
 
 
@@ -111,6 +120,10 @@ def main() -> None:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(json.dumps(asdict(metrics), indent=2), encoding="utf-8")
         print(f"Wrote {args.json_out}")
+
+    if args.dump:
+        rows = write_dump(args.dump, frames, criterion, conditions)
+        print(f"Wrote {args.dump} ({rows} rows)")
 
     if args.save:
         settings = EvalSettings.from_args(args, criterion)

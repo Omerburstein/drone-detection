@@ -348,3 +348,86 @@ simply no longer required to be well-sized in order to count as detections.
 **Not comparable to the published table.** GLAD's figures are IoU-based (whatever their
 threshold), so the centre-matched column belongs only in comparisons against our own runs.
 `mAP@0.50:0.95` is reported as `n/a`: it is an IoU sweep by definition.
+
+---
+
+### EXP-004 broken down by feature
+
+Added 2026-08-18. No inference re-run and no re-scoring beyond what `src.evaluate`
+already does — both scorings now also write a **per-object dump**
+(`--dump`, see [evaluate.md](evaluate.md#the-per-object-dump)), one CSV row per true
+positive, false positive and missed target. Every table below is a `GROUP BY` over
+`runs/exp004_glad/matches_center.csv` and `matches_iou50.csv`; the headline numbers they
+sum to are byte-identical to the ones already in this entry, which is the check that the
+dump is a re-cut and not a re-measurement.
+
+**Distance.** ARD-MAV ships no telemetry range, but every target is the same airframe, so
+apparent size *is* range up to one scale factor (`d ∝ 1/size`; see
+[scene_stats.md](scene_stats.md)). Buckets are multiples of the split's own closest
+approach, p95 apparent size = **34.2 px**. Frame-level, so a false alarm is charged to
+the conditions it happened under.
+
+| Range | frames | targets | P centre | R centre | P IoU@0.50 | R IoU@0.50 |
+| --- | --- | --- | --- | --- | --- | --- |
+| near (<2×) | 9,190 | 9,190 | 0.9997 | 0.9812 | 0.9943 | 0.9760 |
+| mid (2–3×) | 5,867 | 5,867 | 0.9993 | 0.9204 | 0.9548 | 0.8795 |
+| far (3–5×) | 10,345 | 10,345 | 0.9958 | 0.8395 | 0.7713 | 0.6503 |
+| **very far (>5×)** | 2,758 | 2,758 | **0.9431** | **0.7574** | **0.3905** | **0.3136** |
+
+**Background** (the published `scene_category` axis, video-level):
+
+| Category | frames | targets | P centre | R centre | P IoU@0.50 | R IoU@0.50 |
+| --- | --- | --- | --- | --- | --- | --- |
+| ordinary | 9,244 | 9,230 | 0.9981 | 0.9758 | 0.9866 | 0.9646 |
+| complex | 9,582 | 9,578 | 0.9981 | 0.9116 | 0.9070 | 0.8284 |
+| small_mav | 9,352 | 9,352 | 0.9798 | 0.7969 | 0.6420 | 0.5222 |
+
+**Target size**, the same axis the recall buckets use:
+
+| Size | targets | P centre | R centre | P IoU@0.50 | R IoU@0.50 |
+| --- | --- | --- | --- | --- | --- |
+| tiny (<16 px) | 18,265 | 0.9899 | 0.8493 | 0.7755 | 0.6624 |
+| small (16–32) | 7,927 | 0.9971 | 0.9835 | 0.9823 | 0.9783 |
+| medium (32–96) | 1,968 | 0.9968 | 0.9563 | 0.9915 | 0.9487 |
+
+**Branch** — the state-machine path that produced each box, recorded per frame by
+`src.glad_detect` and carried into the dump:
+
+| Branch | frames | P centre | P IoU@0.50 | mean IoU of its hits |
+| --- | --- | --- | --- | --- |
+| local yolo | 25,041 | 0.9935 | 0.8654 | 0.687 |
+| **local mod** | 296 | **0.9358** | **0.0709** | **0.321** |
+| global mod | 26 | 1.0000 | 0.8846 | 0.682 |
+| global yolo | 16 | 0.6250 | 0.4375 | 0.624 |
+| global miss / local miss / first frame | 2,799 | — (no box emitted) | — | — |
+
+#### What the breakdown adds
+
+1. **Distance is the dominant feature, and it is not the same statement as "small
+   targets".** Precision holds at ≥0.994 out to 5× closest approach and only breaks in the
+   final bucket (0.943); recall decays monotonically from 0.981 to 0.757 across the four.
+   Under IoU@0.50 the same axis collapses to 0.39/0.31 in the far bucket — the ruler, not
+   the detector, as established earlier in this entry.
+2. **The motion branch is correctly located and badly sized.** `local mod` — LMD's
+   contour-derived boxes — scores precision **0.94 under centre matching and 0.07 under
+   IoU@0.50**, with mean IoU 0.321 against `local yolo`'s 0.687. A motion blob marks
+   *where* the drone is, not *how big* it is. This is the single clearest instance in the
+   project of a branch that any IoU-based score would call broken and that is in fact
+   doing its job. It is 296 frames, so it changes no headline — but it is the branch to
+   fix a box regressor onto, not to discard.
+3. **`global yolo` is the weakest branch by a wide margin** (P 0.625 centre, 16 frames).
+   Consistent with GAD's published 0.17 recall and with the acquisition ceiling noted
+   above; too few frames to conclude more.
+4. **Per-video spread is larger than any per-category number.** Under IoU@0.50 the videos
+   run from phantom30 at P/R 0.995/0.989 to phantom43 at 0.420/0.384 — a spread the
+   three-category aggregate hides completely. phantom43, phantom46 and phantom63 carry
+   most of the loss; all three are `small_mav`.
+5. **Recall dips again at the top of the size range** — 0.83 centre in the ≥48 px bucket,
+   against 0.99 at 32–48. Only 450 targets, and the likely cause is a target close enough
+   to leave the 320×320 search region between frames rather than an appearance failure.
+   Flagged, not concluded.
+
+The figure `runs/exp004_glad/precision_by_size.png` plots the first row of this story:
+precision against the size of the box being claimed, under both criteria, with the
+per-bin sample counts under it. Regenerate with
+[`src.plot_eval`](plot_eval.md); the binned numbers are in `precision_by_size.csv`.

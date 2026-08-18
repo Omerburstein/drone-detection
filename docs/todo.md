@@ -15,6 +15,7 @@ dates, not priorities.
 
 ## Open
 
+- [ ] 2026-08-18 — [data] Derive the **lighting** condition axis for the ARD-MAV test split: `py -3.13 -m src.data.scene_stats --processed data/processed/ARD-MAV --split test`. It merges `lighting` and `relative_range` into `conditions.json`, after which `src.evaluate --conditions` breaks every run down along them with no further work. **Budget ~1 h wall-clock and run it alone** — it decodes all 28,337 JPEGs and measured ~100 frames/min while competing with a scoring pass, which is why it was abandoned twice on 2026-08-18. `relative_range` is already available indirectly from `gt_size` in a `--dump` CSV; `lighting` is the part that needs the pixels.
 ### M4b — generalisation: does GLAD hold up on video it has never seen?
 
 - [ ] 2026-08-18 — [M4b] [algo] **Get ARD100 and score GLAD on 10–15 of its videos that
