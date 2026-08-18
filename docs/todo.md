@@ -53,7 +53,7 @@ dates, not priorities.
   **CC-BY-4.0**, uploaded by Yu-Hsi Chen and endorsed by the YOLOMG author in issue #7.
 
   ```bash
-  wget -c --tries=0 --waitretry=15     "https://zenodo.org/records/15870538/files/ARD100.zip?download=1" -O ARD100.zip
+  wget -c --tries=0 --waitretry=15 --read-timeout=60     "https://zenodo.org/records/15870538/files/ARD100.zip?download=1" -O ARD100.zip
   ```
 
   Verified: `HTTP 200`, `content-length 27351535415`, range requests return `206`, so
