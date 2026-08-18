@@ -48,12 +48,18 @@ dates, not priorities.
   **bounded and statable**: the number is optimistic, and "GLAD retains X on unseen video
   from the same campaign" is still a true and useful sentence.
 
-  **Routes, in order.** (1) Try the Baidu share link in a browser:
-  `https://pan.baidu.com/s/1ycAoKbzQ1rlzvKr8VRakgw?pwd=1x2z`. (2) Email
-  `guohanqing@westlake.edu.cn` — GLAD's lead author, same lab, already mirrors ARD-MAV on
-  Google Drive. All 60 local filenames are known, so ask for a specific ~40-video list
-  rather than "the dataset", and offer to accept any host or a 10-video subset. The cost
-  here is Baidu friction, not validity.
+  **Access — solved 2026-08-18, no Baidu and no email needed.** ARD100 is mirrored open
+  access on **Zenodo**, DOI `10.5281/zenodo.15870538`: one `ARD100.zip`, **27.35 GB**,
+  **CC-BY-4.0**, uploaded by Yu-Hsi Chen and endorsed by the YOLOMG author in issue #7.
+
+  ```bash
+  wget -c --tries=0 --waitretry=15     "https://zenodo.org/records/15870538/files/ARD100.zip?download=1" -O ARD100.zip
+  ```
+
+  Verified: `HTTP 200`, `content-length 27351535415`, range requests return `206`, so
+  resume works — and it is needed, because Zenodo returned `504` on half the probes during
+  testing. Found via the repo's *issue tracker*, not its README; check issues before
+  declaring a dataset unobtainable.
 
   **Constraints on the run.** 10–15 unseen videos carry the same statistical weight as
   EXP-004's 15, so the full 100 is unnecessary. If disk is tight, subsample by whole

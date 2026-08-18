@@ -57,7 +57,7 @@ set. *(Exact container unverified — it is only visible post-DUA.)*
 | Dataset | Multirotor target | Video | Moving airborne camera | Verdict |
 | --- | :---: | :---: | :---: | --- |
 | **ARD-MAV** | ✅ | ✅ | ✅ | **In use.** Our test set |
-| **ARD100** | ✅ | ✅ | ✅ | **Get this next** |
+| **ARD100** | ✅ | ✅ | ✅ | **Get this next — now open on Zenodo** |
 | **MOT-FLY** | ✅ | ✅ | ✅ | ❌ **download dead since 2024** |
 | **FL-Drones** | ✅ | ✅ | ✅ | Held-out test for M4b; low-res |
 | Det-Fly | ✅ | ❌ stills | ✅ | Appearance only |
@@ -83,7 +83,8 @@ Every direct URL, verified against the source repo/page on 2026-08-17 unless mar
 | --- | --- | --- | --- |
 | **ARD-MAV** | Google Drive | `https://drive.google.com/file/d/1_I5jR-a-Jlan96s7XD3QeLLddb51rDT_/view` | ✅ in use |
 | ARD-MAV | Baidu | `https://pan.baidu.com/s/1SmbyjC0l6uye_ghWhEErsQ` code `z1xb` | ✅ |
-| **ARD100** | Baidu **only** | `https://pan.baidu.com/s/1ycAoKbzQ1rlzvKr8VRakgw?pwd=1x2z` code `1x2z` | ⚠️ no mirror — see below |
+| **ARD100** ⭐ | **Zenodo** | `https://zenodo.org/records/15870538/files/ARD100.zip?download=1` | ✅ **open, 27.35 GB, CC-BY-4.0** |
+| ARD100 | Baidu (original) | `https://pan.baidu.com/s/1ycAoKbzQ1rlzvKr8VRakgw?pwd=1x2z` code `1x2z` | ✅ but throttled |
 | **NPS-Drones** | Purdue HTTP | `https://engineering.purdue.edu/~bouman/UAV_Dataset/Videos.zip` | ✅ ⚠️ fixed-wing targets |
 | NPS-Drones labels | Purdue HTTP | `…/UAV_Dataset/Video_Annotation-v2.zip` (use v2) | ✅ |
 | **MOT-FLY** | Google Drive | `https://drive.google.com/file/d/1GiWLF8B18FGDcCSuSuvGokczCkP_NEgo/view` | ❌ **dead** |
@@ -675,8 +676,38 @@ Pull onto the GPU instance, never here. ~13 TB full; use the starter kit's parti
 
 ## ARD100, and Baidu-gated data generally, from outside China
 
-ARD100's only published link is Baidu, with **no mirror**:
-`https://pan.baidu.com/s/1ycAoKbzQ1rlzvKr8VRakgw?pwd=1x2z` (code `1x2z`).
+> ## ✅ Resolved 2026-08-18 — ARD100 is on Zenodo, no Baidu needed
+>
+> A community mirror exists and is **open access**: **DOI
+> [10.5281/zenodo.15870538](https://doi.org/10.5281/zenodo.15870538)** — a single
+> `ARD100.zip`, **27.35 GB**, **CC-BY-4.0**, uploaded by Yu-Hsi Chen (`@wish44165`) and
+> **endorsed by the YOLOMG author**, who wrote in issue #7 "You can send the download link
+> to me, and I will paste it in the readme."
+>
+> ```bash
+> wget -c "https://zenodo.org/records/15870538/files/ARD100.zip?download=1" -O ARD100.zip
+> ```
+>
+> Verified directly: `HTTP 200`, `content-length: 27351535415`, and range requests return
+> `206 Partial Content`, so **`-c` resume works**. Zenodo intermittently returns `504`
+> under load — one in two probes during testing — so resume is not optional on a 27 GB
+> file. Use `wget -c` (or `curl -C -`) and re-run until it completes; add
+> `--tries=0 --waitretry=15` to make it self-healing.
+>
+> Pull it **onto the GPU instance** for M7, not here. For M4b, 10–15 videos suffice — but
+> the archive is a single zip, so selective extraction happens after download
+> (`unzip -l` to list, then extract only the wanted members).
+>
+> **How it was found, because the method generalises:** the dataset repo's *issue tracker*.
+> `Irisky123/YOLOMG` issue #7 ("How to download ARD100 dataset") runs to 64 comments of
+> international users hitting exactly this wall, and the mirror surfaced there long before
+> any README mentioned it. Check issues before concluding a dataset is unobtainable — the
+> same sweep also confirmed FL-Drones' real home (issue #3, answered by the author with the
+> EPFL CVLab link) and that MOT-FLY's link has been dead since 2024 with no reply.
+
+The original Baidu link still exists (`https://pan.baidu.com/s/1ycAoKbzQ1rlzvKr8VRakgw?pwd=1x2z`,
+code `1x2z`) and reportedly still works, but the notes below explain why it is the worse
+route.
 
 **Baidu is not geo-blocked from Israel.** The obstacles are different, and the second one
 is the real problem:
