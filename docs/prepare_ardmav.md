@@ -28,10 +28,16 @@ data/processed/ARD-MAV/
   images/test/phantom05_0001.jpg     # 1920x1080, JPEG quality 95
   labels/test/phantom05_0001.txt     # YOLO: 0 <cx> <cy> <w> <h>, normalised
   data.yaml                          # ultralytics dataset spec
-  conditions.json                    # scene category per video
+  conditions.json                    # condition axes: scene category, lighting, range
   MANIFEST.md                        # provenance, counts, split rule, known issues
   _verify/                           # sampled frames with labels drawn on
 ```
+
+`conditions.json` carries three axes. `scene_category` is GLAD's published per-video
+grouping; `lighting` and `relative_range` are **measured per frame** during extraction,
+from the frame already decoded, so they cost no extra decode. See
+[scene_stats.md](scene_stats.md) for what they mean and
+`py -3.13 -m src.data.scene_stats` for regenerating them on a tree that already exists.
 
 ## The official split
 

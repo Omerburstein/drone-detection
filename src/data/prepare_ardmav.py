@@ -41,7 +41,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
+import numpy as np
 
+from .scene_stats import FrameStats, measure_frame, update_conditions
 from .voc import parse_voc, to_yolo
 
 # The official split published with GLAD. Using it verbatim is what makes our
@@ -80,6 +82,9 @@ class Stats:
     size_mismatch: list[str] = field(default_factory=list)
     out_of_range: list[str] = field(default_factory=list)
     degenerate: list[str] = field(default_factory=list)
+    # Per-frame lighting and apparent size, measured from the frame already
+    # decoded here rather than by re-reading the JPEGs afterwards.
+    scene: list[FrameStats] = field(default_factory=list)
 
     def merge(self, other: Stats) -> None:
         """Fold one video's counters into the run total."""
@@ -88,6 +93,7 @@ class Stats:
         self.empty_labels += other.empty_labels
         self.unannotated_skipped += other.unannotated_skipped
         self.areas += other.areas
+        self.scene += other.scene
         self.class_names += other.class_names
         self.size_mismatch += other.size_mismatch
         self.out_of_range += other.out_of_range
@@ -145,7 +151,7 @@ def _write_frame(frame, xml: Path, stem: str, images_dir: Path, labels_dir: Path
         stats.size_mismatch.append(
             f"{stem}: frame {width}x{height} vs xml {annotation.width}x{annotation.height}")
 
-    lines = []
+    lines, boxes = [], []
     for obj in annotation.objects:
         stats.class_names[obj.name] += 1
         cx, cy, box_w, box_h = to_yolo(obj, annotation.width, annotation.height)
@@ -157,7 +163,13 @@ def _write_frame(frame, xml: Path, stem: str, images_dir: Path, labels_dir: Path
             continue
 
         stats.areas.append(obj.width * obj.height)
+        boxes.append([obj.xmin, obj.ymin, obj.xmax, obj.ymax])
         lines.append(f"0 {cx:.6f} {cy:.6f} {box_w:.6f} {box_h:.6f}")
+
+    # Measured before the JPEG is written, so the numbers describe the decoded
+    # frame rather than what survived compression.
+    stats.scene.append(measure_frame(frame, np.array(boxes, dtype=float).reshape(-1, 4),
+                                     stem))
 
     cv2.imwrite(str(images_dir / f"{stem}.jpg"), frame,
                 [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
@@ -256,6 +268,10 @@ def write_metadata(processed: Path, split: str, videos: list[str], stats: Stats)
         {"scene_category": category_of,
          "categories": {k: list(v) for k, v in SCENE_CATEGORIES.items()}}, indent=2),
         encoding="utf-8")
+    # Folds in the measured `lighting` and `relative_range` axes alongside the
+    # published `scene_category`. Written second, from the stats gathered during
+    # extraction, so no frame is decoded twice.
+    update_conditions(processed, stats.scene)
 
     histogram = "\n".join(f"| {label.strip()} | {count} |"
                           for label, count in _area_histogram(stats.areas))

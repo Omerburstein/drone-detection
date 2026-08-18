@@ -14,6 +14,12 @@ Maintained by `algo-agent`. Metrics come from `src.evaluate` (see
 > (EXP-001, EXP-002) record commands with no tiling flag at all — **add `--no-tile`**
 > to re-run them as they were run. Every entry from EXP-004 on states its flag
 > explicitly.
+>
+> The same date, `src.evaluate` switched its matching default from IoU to centre
+> distance. Every `src.evaluate` command recorded below was run under the old default,
+> so **add `--match iou`** to reproduce the numbers in that entry; without it the run is
+> scored by the centre rule and the P/R will not match. Pass `--save` when re-scoring —
+> the log keeps each criterion's answer instead of overwriting the last one.
 
 ---
 
@@ -140,6 +146,47 @@ Two things the aggregate was hiding:
 These are not like-for-like with GLAD's column: ours are stride-10 stills scored on
 2,834 frames, GLAD's are full-rate video with motion. The gap is large enough to be
 meaningful anyway, but it is not a measured head-to-head — EXP-004 is.
+
+#### `small_mav` is two handicaps, not one
+
+The category name says scale, and the earlier reading above attributed the wipeout to
+scale alone. Measuring the imagery directly (M2b, `src.data.scene_stats`) shows that is
+only half of it — those videos are also **the worst lit in the split**. Share of each
+video's targets below 5 grey levels of separation from their own background:
+
+| Video | Category | Targets under 5 grey levels |
+| --- | --- | --- |
+| phantom19 | small_mav | **18.8%** |
+| phantom46 | small_mav | **13.2%** |
+| phantom30 | ordinary | 10.6% |
+| phantom47 | ordinary | 10.3% |
+| … | | |
+| phantom10 | ordinary | 1.7% |
+| phantom09 | ordinary | 0.7% |
+
+A **27× spread** between the best and worst video, and it does not follow the published
+category boundaries — `phantom30` is nominally *ordinary* and ranks third worst.
+
+The two effects are **independent and compounding**: contrast and apparent size correlate
+at only r = 0.071 across all 28,160 targets, so they are separate axes that happen to
+land together on `small_mav`. Scored on EXP-004 (GLAD, full-rate, all 28,160 targets),
+holding apparent size fixed:
+
+| Recall | <5 contrast | 5–10 | 10–20 | 20–40 | >40 | drop |
+| --- | --- | --- | --- | --- | --- | --- |
+| w < 12 px | 47.1% | 42.6% | 53.0% | 53.9% | 66.1% | **−19 pt** |
+| w 12–20 px | 70.5% | 77.4% | 83.3% | 88.4% | 85.9% | −15 pt |
+| w > 20 px | 91.3% | 91.6% | 97.3% | 97.8% | 97.2% | −6 pt |
+
+**Poor lighting costs three times more at long range than at short range.** GLAD absorbs
+it almost entirely on large targets and loses a third of its remaining recall on small
+ones; worst cell 47.1% against best cell 97.8%. The baselines carry no readable signal
+here — EXP-001 to EXP-003 sit at 0–40% recall in every cell with no monotone trend, and
+fail for reasons that swamp lighting.
+
+Consequence for future work: **`small_mav` results are not attributable to scale**. Use
+the `lighting` and `relative_range` axes (`--conditions`) to separate them, and do not
+read a `small_mav` number as a pure long-range measurement.
 
 **Do not compare these to the published 0.53.** That figure is YOLOv5 *trained on*
 ARD100 — a fine-tuned baseline, not an off-the-shelf model. The plan originally cited it

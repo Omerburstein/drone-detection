@@ -22,17 +22,29 @@ def _print_size_table(by_size: list[tuple[str, int, float]]) -> None:
 
 
 def _print_condition_table(by_condition: list[ConditionScore]) -> None:
-    """Scores per scene category, in the shape published papers report them.
+    """Scores per bucket, one table per axis, in the shape published papers use.
 
     Aggregates hide the failure that matters: a detector can look acceptable
-    overall while collapsing on complex backgrounds or the smallest targets.
+    overall while collapsing on complex backgrounds, on unlit targets, or at
+    long range. Splitting the table by axis keeps those separable -- pooling
+    them into one list would invite reading a lighting bucket against a scene
+    category, which share no denominator.
+
+    Bucket order is whatever `group_by_axis` produced, so contrast and range
+    read worst-to-best rather than alphabetically.
     """
-    print("\n  by scene condition:")
-    print(f"    {'category':<16}{'frames':>7}{'gt':>7}{'P':>8}{'R':>8}{'F1':>8}{'AP':>8}")
+    by_axis: dict[str, list[ConditionScore]] = {}
     for score in by_condition:
-        print(f"    {score.label:<16}{score.n_frames:>7}{score.n_gt:>7}"
-              f"{score.precision:>8.4f}{score.recall:>8.4f}"
-              f"{score.f1:>8.4f}{score.ap50:>8.4f}")
+        by_axis.setdefault(score.axis, []).append(score)
+
+    for axis, scores in by_axis.items():
+        print(f"\n  by {axis}:")
+        print(f"    {'bucket':<18}{'frames':>7}{'gt':>7}"
+              f"{'P':>8}{'R':>8}{'F1':>8}{'AP':>8}")
+        for score in scores:
+            print(f"    {score.label:<18}{score.n_frames:>7}{score.n_gt:>7}"
+                  f"{score.precision:>8.4f}{score.recall:>8.4f}"
+                  f"{score.f1:>8.4f}{score.ap50:>8.4f}")
 
 
 def report(metrics: Metrics) -> None:

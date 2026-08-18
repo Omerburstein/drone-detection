@@ -1,6 +1,7 @@
 # `src.evaluate` — reference
 
-Scores a `detections.jsonl` against ground-truth labels using the COCO protocol.
+Scores a `detections.jsonl` against ground-truth labels. Matching defaults to the centre
+rule (`--match center`); `--match iou` is COCO's protocol exactly.
 
 ```
 py -3.13 -m src.evaluate --pred <jsonl> --labels <dir> [options]
@@ -12,12 +13,13 @@ py -3.13 -m src.evaluate --pred <jsonl> --labels <dir> [options]
 | --- | --- | --- |
 | `--pred` | required | `detections.jsonl` written by `baseline_detect.py`. |
 | `--labels` | required | Directory of YOLO-format `.txt` label files. Matched to predictions by **filename stem** — `img042.jpg` pairs with `img042.txt`. Video runs pair frame index to `<idx>.txt`. |
-| `--iou` | `0.5` | IoU threshold for the precision/recall/size breakdowns, when `--match iou`. AP@0.50 and mAP@0.50:0.95 always use the standard sweep regardless of this. |
-| `--match` | `iou` | How a prediction claims a target: `iou` (COCO overlap) or `center` (centre-to-centre distance). See **Matching criteria** below. |
+| `--iou` | `0.5` | IoU threshold for the precision/recall/size breakdowns, when `--match iou`. AP@0.50 and mAP@0.50:0.95 always use the standard sweep regardless of this. Ignored under the default criterion. |
+| `--match` | `center` | How a prediction claims a target: `center` (centre-to-centre distance, the default) or `iou` (COCO overlap). See **Matching criteria** below. |
 | `--match-tol` | `1.0` | For `--match center`: the centre-distance tolerance in multiples of the target's own size. `1.0` means "more than one drone-width off centre is a miss". |
 | `--frame-size W H` | none | Frame dimensions in pixels. **Required for video-keyed predictions** — the JSONL stores frame indices, not sizes. For image runs it is read from the image file, and this flag overrides it. |
-| `--conditions` | none | `conditions.json` from `src.data.prepare_ardmav`. Adds a per-scene-category breakdown. Required to compare against papers that report by category. |
-| `--json-out` | none | Also write metrics as JSON. Pass it for anything you intend to cite in the ledger. |
+| `--conditions` | none | `conditions.json` from `src.data.prepare_ardmav`. Adds one breakdown table per axis the file declares — `scene_category` (required to compare against papers that report by category), plus the measured `lighting` and `relative_range`. See [scene_stats.md](scene_stats.md). |
+| `--json-out` | none | Also write metrics as JSON — one snapshot, overwritten each run. Pass it for anything you intend to cite in the ledger. |
+| `--save` | none | Append this result **and the settings that produced it** to a results log (JSONL). See **The results log** below. |
 
 A missing label file is read as "no ground-truth boxes in this frame," not an error —
 that is how legitimate negative frames are represented. A missing *image* when the size
@@ -61,19 +63,37 @@ COCO's, because on air-to-air data nearly everything would otherwise land in one
 > collapsing to near-zero on tiny means the problem is input resolution, not
 > architecture. Raise `--imgsz` or turn on `--tile` before reaching for a bigger model.
 
-**Scores by scene condition** — precision, recall, F1 and AP@0.50 within each scene
-category (`ordinary` / `complex` / `small_mav` for ARD-MAV), enabled by `--conditions`.
+**Scores by condition** — precision, recall, F1 and AP@0.50 within each bucket, printed
+as **one table per axis**, enabled by `--conditions`. ARD-MAV declares three:
+
+| Axis | Level | Buckets |
+| --- | --- | --- |
+| `scene_category` | per video | `ordinary` / `complex` / `small_mav` — GLAD's published grouping |
+| `lighting` | per frame | target-vs-background separation: `invisible (<5)` → `strong (>=30)`, plus `backlit` |
+| `relative_range` | per frame | apparent size as range: `near (<2x)` → `very far (>5x)` |
 
 > Aggregates hide the failure that matters. A detector can look uniformly mediocre
 > overall while actually being adequate on sky and useless against urban clutter — two
-> situations needing completely different fixes. This is also the only form in which
-> results can be compared against GLAD, which publishes per category and not in
+> situations needing completely different fixes. `scene_category` is also the only form
+> in which results can be compared against GLAD, which publishes per category and not in
 > aggregate.
+>
+> The other two axes exist because `scene_category` **conflates things that need
+> different fixes**: ARD-MAV's `small_mav` videos are both the longest-range *and* the
+> worst-lit in the split, and those two handicaps compound while being nearly
+> uncorrelated (r = 0.071). See [scene_stats.md](scene_stats.md) for how they are
+> measured and [experiments.md](experiments.md) for what they showed.
 
-A category with no ground truth reports **NaN**, not 0.0: NaN says "not measured",
-whereas 0.0 would claim the detector was tried there and failed. Frames whose video is
-absent from `conditions.json` are bucketed as `uncategorised` rather than dropped —
-discarding them would silently change every per-category denominator.
+**Never sum across axes.** Every axis covers every frame, so counts partition *within* an
+axis and double-count across them. That is why the tables are printed separately.
+
+A bucket with no ground truth reports **NaN**, not 0.0: NaN says "not measured", whereas
+0.0 would claim the detector was tried there and failed. Frames an axis does not cover
+are bucketed as `uncategorised` rather than dropped — discarding them would silently
+change every per-bucket denominator.
+
+Bucket order follows the axis's declared order where it has one, so lighting and range
+read worst-to-best rather than alphabetically.
 
 ## Matching rules
 
@@ -88,10 +108,11 @@ These hold under either criterion below.
 
 One number cannot do both jobs at these target sizes, so the criterion is a choice.
 
-### `--match iou` (default)
+### `--match iou`
 
 A prediction claims a target when their IoU is at least `--iou`. COCO's rule, and **the
-only setting comparable to a published mAP**.
+only setting comparable to a published mAP** — pass it, and state the threshold, whenever
+that is the comparison being made.
 
 Its weakness is exactly this project's regime. IoU falls off with *relative* offset, so a
 fixed threshold gets stricter as targets shrink. Measured on EXP-004: moving the threshold
@@ -99,7 +120,7 @@ from 0.50 to 0.40 moved `small_mav` precision 23 points and recall 19, while bar
 touching `ordinary`. A 3 px error on a 12 px drone is scored a miss *and* a false alarm;
 the same 3 px on a 100 px target is a clean hit.
 
-### `--match center`
+### `--match center` (default)
 
 A prediction claims a target when their **centres are within `--match-tol` target sizes**
 of each other, where size is `sqrt(w*h)` of the ground-truth box — the same notion of size
@@ -122,14 +143,60 @@ number that looks like mAP, is not, and would eventually be compared to one.
 | Did we find the drone? Is this a false alarm? | `center` |
 | Comparing to a published mAP | `iou`, and state the threshold |
 
+`center` is the default because it is the right ruler for this project's own question —
+is the detector finding 10-30 px drones, and are its false alarms real. `iou` is one flag
+away, and required the moment the comparison is against someone else's published number.
+
 **P/R/F1 from the two criteria are different measurements and must never be compared.**
-The criterion is recorded in the printed report and in the `criterion` field of
-`--json-out` for exactly that reason.
+The criterion is recorded in the printed report, in the `criterion` field of `--json-out`,
+and on every line of the `--save` log, for exactly that reason.
 
 The criterion does not simply flatter a detector. Re-scoring the four runs in the ledger,
 false alarms fell 95% for GLAD (3,658 → 188) — its "false alarms" were mostly its own boxes
 sitting just off a real drone — and by 0.2% for the off-the-shelf baselines, whose false
 alarms are genuinely on air-conditioning units and window recesses.
+
+## The results log
+
+Re-scoring is free — `detections.jsonl` is persisted, so the same run can be scored
+under any number of settings without touching the detector. `--save` is what makes that
+worth doing: it **appends** one JSON object per scoring, so the settings stay attached to
+the numbers instead of the previous answer being overwritten.
+
+```bash
+# Score under the default centre rule.
+py -3.13 -m src.evaluate --pred runs/exp004/detections.jsonl     --labels data/processed/ARD-MAV/labels/test --frame-size 1920 1080     --save runs/exp004/results.jsonl
+
+# Then again under COCO's rule, and again at a looser threshold.
+py -3.13 -m src.evaluate ... --match iou --iou 0.50 --save runs/exp004/results.jsonl
+py -3.13 -m src.evaluate ... --match iou --iou 0.40 --save runs/exp004/results.jsonl
+```
+
+Each line holds:
+
+| Field | What it is |
+| --- | --- |
+| `schema` | Log format version. Bumped only if a field is removed or repurposed. |
+| `time` | UTC timestamp, to the second. |
+| `criterion` | The criterion label as printed — `centre@1x target size`, `IoU@0.40`. |
+| `settings` | `pred`, `labels`, `match`, `match_value`, `conditions`, `frame_size`. |
+| `metrics` | The complete `--json-out` schema, `by_size` and `by_condition` included. |
+
+`match_value` is one field because it is one knob: the threshold under `iou`, the
+tolerance in target sizes under `center`. `match` says which meaning applies.
+
+Read it back with `src.eval.results.load_results`, or from the shell:
+
+```bash
+py -3.13 -c "import json,sys; [print(r['criterion'], '%.4f %.4f' % (r['metrics']['precision'], r['metrics']['recall'])) for r in map(json.loads, open('runs/exp004/results.jsonl'))]"
+```
+
+A malformed line is an error rather than a silent skip — a history that quietly shortens
+itself is worse than one that says it is broken.
+
+`--json-out` is unchanged: one file, overwritten, holding the bare `Metrics` schema the
+ledger cites. Use it for the number being cited and `--save` for the history behind it;
+they are independent and can be passed together.
 
 ## Comparability
 

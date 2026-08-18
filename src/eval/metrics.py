@@ -18,7 +18,7 @@ from dataclasses import dataclass, field, replace
 
 import numpy as np
 
-from .conditions import group_by_condition
+from .conditions import LEGACY_KEY, Axis, as_axes, group_by_axis
 from .labels import EvalFrame
 
 # Ground-truth area buckets in pixels^2, as (label, lo, hi).
@@ -52,9 +52,14 @@ def f1_score(precision: float, recall: float) -> float:
 
 @dataclass(frozen=True)
 class ConditionScore:
-    """One scene category's scores, for comparison against published per-category
+    """One bucket's scores, for comparison against published per-category
     figures. GLAD reports precision/recall/F1 per category, so those are carried
-    explicitly rather than left to be recomputed by a reader."""
+    explicitly rather than left to be recomputed by a reader.
+
+    `axis` names which split the bucket belongs to. It is last and defaulted so
+    the JSON key order of every field that predates the multi-axis breakdown is
+    unchanged, and so a bare `scene_category` run reads exactly as before.
+    """
 
     label: str
     n_frames: int
@@ -63,6 +68,7 @@ class ConditionScore:
     recall: float
     f1: float
     ap50: float
+    axis: str = LEGACY_KEY
 
 
 @dataclass(frozen=True)
@@ -371,17 +377,18 @@ def _score(frames: list[EvalFrame], primary: float | MatchCriterion,
 
 def _score_condition(label: str, frames: list[EvalFrame],
                      primary: MatchCriterion,
-                     iou_sweep: np.ndarray) -> ConditionScore:
-    """Score one scene category.
+                     iou_sweep: np.ndarray,
+                     axis: str = LEGACY_KEY) -> ConditionScore:
+    """Score one bucket of one axis.
 
-    A category with no ground truth is reported with NaN scores rather than
-    skipped: an empty category usually means the conditions file and the run
+    A bucket with no ground truth is reported with NaN scores rather than
+    skipped: an empty bucket usually means the conditions file and the run
     disagree about which frames exist, and that is worth seeing.
     """
     n_gt = sum(len(f.gt_boxes) for f in frames)
     if n_gt == 0:
         return ConditionScore(label, len(frames), 0, float("nan"), float("nan"),
-                              float("nan"), float("nan"))
+                              float("nan"), float("nan"), axis)
 
     scored = _score(frames, primary, iou_sweep)
     return ConditionScore(
@@ -392,26 +399,32 @@ def _score_condition(label: str, frames: list[EvalFrame],
         recall=scored.recall,
         f1=f1_score(scored.precision, scored.recall),
         ap50=scored.ap50,
+        axis=axis,
     )
 
 
 def evaluate(frames: list[EvalFrame], primary: float | MatchCriterion,
              iou_sweep: np.ndarray = IOU_SWEEP,
-             conditions: dict[str, str] | None = None) -> Metrics:
-    """Score a run, optionally broken down by scene category.
+             conditions: dict[str, str] | list[Axis] | None = None) -> Metrics:
+    """Score a run, optionally broken down along one or more condition axes.
 
     `primary` is the matching criterion; a bare float means IoU at that
-    threshold. The per-category pass reuses the same scorer on each subset, so a
-    category's numbers are computed exactly as the headline ones are -- there is
-    no second implementation to drift.
+    threshold. `conditions` is a list of `Axis`, or a bare video -> category map
+    for the single-axis case. Every bucket reuses the same scorer on its own
+    subset, so a bucket's numbers are computed exactly as the headline ones are
+    -- there is no second implementation to drift.
+
+    All axes are returned concatenated in `by_condition`, each score naming its
+    axis, so a reader that predates the multi-axis split still sees a flat list.
     """
     primary = as_criterion(primary)
     metrics = _score(frames, primary, iou_sweep)
-    if not conditions:
+    axes = as_axes(conditions)
+    if not axes:
         return metrics
 
-    grouped = group_by_condition(frames, conditions)
     return replace(metrics, by_condition=[
-        _score_condition(label, subset, primary, iou_sweep)
-        for label, subset in sorted(grouped.items())
+        _score_condition(label, subset, primary, iou_sweep, axis.name)
+        for axis in axes
+        for label, subset in group_by_axis(frames, axis).items()
     ])

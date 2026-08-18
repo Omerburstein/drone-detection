@@ -53,7 +53,8 @@ class TestEvaluateCli:
         pred, labels = perfect_run
         out = tmp_path / "metrics.json"
         result = run_cli("--pred", str(pred), "--labels", str(labels),
-                         "--frame-size", "100", "100", "--json-out", str(out))
+                         "--frame-size", "100", "100", "--match", "iou",
+                         "--json-out", str(out))
 
         assert result.returncode == 0, result.stderr
         metrics = json.loads(out.read_text())
@@ -63,7 +64,11 @@ class TestEvaluateCli:
         assert (metrics["tp"], metrics["fp"], metrics["fn"]) == (1, 0, 0)
 
     def test_mixed_run_matches_hand_computed_ap(self, tmp_path):
-        """Two hits and a false alarm over three targets -> AP = 67/101."""
+        """Two hits and a false alarm over three targets -> AP = 67/101.
+
+        Scored with `--match iou` explicitly: the arithmetic is IoU's, so the
+        test must not silently start measuring whatever the default becomes.
+        """
         records = [
             {"frame": 0, "detections": [{"bbox": [25, 25, 75, 75], "conf": 0.9, "cls": 0}]},
             {"frame": 1, "detections": [{"bbox": [25, 25, 75, 75], "conf": 0.8, "cls": 0},
@@ -75,7 +80,8 @@ class TestEvaluateCli:
         out = tmp_path / "metrics.json"
 
         result = run_cli("--pred", str(pred), "--labels", str(labels),
-                         "--frame-size", "100", "100", "--json-out", str(out))
+                         "--frame-size", "100", "100", "--match", "iou",
+                         "--json-out", str(out))
         assert result.returncode == 0, result.stderr
 
         metrics = json.loads(out.read_text())
@@ -90,6 +96,33 @@ class TestEvaluateCli:
         assert result.returncode == 0, result.stderr
         assert "AP@0.50" in result.stdout
         assert "recall by target size" in result.stdout.lower()
+
+    def test_default_criterion_is_the_centre_rule(self, perfect_run):
+        """The default is centre matching, and the report says so on every line
+        it governs -- an unlabelled P/R invites comparison against an IoU one."""
+        pred, labels = perfect_run
+        result = run_cli("--pred", str(pred), "--labels", str(labels),
+                         "--frame-size", "100", "100")
+        assert result.returncode == 0, result.stderr
+        assert "centre@1x target size" in result.stdout
+        assert "mAP@0.50:0.95    n/a" in result.stdout
+
+    def test_save_appends_each_scoring_with_its_settings(self, perfect_run, tmp_path):
+        """Two scorings of one run, two lines, each naming its own criterion."""
+        pred, labels = perfect_run
+        log = tmp_path / "nested" / "results.jsonl"
+        common = ("--pred", str(pred), "--labels", str(labels),
+                  "--frame-size", "100", "100", "--save", str(log))
+
+        assert run_cli(*common).returncode == 0
+        assert run_cli(*common, "--match", "iou", "--iou", "0.75").returncode == 0
+
+        records = [json.loads(line)
+                   for line in log.read_text(encoding="utf-8").splitlines()]
+        assert [r["criterion"] for r in records] == ["centre@1x target size",
+                                                     "IoU@0.75"]
+        assert records[0]["settings"]["pred"] == str(pred)
+        assert records[1]["metrics"]["ap50"] == pytest.approx(1.0)
 
     def test_missing_labels_directory_is_rejected(self, perfect_run, tmp_path):
         pred, _ = perfect_run

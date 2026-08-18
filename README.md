@@ -106,12 +106,19 @@ same project without stepping on each other.
 
 ```
 py -3.13 -m src.evaluate --pred runs/exp001/detections.jsonl \
-    --labels data/processed/ARD-MAV/labels/val --json-out runs/exp001/metrics.json
+    --labels data/processed/ARD-MAV/labels/val --json-out runs/exp001/metrics.json \
+    --save runs/exp001/results.jsonl
 ```
 
 Reports AP@0.50, mAP@0.50:0.95, precision/recall, mean IoU, and **recall broken down by
 target size** — the most diagnostic block in the report. See
 [docs/evaluate.md](docs/evaluate.md) for the metric glossary.
+
+Matching defaults to **centre distance within one target size**, because a fixed IoU
+threshold scores a correct detection on a 12 px drone as both a miss and a false alarm.
+Pass `--match iou` for COCO's rule, the only setting comparable to a published mAP.
+`--save` appends each scoring, with the settings that produced it, to a results log, so
+one run can be re-scored under different settings without losing the earlier answers.
 
 Requires ground-truth labels, so it comes after `dataset-agent` has produced a
 validated, sequence-level split.

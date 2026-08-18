@@ -40,12 +40,22 @@ it *alongside* recall, never instead of it.
 ```
 py -3.13 -m src.evaluate --pred runs/<exp>/detections.jsonl \
     --labels data/processed/<dataset>/labels/val \
-    [--iou 0.5] [--frame-size W H] [--json-out runs/<exp>/metrics.json]
+    [--match center|iou] [--iou 0.5] [--frame-size W H] \
+    [--json-out runs/<exp>/metrics.json] [--save runs/<exp>/results.jsonl]
 ```
 
 `--frame-size` is required for video-keyed predictions, since the JSONL carries frame
 indices rather than dimensions. Always pass `--json-out` — the ledger entry should cite
 a file, not a screenshot of a terminal.
+
+**Matching defaults to `--match center`** — centre within one target size, the ruler this
+project actually cares about. Pass **`--match iou` explicitly** whenever the number will
+be compared against a published mAP, and state the threshold when quoting it. The two
+criteria's P/R/F1 are different measurements; never table them together unlabelled.
+
+Pass `--save` alongside `--json-out` when a run is scored more than one way. It appends
+each scoring with the settings that produced it, so the ledger can cite the criterion it
+means rather than whichever `metrics.json` was written last.
 
 ## Before trusting any number
 
