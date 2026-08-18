@@ -89,7 +89,9 @@ Every direct URL, verified against the source repo/page on 2026-08-17 unless mar
 | **MOT-FLY** | Google Drive | `https://drive.google.com/file/d/1GiWLF8B18FGDcCSuSuvGokczCkP_NEgo/view` | ❌ **dead** |
 | MOT-FLY | Baidu | `https://pan.baidu.com/s/1eS84Ooz0URojz1tAJNZ5Eg?pwd=pe53` code `pe53` | ❓ untested |
 | **Det-Fly** | repo → OneDrive/Baidu | `https://github.com/Jake-WU/Det-Fly` | ✅ sparse stills |
-| **FL-Drones** | via TransVisDrone prep | `https://github.com/tusharsangam/TransVisDrone` | ⚠️ indirect |
+| **FL-Drones** imagery | EPFL CVLab Drive | `https://drive.google.com/open?id=18CoTpjMs80dfanYNpbznjL4e-KB_Diel` | ✅ **no Baidu** |
+| **FL-Drones** labels | Dogfight repo (git) | `https://github.com/mwaseema/Drone-Detection/tree/main/annotations/FL-Drones-Dataset` | ✅ 14 files |
+| **NPS-Drones** labels (alt) | Dogfight repo (git) | `…/annotations/NPS-Drones-Dataset` | ✅ 50 files, re-annotated |
 | **AOT** | open S3 | `aws s3 ls --no-sign-request s3://airborne-obj-detection-challenge-training/` | ✅ 13 TB |
 
 ## Ground-based
@@ -267,17 +269,53 @@ on a drone filming similar ones** while flying outdoors" — plus indoor sequenc
 describes it as "quite challenging due to extreme illumination, pose, and size changes …
 their shape is **barely retained even in consecutive frames**."
 
-> **Version confusion — read before citing.** Three annotation lineages exist: the EPFL
-> original (20 sequences, ~8,000 manual boxes), the 14-video / 38,948-frame benchmark
-> version distributed via TransVisDrone prep, and **Dogfight's re-annotation** (their
-> Figure 8 shows original vs. corrected boxes with IoU between them, for both FL-Drones and
-> NPS-Drones). Always state which you used. *(The exact derivation between them is
-> unverified.)*
+> **Version confusion — now resolved.** Earlier notes flagged a 20-vs-14 sequence
+> discrepancy as unverified. It is explained: **Dogfight re-annotated 14 of EPFL's 20
+> sequences**, and its annotation folder holds exactly those 14, with non-contiguous ids —
+> `Video_001, 011, 012, 018, 019, 029, 037, 046, 047, 048, 049, 053, 055, 056` — which is
+> the signature of a subset selected from a larger pool. So the "14 videos / 38,948 frames"
+> benchmark = EPFL imagery + Dogfight labels. Two lineages, not three: the **EPFL original**
+> (20 sequences, ~8,000 manual boxes) and the **Dogfight re-annotation** (14 sequences).
+> Published numbers from Dogfight, TransVisDrone and their successors all use the latter.
+
+### How to download it — no Baidu, no permission needed
+
+**A correction:** earlier notes said access was "via TransVisDrone prep". That is wrong.
+TransVisDrone ships only *conversion scripts* and states the data "needs to be obtained
+from permission with authors". The data and labels come from two other places, both open:
+
+| Part | Source | Notes |
+| --- | --- | --- |
+| **Imagery** | EPFL CVLab — `https://drive.google.com/open?id=18CoTpjMs80dfanYNpbznjL4e-KB_Diel` | "Data and Code", linked from the [project page](https://www.epfl.ch/labs/cvlab/research/uav/research-unmanned-detection/). Covers both the UAV and aircraft sets. |
+| **Labels** (14-seq benchmark) | Dogfight repo, plain git | `https://github.com/mwaseema/Drone-Detection/tree/main/annotations/FL-Drones-Dataset` |
+
+```bash
+# labels only -- ~0.5 MB, no auth
+git clone --depth 1 https://github.com/mwaseema/Drone-Detection.git
+ls Drone-Detection/annotations/FL-Drones-Dataset   # 14 files, Video_XXX.txt
+```
+
+**Annotation format** (verified) — one line per annotated frame, **frame numbers 0-based**,
+boxes as **absolute `x1,y1,x2,y2` corners**, not xywh:
+
+```
+frame, n_boxes, x1, y1, x2, y2 [, x1, y1, x2, y2 ...]
+0,1,348,339,411,366
+```
+
+Note this differs from ARD-MAV's VOC XML *and* from MOT-FLY's `x,y,w,h`, so it needs its
+own converter. Frames with no line are frames with no annotation — the same
+unannotated-vs-negative trap documented in
+[MANIFEST.md](data/processed/ARD-MAV/MANIFEST.md); decide which before scoring.
+
+If the EPFL Drive link fails, contact **Artem Rozantsev** (EPFL CVLab) via the project page.
 
 **Verdict.** The best genuine held-out test for GLAD — GLAD published on ARD-MAV and
-NPS-Drones but **not** FL-Drones. Two frictions: access is via another repo's prep script,
-and at 752×480 it is a different resolution from GLAD's hardcoded 1080p motion constants,
-which must be rescaled first ([glad-model.md](glad-model.md) §6.3).
+NPS-Drones but **not** FL-Drones. Now known to be obtainable without Baidu or a DUA. The
+remaining friction is technical, not access: at 752×480 it is a different resolution from
+GLAD's hardcoded 1080p motion constants, which must be rescaled first
+([glad-model.md](glad-model.md) §6.3), and its largest targets fall outside the motion
+branch's area cap regardless.
 
 ---
 
@@ -685,7 +723,8 @@ option**, which is exactly why the email is worth sending.
 - **Check the target airframe.** NPS-Drones (delta-wing) and MMFW-UAV (fixed-wing) are
   air-to-air but not multirotor. AOT is mostly manned aircraft.
 - **Check the annotation version.** NPS-Drones ships v1 and v2 from Purdue *and* has a third
-  re-annotation from Dogfight. FL-Drones circulates in at least three lineages. Published
+  re-annotation from Dogfight, whose 50 files are on GitHub. FL-Drones has two lineages:
+  EPFL's original 20 sequences and Dogfight's re-annotated 14. Published
   numbers assume specific ones.
 - **Split by video, never by frame.** Adjacent frames are near-identical; a random
   frame-level split leaks near-duplicates and inflates mAP by tens of points.
