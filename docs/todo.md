@@ -56,10 +56,25 @@ dates, not priorities.
   wget -c --tries=0 --waitretry=15 --read-timeout=60     "https://zenodo.org/records/15870538/files/ARD100.zip?download=1" -O ARD100.zip
   ```
 
-  Verified: `HTTP 200`, `content-length 27351535415`, range requests return `206`, so
-  resume works — and it is needed, because Zenodo returned `504` on half the probes during
-  testing. Found via the repo's *issue tracker*, not its README; check issues before
-  declaring a dataset unobtainable.
+  **DONE 2026-08-19 — downloaded, verified, extracted.** 27.35 GB pulled from Zenodo;
+  **MD5 `b52a5c8aae7b7661b57dde5490c56580` matched**. Archive audited before extraction:
+  105 members, ratio 1.00x, 0 traversal entries, 0 symlinks; the one bundled script is a
+  33-line cv2 frame dumper with no network or subprocess use. Nested `annotations.zip`
+  (202,411 VOC XML) equally clean.
+
+  **The M4b set is 15 videos** — ARD100's own *test* split intersected with "not in our
+  local 60", which happens to be exactly 15, matching EXP-004's count, so the comparison is
+  like-for-like and the selection is not cherry-picked:
+  `phantom03, 92, 93, 94, 95, 97, 102, 110, 113, 119, 133, 135, 136, 141, 144`.
+  (ARD100 has 100 videos; 51 overlap our 60, 49 are unseen, 15 of those are test-split.)
+
+  Extracted to `data/raw/ARD100/{videos,Annotations}` — 4.81 GB, 34,287 XML. Confirmed
+  **drop-in**: all 15 are 1920x1080 @30fps with VOC XML, class `Drone`, and the same
+  `phantomNN_0001` naming as ARD-MAV, so criterion 6 (no new code path) holds and
+  `prepare_ardmav` should run unmodified. Same `CAP_PROP_FRAME_COUNT` overstatement as
+  ARD-MAV (header exceeds XML by 0-30 frames per video). Full record in
+  `data/raw/ARD100/PROVENANCE.md`. **Next: prepare the split, then run `src.glad_detect`
+  over these 15 and score against EXP-004.**
 
   **Constraints on the run.** 10–15 unseen videos carry the same statistical weight as
   EXP-004's 15, so the full 100 is unnecessary. If disk is tight, subsample by whole
