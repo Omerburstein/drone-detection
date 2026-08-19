@@ -161,6 +161,11 @@ These have already cost real effort. Do not rediscover them.
 - **Commit and push to `origin main` after each unit of work** — this is standing
   instruction from the user, no need to ask. `gh` CLI is not installed; plain HTTPS
   push works.
+- **A mission is not finished until the record is.** Completing an M-numbered task
+  means checking it off in `docs/todo.md` (moved to Done with the date) and, when the
+  task produced numbers, adding the run to `docs/experiments.md` — in the *same commit*
+  as the work, without being asked. An unrecorded mission gets re-asked and re-run: M2
+  landed on 2026-08-16 and had to be chased because the todo still showed it open.
 - Docs live in `docs/`. When a script's parameters change, update its reference doc in
   the same commit — the user relies on these instead of re-reading the source.
 
