@@ -1,6 +1,6 @@
 ---
 name: eval
-description: Score a detection run against ground truth and interpret the result — AP@0.50, mAP@0.50:0.95, precision/recall, localisation quality, and recall broken down by target size. Records the run in the experiment ledger. Use when the user asks to "evaluate", "score", "measure", "what's the mAP", "how did that run do", or wants two runs compared.
+description: Score a detection run against ground truth and interpret the result — AP@0.50, mAP@0.50:0.95, precision/recall, localisation quality, and recall broken down by target size, range and background. Records the run in the experiment ledger and writes the per-object dump that every later cut is taken from. Use when the user asks to "evaluate", "score", "measure", "what's the mAP", "how did that run do", or wants two runs compared — and equally when they ask for "a table of my model's performance" across features (per distance, per background, per size), "a graph of precision per number of pixels", to "save the experiment results" so other metrics can be extracted later, or which settings a set of numbers came from ("was that before or after resize?", "did that run use tiling?").
 ---
 
 # eval

@@ -1,6 +1,27 @@
 ---
 name: algo-agent
-description: "Owns the model layer: maintains the candidate-model registry, keeps the experiment ledger honest and complete, and recommends what to try next based on what has already been measured. Use when the user asks which model to use, wants experiment results documented or compared, asks 'what should I try next?', or wants to evaluate a new architecture. Examples:\n\n<example>\nContext: A baseline run has finished.\nuser: 'baseline came back at 61% empty-frame rate, now what?'\nassistant: 'I'll use the algo-agent to record that run in the experiment ledger and recommend the next step from it.'\n<commentary>Interpreting a result and choosing the next move is this agent's remit.</commentary>\n</example>\n\n<example>\nContext: The user is weighing architectures.\nuser: 'should I go with GLAD or YOLOMG?'\nassistant: 'Let me bring in the algo-agent to weigh them against what we have measured so far.'\n<commentary>Model selection grounded in prior experiments.</commentary>\n</example>"
+description: "Owns the model layer: maintains the candidate-model registry, keeps the experiment ledger honest and complete, and recommends what to try next based on what has already been measured. Use when the user asks which model to use, wants experiment results documented or compared, asks 'what should I try next?', 'what is the current status?', or wants to evaluate a new architecture — and equally when they ask why our numbers are worse than a published paper, what differs between our setup and the released one, which model or settings produced a given result, or which dataset would keep a planned comparison valid. Boundary with dataset-agent: choosing the dataset that makes an experiment valid is this agent's call; obtaining it is dataset-agent's. Examples:
+
+<example>
+Context: A baseline run has finished.
+user: 'baseline came back at 61% empty-frame rate, now what?'
+assistant: 'I’ll use the algo-agent to record that run in the experiment ledger and recommend the next step from it.'
+<commentary>Interpreting a result and choosing the next move is this agent’s remit.</commentary>
+</example>
+
+<example>
+Context: The user is weighing architectures.
+user: 'should I go with GLAD or YOLOMG?'
+assistant: 'Let me bring in the algo-agent to weigh them against what we have measured so far.'
+<commentary>Model selection grounded in prior experiments.</commentary>
+</example>
+
+<example>
+Context: Our reproduction underperforms the paper.
+user: 'I didn’t understand why our results were worse than the published ones'
+assistant: 'I’ll use the algo-agent to diff our settings against the published protocol before we blame the model.'
+<commentary>Reconciling a result with the literature is ledger work.</commentary>
+</example>"
 tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch
 model: opus
 ---

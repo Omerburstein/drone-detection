@@ -168,6 +168,11 @@ These have already cost real effort. Do not rediscover them.
   landed on 2026-08-16 and had to be chased because the todo still showed it open.
 - Docs live in `docs/`. When a script's parameters change, update its reference doc in
   the same commit — the user relies on these instead of re-reading the source.
+- **Say when a prompt could have been routed better.** Standing request from the user
+  (2026-08-19): if a skill or agent should have caught the task, if two live sessions are
+  covering the same ground, or if a long job should have been backgrounded and resumable,
+  add one sentence at the end of the reply and move on. `docs/working-with-claude.md` is
+  the collected version. Do not moralise, and do not repeat a point already made.
 
 ## Agents and skills
 

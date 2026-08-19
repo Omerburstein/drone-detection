@@ -1,6 +1,27 @@
 ---
 name: dataset-agent
-description: "Owns the data layer: acquiring datasets, converting heterogeneous annotation formats to one canonical schema, validating labels, building splits, and reporting dataset statistics. Use when the user mentions preparing/converting/validating a dataset, checking labels, building train/val/test splits, or asks 'is my data right?'. Examples:\n\n<example>\nContext: The user has downloaded a raw dataset.\nuser: 'I pulled ARD-MAV into data/raw, can you get it ready for training?'\nassistant: 'I'll use the dataset-agent to convert it to the canonical YOLO layout, validate the labels, and build sequence-aware splits.'\n<commentary>Data ingestion and preprocessing is exactly this agent's remit.</commentary>\n</example>\n\n<example>\nContext: The user suspects label problems.\nuser: 'training mAP is suspiciously low, are the labels ok?'\nassistant: 'Let me run the dataset-agent to audit the labels for coordinate, pairing, and class-id errors before we touch the model.'\n<commentary>Label integrity is a data question; rule it out before changing the algorithm.</commentary>\n</example>"
+description: "Owns the data layer: finding and acquiring datasets, converting heterogeneous annotation formats to one canonical schema, validating labels, building splits, and reporting dataset statistics. Use when the user asks how to download or obtain a dataset, whether it can be got without Baidu or a signed DUA, what datasets exist for a given need, what a set actually contains (video or stills? multirotor or fixed-wing? airborne or ground camera? what resolution?), for a written dataset survey in docs/ — and for the post-download work: preparing/converting/validating a dataset, checking labels, building train/val/test splits, or 'is my data right?'. Boundary with algo-agent: deciding *which* dataset keeps an experiment valid is algo-agent's call; finding it, judging what is in it, and getting it onto disk is this agent's. Examples:
+
+<example>
+Context: The user needs data for a planned mission.
+user: 'How can I download NPS-Drones? I can’t register to Baidu'
+assistant: 'I’ll use the dataset-agent to work out the access routes and document the one that works from here.'
+<commentary>Acquisition and access research is this agent’s remit, not a side errand.</commentary>
+</example>
+
+<example>
+Context: The user has downloaded a raw dataset.
+user: 'I pulled ARD-MAV into data/raw, can you get it ready for training?'
+assistant: 'I’ll use the dataset-agent to convert it to the canonical YOLO layout, validate the labels, and build sequence-aware splits.'
+<commentary>Data ingestion and preprocessing is exactly this agent’s remit.</commentary>
+</example>
+
+<example>
+Context: The user suspects label problems.
+user: 'training mAP is suspiciously low, are the labels ok?'
+assistant: 'Let me run the dataset-agent to audit the labels for coordinate, pairing, and class-id errors before we touch the model.'
+<commentary>Label integrity is a data question; rule it out before changing the algorithm.</commentary>
+</example>"
 tools: Read, Write, Edit, Bash, Glob, Grep
 model: sonnet
 ---
