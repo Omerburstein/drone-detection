@@ -119,4 +119,7 @@ The CLI stops rather than printing a table that would be read wrong:
 
 - [evaluate.md](evaluate.md) — producing the dump this reads, and the matching criteria.
 - [plot_eval.md](plot_eval.md) — the same size axis as a figure, one criterion per line.
+- [alarm_eval.md](alarm_eval.md) — the other half of the false-alarm question. This
+  table says *how often* alarms fire per cell; that one says *where they land*, which is
+  what decides whether they are loose boxes or genuine clutter.
 - [experiments.md](experiments.md) — EXP-004, whose cross-cut is quoted above.

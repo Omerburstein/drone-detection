@@ -730,3 +730,106 @@ sampling itself. Read the Pd column as exact and the FA column as ±1 alarm.
   measured deficit is in `small_mav` and at range, and M4b (GLAD on unseen video) is
   still the experiment that decides whether any of these numbers survive contact with
   data GLAD was not tuned on.
+
+---
+
+### EXP-001–004 — where the false alarms actually land
+
+Added 2026-08-20. **No inference and no re-scoring.** A `GROUP BY` over the same persisted
+dumps, binning every `fp` row by its distance from the nearest ground-truth box in its own
+frame. New CLI [`src.alarm_eval`](alarm_eval.md) over `src/eval/alarms.py`.
+
+- **Command:**
+  ```
+  py -3.13 -m src.alarm_eval \
+      --dump "centre@1x=runs/exp004_glad/matches_center.csv" \
+      --dump "IoU@0.50=runs/exp004_glad/matches_iou50.csv" \
+      --csv runs/exp004_glad/alarm_distance.csv
+  ```
+  Baselines: `runs/compare_resize_vs_tile/alarm_distance.csv`.
+- **Why the count alone was not enough.** `far` says how often the detector cries wolf.
+  It cannot say whether the wolf was two pixels from a real drone or four hundred, and
+  those need opposite fixes — a box regressor versus training data.
+- **Distance is to the nearest target, matched or not.** A false alarm has no *matched*
+  target by definition, but it always has a nearest one. Frames holding no target at all
+  give an alarm no distance; those are counted on their own row rather than swept into
+  the far bin, which would manufacture clutter the run never produced.
+
+**EXP-004 GLAD, both criteria.** Distance in multiples of the nearest target's own size.
+
+| Distance | centre@1× | share | IoU@0.50 | share |
+| --- | --- | --- | --- | --- |
+| **<1** | **0** | 0.0% | **3,470** | **94.9%** |
+| 1–2 | 8 | 4.3% | 8 | 0.2% |
+| 2–4 | 9 | 4.8% | 9 | 0.2% |
+| 4–8 | 38 | 20.2% | 38 | 1.0% |
+| 8–16 | 32 | 17.0% | 32 | 0.9% |
+| 16–32 | 30 | 16.0% | 30 | 0.8% |
+| ≥32 | 53 | 28.2% | 53 | 1.4% |
+| no target in frame | 18 | 9.6% | 18 | 0.5% |
+| **total** | **188** | | **3,658** | |
+
+In pixels, the same two populations: centre@1× has a median alarm distance of **100 px**,
+IoU@0.50 a median of **2.2 px**.
+
+**The three baselines**, centre@1× (every 10th frame, so counts are a tenth-scale sample):
+
+| Distance | EXP-001 whole@640 | EXP-002 whole@1280 | EXP-003 tiled@640 |
+| --- | --- | --- | --- |
+| <1 | 0 | 0 | 9 |
+| 1–2 | 0 | 5 | 14 |
+| 2–4 | 0 | 10 | 121 |
+| 4–8 | 8 | 41 | 389 |
+| 8–16 | 25 | 252 | 973 |
+| 16–32 | 94 | 813 | 2,395 |
+| **≥32** | **476 (78.2%)** | **2,127 (64.7%)** | **7,332 (64.7%)** |
+| no target in frame | 6 | 39 | 92 |
+| **total** | **609** | **3,287** | **11,325** |
+| median distance, px | 868 | 683 | 622 |
+| median distance, target sizes | 55.9 | 45.6 | 45.5 |
+
+#### What this settles
+
+1. **Every one of the 3,470 alarms IoU@0.50 adds over centre matching is inside one
+   target size.** The two columns of the EXP-004 table are *identical* from the 1–2 bin
+   outward — 8, 9, 38, 32, 30, 53, 18 under both criteria. The criterion does not find
+   different clutter; it reclassifies boxes that are sitting **on** the drone. The
+   centre-distance section above asserted "95% of what IoU@0.50 charged as false
+   positives were GLAD's own boxes slightly off a real drone" from the count; this is the
+   distance itself, and it is 94.9% with a median of 2.2 px.
+2. **GLAD's real false-alarm population is 188 boxes, and it is not near-misses.** Under
+   centre matching **zero** alarms fall inside one target size — as they must, since a
+   first box that close would have matched, so a sub-1 alarm could only be a duplicate and
+   GLAD emits one box per frame. Of the 170 that have a distance at all, **153 (90%) are
+   4 or more target sizes out** and 53 are beyond 32; median 100 px. These are genuine
+   wrong-object detections, not sloppy boxing.
+3. **This is the strongest separation yet between the baselines and GLAD, and it is not
+   about counts.** EXP-003 emits 60× GLAD's alarms, but the *shape* is the finding: 64.7%
+   of tiled alarms are ≥32 target sizes from any drone, median 622 px — the detector is
+   boxing objects that have nothing to do with the target. Doubling input resolution
+   (EXP-001 → 002) moves the median from 868 px to 683 px and tiling to 622 px, so
+   more resolution buys alarms that are *nearer* the drone but nowhere near enough to
+   matter. **The failure was never localisation.**
+4. **EXP-003's 9 sub-1 alarms are the only duplicates in the project.** Tiling gives
+   overlapping crops an independent chance at the same target, and class-aware NMS at the
+   merge does not always collapse them. Nine boxes out of 11,325 — real, negligible, and
+   the only place the tile-merge path is visibly imperfect.
+5. **The 18 no-target frames are worth their own line.** GLAD fires on 18 of the split's
+   frames that hold no drone at all — 9.6% of its alarm budget, from 18 of 28,178 frames.
+   Small, but it is the one population no amount of box regression or matching-rule change
+   will touch.
+
+#### Next
+
+- **Free:** `--group video` on EXP-004 confirms the concentration already recorded above —
+  phantom63 supplies 129 of the 188, and its shape is the far-clutter shape (38.8% beyond
+  32 target sizes). phantom43's 19 alarms are the opposite: 84% within 8 target sizes,
+  i.e. the drone's surroundings rather than unrelated objects. **Two different failures
+  in one aggregate, in the two videos that already dominate the loss.**
+- **What this changes about M7.** A box-regression head or a tighter matching rule would
+  recover almost the whole IoU@0.50 penalty and **none** of the 188 real alarms. If the
+  goal is a deployable false-alarm rate, the work is hard-negative mining on the far
+  population — clutter phantom63 flies past — not localisation. That is a data question
+  for `dataset-agent`, not an architecture question.
+- **Not worth running:** anything on the near population. It is already zero under the
+  criterion this project scores on.

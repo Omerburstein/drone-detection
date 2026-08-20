@@ -148,6 +148,18 @@ dates, not priorities.
 
 ## Done
 
+- [x] 2026-08-20 — [algo] **Bin false alarms by distance from the nearest real drone.**
+  `src/eval/alarms.py` + CLI `src/alarm_eval.py`, documented in
+  [alarm_eval.md](alarm_eval.md); `nearest_gt_dist` / `nearest_gt_dist_rel` /
+  `nearest_gt_size` added to the dump in `src/eval/records.py`, computed by the new
+  `metrics.nearest_target`. Separates the two failures `far` pools: a box on the drone
+  versus a box on a rooftop. Zero cost — dumps written before the columns landed are
+  re-derived from the frame's own rows, so no run needed re-scoring. Result in
+  [experiments.md](experiments.md): **all 3,470 alarms IoU@0.50 adds over centre matching
+  are inside one target size** (median 2.2 px), while GLAD's 188 real alarms have **zero**
+  inside one target size and a median of 100 px. The baselines are 65–78% beyond 32 target
+  sizes at a ~600–870 px median — their failure was never localisation.
+
 - [x] 2026-08-20 — [algo] **Cross-cut the scoring dump by target size *and* capture
   condition at once.** `src/eval/crosscut.py` + CLI `src/cross_eval.py`, documented in
   [cross_eval.md](cross_eval.md). Answers the conjunction the metric block's one-way

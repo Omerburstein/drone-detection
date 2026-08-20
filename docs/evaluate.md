@@ -269,6 +269,7 @@ py -3.13 -m src.evaluate     --pred runs/exp004_glad/detections.jsonl     --labe
 | `iou` | **Real IoU of the pair, whatever criterion matched them.** Under centre matching this is the only column still measuring how well the box was placed. |
 | `center_dx`, `center_dy`, `center_dist` | Offset between the two centres, px. |
 | `center_dist_rel` | The same in multiples of `gt_size` — *the quantity `--match center` thresholds on*. A tolerance of *t* accepts exactly the rows below *t*, so the effect of a different `--match-tol` can be read off the file without re-scoring. |
+| `nearest_gt_dist`, `nearest_gt_dist_rel`, `nearest_gt_size` | The closest target in the frame, **matched or not**, and how far the prediction landed from it. Present on `tp` and `fp` rows; blank on `fn`, and blank on any row in a frame with no targets. This is the only geometry a false alarm has — `center_dist` is the offset from the target a prediction *claimed*, and a false alarm claimed nothing. Added 2026-08-20; dumps written before then are handled by re-derivation, see [alarm_eval.md](alarm_eval.md#where-the-numbers-come-from). |
 | one column per axis | `scene_category`, and `lighting` / `relative_range` when `--conditions` declares them. |
 | one column per recorded field | Whatever the run wrote per frame. GLAD writes `branch` — the state-machine path that produced the box. |
 
@@ -310,11 +311,14 @@ hits.groupby(pd.cut(hits.gt_size, [0, 8, 12, 16, 24, 32, 48, 1e9])).center_dist_
 `tests/unit/test_records.py` pins the claim that matters: the `tp`/`fp`/`fn` row counts
 equal what `evaluate` reports, under either criterion.
 
-Two cuts of this file are packaged rather than left to a spreadsheet:
-[`src.plot_eval`](plot_eval.md) draws precision against target size, and
+Three cuts of this file are packaged rather than left to a spreadsheet:
+[`src.plot_eval`](plot_eval.md) draws precision against target size,
 [`src.cross_eval`](cross_eval.md) tables Pd and false alarms by size **and** capture
 condition at once — the conjunction the per-axis blocks above cannot express, since the
-two axes are correlated and their marginals cannot be multiplied.
+two axes are correlated and their marginals cannot be multiplied — and
+[`src.alarm_eval`](alarm_eval.md) bins the false alarms by how far they landed from the
+nearest real drone, which is what separates a box two pixels off the target from a box on
+a rooftop.
 
 ## Comparability
 

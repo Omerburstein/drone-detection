@@ -170,3 +170,86 @@ def test_write_overwrites_rather_than_appending(tmp_path, frames):
 
     with path.open(encoding="utf-8", newline="") as handle:
         assert len(list(csv.DictReader(handle))) == 3
+
+
+class TestNearestTargetColumns:
+    """`nearest_gt_*`: the distance to the closest target, matched or not.
+
+    Distinct from `center_dist`, which is the offset from the target a prediction
+    *claimed*. A false alarm claims nothing and so has no `center_dist` at all —
+    these columns are the only place its geometry is recorded, and they are what
+    `src.eval.alarms` bins.
+    """
+
+    def test_false_alarm_gets_a_distance_where_center_dist_is_blank(self):
+        frame = make_frame("f", gt=[box(100, 100, 110, 110)],
+                           preds=[box(100, 100, 110, 110), box(200, 100, 210, 110)])
+        rows = list(frame_rows(frame, MatchCriterion(CENTER, 1.0)))
+        alarm = [r for r in rows if r["outcome"] == "fp"][0]
+
+        assert alarm["center_dist"] == ""          # nothing was claimed
+        assert alarm["nearest_gt_dist"] == pytest.approx(100.0)
+        assert alarm["nearest_gt_dist_rel"] == pytest.approx(10.0)
+        assert alarm["nearest_gt_size"] == pytest.approx(10.0)
+
+    def test_nearest_is_nearest_not_matched(self):
+        """Two targets: the alarm is measured against whichever is closer."""
+        frame = make_frame("f", gt=[box(0, 0, 10, 10), box(300, 0, 310, 10)],
+                           preds=[box(0, 0, 10, 10), box(280, 0, 290, 10)])
+        rows = list(frame_rows(frame, MatchCriterion(CENTER, 1.0)))
+        alarm = [r for r in rows if r["outcome"] == "fp"][0]
+        assert alarm["nearest_gt_dist"] == pytest.approx(20.0)
+
+    def test_true_positive_carries_it_too(self):
+        """So a prediction matched to something other than its nearest is visible."""
+        frame = make_frame("f", gt=[box(100, 100, 110, 110)],
+                           preds=[box(102, 100, 112, 110)])
+        row = list(frame_rows(frame, MatchCriterion(CENTER, 1.0)))[0]
+        assert row["outcome"] == "tp"
+        assert row["nearest_gt_dist"] == pytest.approx(2.0)
+
+    def test_missed_target_has_no_prediction_and_so_no_distance(self):
+        frame = make_frame("f", gt=[box(100, 100, 110, 110)], preds=[])
+        row = list(frame_rows(frame, MatchCriterion(CENTER, 1.0)))[0]
+        assert row["outcome"] == "fn"
+        assert row["nearest_gt_dist"] == ""
+        assert row["nearest_gt_size"] == ""
+
+    def test_alarm_on_an_empty_frame_is_blank_not_zero(self):
+        """A zero would read as 'landed exactly on a drone' — the opposite."""
+        frame = make_frame("f", gt=[], preds=[box(200, 100, 210, 110)])
+        row = list(frame_rows(frame, MatchCriterion(CENTER, 1.0)))[0]
+        assert row["outcome"] == "fp"
+        assert row["nearest_gt_dist"] == ""
+        assert row["nearest_gt_dist_rel"] == ""
+
+    def test_columns_are_in_the_written_header(self, frames, tmp_path):
+        path = tmp_path / "dump.csv"
+        write_dump(path, frames, MatchCriterion(CENTER, 1.0))
+        header = list(csv.DictReader(path.open(encoding="utf-8")).fieldnames)
+        for name in ("nearest_gt_dist", "nearest_gt_dist_rel", "nearest_gt_size"):
+            assert name in header
+            assert name in BASE_COLUMNS
+
+    def test_a_dumped_alarm_round_trips_into_the_alarms_module(self, tmp_path):
+        """The read path in `alarms` and the write path here are one quantity.
+
+        Equal to the dump's own precision, not to the bit: the CSV rounds to
+        `DECIMALS`, so the recorded column and a fresh derivation agree to 1e-4.
+        That is the tolerance every consumer of the file already lives with.
+        """
+        from src.eval.alarms import frame_alarms
+        from src.eval.curves import load_dump
+
+        frame = make_frame("f", gt=[box(100, 100, 112, 112)],
+                           preds=[box(160, 130, 172, 142)])
+        path = tmp_path / "dump.csv"
+        write_dump(path, [frame], MatchCriterion(CENTER, 1.0))
+
+        rows = load_dump(path)
+        recorded = frame_alarms(rows)[0]
+        derived = frame_alarms([{k: v for k, v in r.items()
+                                 if not k.startswith("nearest_")} for r in rows])[0]
+        assert recorded.distance == pytest.approx(derived.distance, abs=1e-4)
+        assert recorded.distance_rel == pytest.approx(derived.distance_rel, abs=1e-4)
+        assert recorded.distance == pytest.approx(np.hypot(60.0, 30.0), abs=1e-4)

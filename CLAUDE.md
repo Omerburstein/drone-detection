@@ -66,10 +66,12 @@ src/eval/     labels.py     EvalFrame; ground truth paired with recorded preds
               records.py    the per-object dump: one row per tp / fp / fn
               curves.py     binning that dump into precision/recall vs size
               crosscut.py   that dump cut by size *and* condition at once
+              alarms.py     false alarms binned by distance from the nearest target
 src/baseline_detect.py      CLI: inference — parser, run loop, wiring
 src/evaluate.py             CLI: scoring a recorded run against labels
 src/plot_eval.py            CLI: precision-against-size figure from a dump
 src/cross_eval.py           CLI: Pd and false alarms per (size x condition) cell
+src/alarm_eval.py           CLI: false alarms by distance from the nearest drone
 src/render_video.py         CLI: a scored run drawn back onto its source video
 ```
 
@@ -107,6 +109,10 @@ Load-bearing points:
   alarm has no target and therefore no target size, so it inherits the band of the frame
   it fired in; that is what makes a cell's `far` mean what `far` means in the metric
   block. Frames whose targets straddle a band go to `mixed sizes`, not into one of them.
+- `metrics.nearest_target` — the closest ground-truth box to a prediction, **ignoring
+  what matched what**. A false alarm has no matched target and so no `center_dist`; this
+  is the only geometry it has. `records` writes it into the dump and `alarms` re-derives
+  it for dumps predating those columns — both call this, so they cannot drift.
 - `MatchCriterion` — the one place a match is decided. `records`, `curves` and the
   `overlay` renderer call `match_frame`, they do not reimplement it, so neither a dump's
   `outcome` nor the colour of a box on a rendered video can disagree with the metric

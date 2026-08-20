@@ -36,7 +36,8 @@ from typing import Any, Iterator
 import numpy as np
 
 from .conditions import Axis, video_of
-from .metrics import MatchCriterion, as_criterion, box_size, iou_matrix, match_frame
+from .metrics import (MatchCriterion, as_criterion, box_size, iou_matrix,
+                      match_frame, nearest_target)
 from .labels import EvalFrame
 
 TP, FP, FN = "tp", "fp", "fn"
@@ -60,6 +61,9 @@ BASE_COLUMNS = (
     "center_dx", "center_dy",
     "center_dist",    # centre-to-centre distance, px
     "center_dist_rel",  # the same, in multiples of gt_size -- the centre criterion
+    "nearest_gt_dist",      # px to the closest target in the frame, matched or not
+    "nearest_gt_dist_rel",  # the same, in multiples of *that* target's size
+    "nearest_gt_size",      # sqrt(w*h) of that target, px
 )
 
 DECIMALS = 4
@@ -116,6 +120,31 @@ def _geometry(pred: np.ndarray | None, gt: np.ndarray | None) -> dict[str, Any]:
     }
 
 
+def _nearest(pred_box: np.ndarray | None, gt_boxes: np.ndarray) -> dict[str, Any]:
+    """Distance from one prediction to the closest target in its frame.
+
+    Blank on `fn` rows, which have no prediction, and blank on any row in a frame
+    with no targets -- an alarm on an empty frame genuinely has no distance.
+
+    Present on `tp` rows as well as `fp` ones, and deliberately not merged with
+    `center_dist`: that column is the offset from the target this prediction
+    *claimed*, this one is the offset from the target it was *closest to*. They
+    differ exactly when a prediction was matched to something other than its
+    nearest target, which is a duplicate-box signature worth being able to see.
+    """
+    blank = {"nearest_gt_dist": "", "nearest_gt_dist_rel": "", "nearest_gt_size": ""}
+    if pred_box is None or len(gt_boxes) == 0:
+        return blank
+
+    index, distance = nearest_target(pred_box.reshape(1, 4), gt_boxes)
+    size = float(box_size(gt_boxes[index[0]].reshape(1, 4))[0])
+    return {
+        "nearest_gt_dist": _round(float(distance[0])),
+        "nearest_gt_dist_rel": _round(float(distance[0]) / size) if size > 0 else "",
+        "nearest_gt_size": _round(size),
+    }
+
+
 def _context(frame: EvalFrame, axes: list[Axis]) -> dict[str, Any]:
     """Axis labels and recorded per-frame fields, shared by every row of a frame."""
     context: dict[str, Any] = {axis.name: axis.label_for(frame.key) for axis in axes}
@@ -154,6 +183,7 @@ def frame_rows(frame: EvalFrame, criterion: float | MatchCriterion,
             **_box_columns("pred", np.asarray(box, dtype=float)),
             **_box_columns("gt", gt_box),
             **_geometry(np.asarray(box, dtype=float), gt_box),
+            **_nearest(np.asarray(box, dtype=float), frame.gt_boxes),
             **context,
         }
 
@@ -172,6 +202,7 @@ def frame_rows(frame: EvalFrame, criterion: float | MatchCriterion,
             **_box_columns("pred", None),
             **_box_columns("gt", gt_box),
             **_geometry(None, gt_box),
+            **_nearest(None, frame.gt_boxes),
             **context,
         }
 

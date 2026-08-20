@@ -170,6 +170,32 @@ def center_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
                           axis=2)
 
 
+def nearest_target(pred_boxes: np.ndarray,
+                   gt_boxes: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """For each prediction, the closest ground-truth box and how far off it is.
+
+    Nearest by centre distance, *ignoring whether the pair was matched*. That is
+    the point: a false alarm has no matched target by definition, but it still
+    has a nearest one, and the distance to it is what separates "a second box on
+    the drone we already found" from "a box on a rooftop".
+
+    Returns `(index, distance)`; the index is -1 and the distance NaN for every
+    prediction in a frame holding no targets at all, which is a real answer --
+    an alarm on an empty frame has no distance, and filling in a zero or a large
+    number would invent one.
+
+    The one definition of the quantity. `records` writes it into the dump and
+    `alarms` re-derives it from dumps written before that column existed; both
+    call this, so the two cannot drift.
+    """
+    if len(gt_boxes) == 0 or len(pred_boxes) == 0:
+        return (np.full(len(pred_boxes), -1, dtype=int),
+                np.full(len(pred_boxes), np.nan))
+    distances = center_distance(pred_boxes, gt_boxes)
+    index = distances.argmin(axis=1)
+    return index, distances[np.arange(len(pred_boxes)), index]
+
+
 def box_size(boxes: np.ndarray) -> np.ndarray:
     """The side of the equal-area square, sqrt(w*h), per box.
 
