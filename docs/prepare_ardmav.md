@@ -163,3 +163,48 @@ tiny-target performance under another name — read the size breakdown, not the 
 
 The 7% medium bucket is useful rather than noise: it is the control. If a model scores
 well there and collapses on tiny, the limit is resolution, not architecture.
+
+### The same battery on ARD100 — 2026-08-20
+
+15 videos, **34,287 frames, 33,517 boxes**, converted in one pass (~2 h 45 m at
+1920×1080, labels only). Clean: no size mismatches, no out-of-range coordinates, no
+degenerate boxes, `Drone` the only class name.
+
+**Every decodable frame has an XML, and the per-video decode count matches the XML count
+exactly on all 15.** The `CAP_PROP_FRAME_COUNT` overstatement PROVENANCE warned about is
+real in the header and invisible after decoding — the guard never fired. 777 frames carry
+an XML with zero objects; those are genuine negatives and are kept.
+
+| Bucket | ARD100 | ARD-MAV test 15 |
+| --- | --- | --- |
+| tiny (<16 px) | 20,614 — 61.5% | 64.8% |
+| small (16–32 px) | 12,160 — 36.3% | 28.2% |
+| medium (32–96 px) | 730 — 2.2% | 7.0% |
+| large (>96 px) | 13 — 0.04% | 0% |
+
+**This subset is not the "smallest targets of any dataset" the survey describes.** That
+claim is about ARD100's full 100 videos; these 15 sit slightly *less* tiny than ARD-MAV's
+test 15 (61.5% vs 64.8%). What they do lose is the easy end — the medium control bucket
+drops from 7.0% to 2.2%, so **97.8% of targets are under 32 px against ARD-MAV's 93.0%**.
+Harder overall, but by attrition of easy targets rather than by a shift into the tiny bin.
+The 13 targets over 96 px are the only ones outside GLAD's motion-branch area cap of
+3,000 px², which at 0.04% is nothing like the structural problem FL-Drones poses.
+
+**The finding that matters for M4b: 29.7% of ARD100 frames are `backlit`** — over 2% of
+pixels blown — where ARD-MAV's cleanly exposed videos sit at 0.0–0.2%.
+
+| `lighting` | frames | share |
+| --- | --- | --- |
+| backlit | 10,195 | 29.7% |
+| moderate (15–30) | 8,443 | 24.6% |
+| low (5–15) | 6,658 | 19.4% |
+| strong (≥30) | 5,932 | 17.3% |
+| invisible (<5) | 2,752 | 8.0% |
+| no_target | 307 | 0.9% |
+
+M4b is meant to change exactly one variable, the video content — and exposure regime is
+part of content, so this is not a protocol break. But it does mean a recall drop against
+EXP-004 **cannot be read as "GLAD fails on unseen video" without controlling for it.**
+Since `lighting` is a measured per-frame axis, the control is free: score the non-backlit
+frames separately and compare that subset against EXP-004. Do that before attributing any
+gap to generalisation.

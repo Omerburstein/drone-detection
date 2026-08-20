@@ -86,6 +86,26 @@ dates, not priorities.
   flag if a stills run ever needs them). Verify renders confirmed the boxes land on the
   drone, so the one-based numbering matches ARD-MAV's.
 
+  **Conversion landed 2026-08-20 15:11: 34,287 frames / 33,517 boxes, ~2 h 45 m.**
+  Validation clean — no size mismatches, no out-of-range coords, no degenerate boxes,
+  `Drone` the only class. Per-video decode counts match the XML counts exactly on all 15,
+  so the header overstatement never survives decoding. 777 frames are genuine negatives
+  (XML with zero objects). The `lighting` and `relative_range` axes came free in the same
+  decode, which is what the equivalent ARD-MAV task above still owes an hour to.
+
+  **Two findings to carry into the run** (full tables in
+  [prepare_ardmav.md](prepare_ardmav.md)):
+
+  1. **29.7% of frames are `backlit`** — >2% of pixels blown, against ARD-MAV's 0.0–0.2%.
+     Exposure regime is part of "video content" so this is not a protocol break, but a
+     recall drop **cannot be read as a generalisation failure without controlling for
+     it**. `lighting` is a measured axis, so the control is free: score the non-backlit
+     frames separately and compare *that* against EXP-004 before concluding anything.
+  2. **This subset is not the record-small one the survey describes.** That claim covers
+     all 100 videos; these 15 are slightly less tiny than ARD-MAV's test 15 (61.5% vs
+     64.8% under 16 px). What they lose is the easy end — medium targets fall 7.0% → 2.2%,
+     so 97.8% sit under 32 px against ARD-MAV's 93.0%.
+
   **Next: the run and the score.**
 
   ```bash
