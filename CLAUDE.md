@@ -150,6 +150,38 @@ These have already cost real effort. Do not rediscover them.
 - **Drone-vs-Bird requires a signed DUA and is non-commercial.** YOLOMG is GPL-3.0;
   GLAD and DUT are MIT. Flag licensing when the use case might be commercial.
 
+## Definition of done — every task, not just M-numbered ones
+
+Standing instruction from the user, restated 2026-08-20. A task is not finished when
+the code works; it is finished when these four are true. Do all four **without being
+asked**, in the *same commit* as the work.
+
+1. **Tests** — cover changed behaviour under `src/` and run them:
+   `py -3.13 -m pytest -m "not slow"`. Unit tests for functions, integration tests for
+   the wiring. If tests genuinely do not apply — a docs-only or config-only change —
+   say so in one line rather than skipping silently.
+2. **Docs** — if a script's parameters changed, update its reference in `docs/` in the
+   same commit. The user relies on these instead of re-reading the source, so a stale
+   doc is a broken one.
+3. **The record** — move the finished task to `## Done` in `docs/todo.md` with the
+   date. If the work produced numbers, add the run to `docs/experiments.md`. **An
+   unrecorded mission gets re-asked and re-run**: M2 landed on 2026-08-16 and had to be
+   chased because the todo still showed it open.
+4. **Commit and push to `origin main`** — standing approval, never ask for it. `gh` CLI
+   is not installed; plain HTTPS push works.
+
+Only items 1–2 are ever optional, and only when the change genuinely has no behaviour
+and no parameters. Items 3 and 4 are not.
+
+**This is enforced, not just documented.** `.claude/hooks/definition_of_done.py` runs on
+`Stop` and refuses to end a turn while a file *this session edited* is uncommitted or
+unpushed. It tracks the session's own edits rather than the whole tree because several
+sessions run against this repo at once — so if it fires, it is about your work. It
+checks only what a machine can check; items 1–3 ride in its message and are on you.
+
+When it does fire, **stage only the paths your task touched** (`git add <paths>`, never
+`git add -A`) — another session very likely has unrelated work in the tree.
+
 ## Conventions
 
 - `/data/`, `/weights/`, and `/runs/` are gitignored — **never commit datasets or
@@ -158,23 +190,13 @@ These have already cost real effort. Do not rediscover them.
 - `data/raw/` is immutable. Transforms read from it and write to `data/processed/`, so
   any step can be re-derived.
 - Give every experiment its own `--out` directory; runs overwrite in place otherwise.
-- **Commit and push to `origin main` after each unit of work** — this is standing
-  instruction from the user, no need to ask. `gh` CLI is not installed; plain HTTPS
-  push works.
-- **A mission is not finished until the record is.** Completing an M-numbered task
-  means checking it off in `docs/todo.md` (moved to Done with the date) and, when the
-  task produced numbers, adding the run to `docs/experiments.md` — in the *same commit*
-  as the work, without being asked. An unrecorded mission gets re-asked and re-run: M2
-  landed on 2026-08-16 and had to be chased because the todo still showed it open.
-- Docs live in `docs/`. When a script's parameters change, update its reference doc in
-  the same commit — the user relies on these instead of re-reading the source.
 - **Say when a prompt could have been routed better.** Standing request from the user
   (2026-08-19): if a skill or agent should have caught the task, if two live sessions are
   covering the same ground, or if a long job should have been backgrounded and resumable,
   add one sentence at the end of the reply and move on. `docs/working-with-claude.md` is
   the collected version. Do not moralise, and do not repeat a point already made.
 
-## Agents and skills
+## Agents, skills and hooks
 
 `.claude/agents/` — `dataset-agent` owns ingest, label validation, and splits;
 `algo-agent` owns the model registry, the `docs/experiments.md` ledger, and next-step
@@ -182,3 +204,10 @@ recommendations. They split at the data/model boundary.
 
 `.claude/skills/` — `/clean-up` (quality only, not a bug hunt), `/test-creation`,
 `/eval`, `/todo` (captures a task in `docs/todo.md`; capture only, does not do the work).
+
+`.claude/hooks/` — `definition_of_done.py`, wired in `.claude/settings.json` as two
+hooks sharing one script: `record` (`PostToolUse` on `Write|Edit`, async) notes which
+repo file the session touched, and `check` (`Stop`) blocks the turn while any of those
+is uncommitted or unpushed. See the definition-of-done section above. It is deliberately
+quiet — no state, no output — until it has something real to say, and it never blocks
+twice in a row, so it cannot trap a session.

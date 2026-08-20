@@ -89,9 +89,34 @@ and keep the laptop awake for anything measured in hours.
 
 ## Reducing friction
 
-There is no `.claude/settings.json` in this repo, so roughly 550 shell calls each
-raised a prompt. `/fewer-permission-prompts` reads these same transcripts and
-writes the allowlist.
+`.claude/settings.json` now exists but carries **hooks only, no permission
+allowlist** — so roughly 550 shell calls still each raise a prompt.
+`/fewer-permission-prompts` reads these same transcripts and writes the allowlist
+into the `permissions.allow` array of that same file.
+
+## The definition-of-done hook
+
+Added 2026-08-20, because the instruction *"commit, push, test, document, tick the
+todo"* had to be typed again after already being three separate bullets in
+`CLAUDE.md`. A rule that has to be repeated is not a rule, it is a reminder — so it
+is now a `Stop` hook that refuses to end a turn while a file the session edited is
+uncommitted or unpushed (`.claude/hooks/definition_of_done.py`).
+
+**What it does and does not catch.** Commits and pushes are checkable, so it blocks
+on them. Tests, docs and the `todo.md` tick are not mechanically checkable, so they
+ride in the message the block prints and still depend on Claude reading it.
+
+**Why it tracks the session's own edits rather than `git status`.** Several sessions
+run against this repo at once and each sees the others' work in progress as
+uncommitted changes — the multi-session habit this doc already warns about. A bare
+dirty-tree check would fire on every turn of every session for edits it did not
+make, and a hook that cries wolf gets switched off. It also means the block message
+can name the files, and that staging must be `git add <paths>`, never `git add -A`.
+
+**If it gets in the way.** It never blocks twice in a row, so it cannot trap a
+session — say what is left and the second stop goes through. `/hooks` reviews or
+disables it; deleting the `Stop` entry in `.claude/settings.json` removes it
+entirely. Config changes only take effect in sessions started afterwards.
 
 ## What already works — keep doing it
 

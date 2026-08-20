@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py",
+            "args": [
+              "-3.13",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/definition_of_done.py",
+              "record"
+            ],
+            "async": true,
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py",
+            "args": [
+              "-3.13",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/definition_of_done.py",
+              "check"
+            ],
+            "timeout": 60,
+            "statusMessage": "Checking the definition of done"
+          }
+        ]
+      }
+    ]
+  }
+}
