@@ -21,7 +21,7 @@ reliability is the thing under study, not a nuisance to average over.
 | --- | --- | --- |
 | `--dump` | required | `LABEL=path/to/matches.csv`. The label is what the legend says. **Repeatable** — overlaying the same run under two matching criteria is the useful case. |
 | `--out` | `precision_by_size.png` | Where to write the figure. |
-| `--data-out` | `--out` with a `.csv` suffix | The binned numbers behind the figure, so it can be redrawn or checked without re-deriving anything. |
+| `--data-out` | `--out` with a `.csv` suffix | The binned numbers behind the figure, so it can be redrawn or checked without re-deriving anything. Carries three series per dump — precision, recall and the size-normalised centre offset — of which only precision is drawn. |
 | `--title` | `Precision against target size` | Figure title. |
 | `--subtitle` | none | The line under it. Put the run, split and frame count here. |
 
@@ -42,6 +42,14 @@ Recall, which the same command writes into the data CSV but does **not** plot, b
 are not two views of one axis, and a single chart showing both at a shared x would invite
 reading them as a trade-off curve at one size. They are in the same file, labelled by
 `binned_on`, and kept off the same panel.
+
+The **centre offset** (`metric = loc_error`) is written to the CSV as well, also binned
+on `gt_size`, over `tp` rows only — a false alarm has no target to be offset from and a
+miss has no box. It carries `median` and `p90` where the ratio series carry `hits`, since
+a distribution has no numerator. Read it against the recall series over the same bins:
+recall says how often a drone of that size was found, the offset says how well the box
+sat on it once it was. Rising offset with falling size, at steady recall, is a matching
+threshold story rather than a detection one.
 
 Bin edges are 8 / 12 / 16 / 20 / 24 / 32 / 48 px with an open bin above — fine where the
 data lives, coarse where it thins out. The open top bin is deliberate: an appearance-only

@@ -12,7 +12,11 @@ target, so its own size is the only one it has. See `src.eval.curves`.
 
 The figure is redrawn from the dump CSVs, never from a live scoring, so it costs
 nothing and cannot disagree with the numbers in the ledger. The binned values are
-written out beside it for the same reason.
+written out beside it for the same reason -- and the sidecar carries recall and
+the size-normalised localisation error over the same bins, which the figure does
+not draw. Precision is what the chart is for; the other two are there so the
+bucket a claim was made in can be read against how often that size was found at
+all and how well the box sat on it.
 
 Example
 -------
@@ -34,8 +38,9 @@ import numpy as np
 matplotlib.use("Agg")  # no display on this machine, and none wanted in a script
 import matplotlib.pyplot as plt  # noqa: E402  (must follow the backend choice)
 
-from .eval.curves import (Curve, SIZE_EDGES, curve_rows, load_dump,  # noqa: E402
-                          precision_by_size, recall_by_size)
+from .eval.curves import (Curve, SIZE_EDGES, curve_rows,  # noqa: E402
+                          loc_error_by_size, load_dump, precision_by_size,
+                          recall_by_size)
 
 # Validated categorical slots 1 and 2 (adjacent-pair CVD dE 24.7, normal 33.6).
 SERIES_COLORS = ("#2a78d6", "#eb6834", "#1baf7a")
@@ -206,18 +211,19 @@ def main() -> None:
     """Load each dump, bin it, and render the figure."""
     args = build_parser().parse_args()
 
-    precision, recall = {}, {}
+    precision, recall, offsets = {}, {}, {}
     for label, path in args.dump:
         rows = load_dump(path)
         precision[label] = precision_by_size(rows, SIZE_EDGES)
         recall[f"{label} (recall)"] = recall_by_size(rows, SIZE_EDGES)
+        offsets[f"{label} (loc err)"] = loc_error_by_size(rows, SIZE_EDGES)
         print(f"{label}: {len(rows)} rows from {path}")
 
     render(precision, args.out, args.title, args.subtitle)
     print(f"Wrote {args.out}")
 
     data_out = args.data_out or args.out.with_suffix(".csv")
-    written = write_curve_data(data_out, {**precision, **recall})
+    written = write_curve_data(data_out, {**precision, **recall, **offsets})
     print(f"Wrote {data_out} ({written} binned rows)")
 
 

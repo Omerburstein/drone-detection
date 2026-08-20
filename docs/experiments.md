@@ -434,6 +434,80 @@ per-bin sample counts under it. Regenerate with
 
 ---
 
+### EXP-004 with false-alarm rate and localisation error (M5)
+
+Added 2026-08-20. **No inference re-run** — `detections.jsonl` was persisted on
+2026-08-16, so this is `src.evaluate` over the same file under both criteria, now
+reporting three quantities the metric block did not previously carry: `far` (false alarms
+per frame), `loc_err` (centre offset in multiples of the target's own size) and
+`loc_by_size`. Every headline number reproduces the entries above **exactly** under both
+criteria — P/R/AP/mean IoU and all TP/FP/FN counts — so nothing earlier in this entry is
+disturbed. Snapshots: `metrics_center.json`, `metrics.json`; log `results.jsonl`.
+
+**False alarms per frame.** Precision already said what fraction of alarms were wrong;
+this says how often the alarm fires at all, which is the number an operator budgets
+against.
+
+| | centre@1× | IoU@0.50 | ratio |
+| --- | --- | --- | --- |
+| **overall** | **0.0066** | **0.1291** | 19.5× |
+| `ordinary` | 0.0018 | 0.0130 | 7.2× |
+| `complex` | 0.0018 | 0.0843 | 47.9× |
+| `small_mav` | **0.0165** | **0.2912** | 17.7× |
+
+**Size-normalised localisation error**, centre@1× matching, over matched pairs only. The
+fine bins are the `loc_error` series in `precision_by_size.csv`; the four coarse buckets
+are what the metric block prints.
+
+| gt size | pairs | mean | median | p90 |
+| --- | --- | --- | --- | --- |
+| <8 px | 4,462 | **0.255** | 0.250 | 0.368 |
+| 8–12 | 7,313 | 0.176 | 0.171 | 0.260 |
+| 12–16 | 3,738 | 0.121 | 0.116 | 0.180 |
+| 16–20 | 2,333 | 0.093 | 0.088 | 0.142 |
+| 20–24 | 1,863 | 0.071 | 0.067 | 0.104 |
+| 24–32 | 3,600 | 0.063 | 0.059 | 0.096 |
+| 32–48 | 1,510 | **0.051** | 0.047 | 0.079 |
+| ≥48 | 372 | 0.071 | 0.060 | 0.112 |
+
+#### What this adds
+
+1. **The IoU/centre gap now has a mechanism, measured.** Relative localisation error
+   degrades **5× monotonically** as targets shrink — 0.051 target-widths at 32–48 px to
+   0.255 below 8 px. At 0.255 a pair cannot clear IoU 0.50 however correct the detection
+   is, which is why the same run posts recall 0.89 under one ruler and 0.77 under the
+   other. The earlier sections of this entry asserted this from the P/R gap; this is the
+   quantity itself, and it is the metric to watch when a future model claims a small-target
+   win.
+2. **FAR and precision genuinely diverge.** `small_mav` alarms **9× more often** than
+   `ordinary` (0.0165 vs 0.0018) while scoring 0.98 precision against 0.998 — a two-point
+   precision difference standing in for an order-of-magnitude difference in how often the
+   thing fires. Either number alone misleads about the other. This is why `far` is now on
+   `ConditionScore` and not only on the aggregate.
+3. **False alarms are a sequence-level failure, not a rate.** Under centre matching
+   **phantom63 alone contributes 129 of the 188** false alarms — 69% from one of 15
+   videos, with phantom43 next at 19. Quoting 0.0066/frame as a property of the detector
+   is therefore wrong: on twelve of these videos it is near zero, and on one it is not.
+   Consistent with item 4 of the breakdown above, where phantom43/46/63 carried most of
+   the per-video loss.
+4. **Do not compare offsets across criteria.** The IoU@0.50 column of the same table reads
+   *lower* (0.199 in the <8 px bin against centre's 0.255) purely because IoU matching
+   admits only pairs that were already well placed — the offsets are censored at the
+   tolerance, not better. Compare `loc_err` between runs only under the same criterion.
+5. **Above 48 px the error rises again** (0.071 from 0.051), on 372 pairs. Same shape as
+   the recall dip noted in item 5 of the breakdown above, and the same likely cause — a
+   target close enough to leave the 320×320 search region. Two independent metrics now
+   point at it; still 372 samples, so still flagged rather than concluded.
+
+**Cost: zero GPU, ~25 min wall-clock, and none of it was the detector.** Re-scoring reads
+28,337 per-frame label files; the scoring itself is seconds. The `matches_*.csv` dumps
+already carried `gt_size` and `center_dist_rel`, so every number in the two tables above
+was derivable from them without touching a label at all — the re-run existed only to write
+the new fields into the persisted JSON this ledger cites. Noted because it is the trigger
+condition in [todo.md](todo.md) for storing labels per video instead of per frame.
+
+---
+
 ### EXP-001–003 re-scored with dumps — resize vs tiled, by feature
 
 Added 2026-08-18. No inference re-run: all three `detections.jsonl` were persisted, so

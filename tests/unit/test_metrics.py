@@ -226,3 +226,125 @@ class TestEvaluate:
         assert scored.precision == pytest.approx(1.0)
         assert scored.recall == pytest.approx(1.0)
         assert scored.fn == 0
+
+
+class TestFalseAlarmRate:
+    """`far` — false alarms per frame.
+
+    Precision answers "of the alarms raised, how many were real". An operator
+    asks the other question: how often does this thing cry wolf. On air-to-air
+    data the two come apart hard, because most frames hold exactly one target and
+    a detector can be precise on the frames it fires while firing constantly.
+    """
+
+    def test_far_is_false_positives_per_frame(self, make_frame):
+        frames = [
+            make_frame(key="a", gt=[[0, 0, 100, 100]],
+                       preds=[([0, 0, 100, 100], 0.9, 0),
+                              ([200, 200, 260, 260], 0.5, 0)]),
+            make_frame(key="b", gt=[[0, 0, 100, 100]], preds=None),
+        ]
+        scored = evaluate(frames, 0.5)
+
+        assert scored.fp == 1
+        assert scored.far == pytest.approx(0.5)
+
+    def test_empty_frames_count_in_the_denominator(self, make_frame):
+        """A frame with no target is still a frame the detector could alarm on.
+
+        Dropping those would flatter every rate: on this data the target-free
+        frames are where a motion detector fires at cloud edges.
+        """
+        frames = [
+            make_frame(key="a", gt=[[0, 0, 100, 100]],
+                       preds=[([0, 0, 100, 100], 0.9, 0)]),
+            make_frame(key="empty", gt=None, preds=[([0, 0, 20, 20], 0.4, 0)]),
+        ]
+        scored = evaluate(frames, 0.5)
+
+        assert (scored.n_frames, scored.fp) == (2, 1)
+        assert scored.far == pytest.approx(0.5)
+
+    def test_a_clean_run_alarms_at_zero(self, make_frame):
+        frames = [make_frame(gt=[[0, 0, 100, 100]],
+                             preds=[([0, 0, 100, 100], 0.9, 0)])]
+        assert evaluate(frames, 0.5).far == pytest.approx(0.0)
+
+
+class TestLocalisationError:
+    """Centre offset scaled by the target's own size.
+
+    The scaling is the whole point: a 2 px offset is fatal on a 12 px drone and
+    invisible on a 90 px one, so a raw pixel error cannot be compared across the
+    size buckets this project lives in.
+    """
+
+    @pytest.fixture
+    def two_sizes(self, make_frame):
+        """A 10 px and a 100 px target, each found 20% of its own size off."""
+        return [
+            make_frame(key="tiny", gt=[[0, 0, 10, 10]],
+                       preds=[([2, 0, 12, 10], 0.9, 0)]),
+            make_frame(key="large", gt=[[0, 0, 100, 100]],
+                       preds=[([20, 0, 120, 100], 0.9, 0)]),
+        ]
+
+    def test_offset_is_scaled_by_the_target_size(self, two_sizes):
+        """Both offsets are 0.2 target sizes though one is 2 px and one is 20."""
+        scored = evaluate(two_sizes, 0.5)
+        by_size = {error.label.split()[0]: error for error in scored.loc_by_size}
+
+        assert scored.loc_err == pytest.approx(0.2)
+        assert by_size["tiny"].mean == pytest.approx(0.2)
+        assert by_size["large"].mean == pytest.approx(0.2)
+
+    def test_bucketing_matches_the_recall_table(self, two_sizes):
+        """Same labels, same order: the two tables are read row against row."""
+        scored = evaluate(two_sizes, 0.5)
+
+        assert [error.label for error in scored.loc_by_size] == \
+               [label for label, _, _ in scored.by_size]
+
+    def test_a_bucket_with_no_matches_is_nan_not_zero(self, make_frame):
+        """0.0 would read as perfect placement of targets never found at all."""
+        frames = [make_frame(key="miss", gt=[[0, 0, 20, 20]], preds=None)]
+        scored = evaluate(frames, 0.5)
+        small = next(e for e in scored.loc_by_size if e.label.startswith("small"))
+
+        assert small.n == 0
+        assert np.isnan(small.mean)
+        assert np.isnan(scored.loc_err)
+
+    def test_counts_matched_pairs_not_targets(self, make_frame):
+        """`n` is the sample the average was taken over, not the bucket's size."""
+        frames = [
+            make_frame(key="hit", gt=[[0, 0, 20, 20]],
+                       preds=[([0, 0, 20, 20], 0.9, 0)]),
+            make_frame(key="miss", gt=[[0, 0, 20, 20]], preds=None),
+        ]
+        scored = evaluate(frames, 0.5)
+        small = next(e for e in scored.loc_by_size if e.label.startswith("small"))
+        targets = next(count for label, count, _ in scored.by_size
+                       if label.startswith("small"))
+
+        assert (small.n, targets) == (1, 2)
+
+    def test_the_tail_is_reported_beside_the_mean(self, make_frame):
+        """One sloppy frame among tight ones moves p90 where the median holds.
+
+        The 30 px offset is chosen to stay inside IoU 0.5 (0.538 against a 100 px
+        box): a pair that failed to match would leave nothing to average, and the
+        test would pass for the wrong reason.
+        """
+        frames = [make_frame(key=f"f{i}", gt=[[0, 0, 100, 100]],
+                             preds=[([1, 0, 101, 100], 0.9, 0)])
+                  for i in range(9)]
+        frames.append(make_frame(key="sloppy", gt=[[0, 0, 100, 100]],
+                                 preds=[([30, 0, 130, 100], 0.9, 0)]))
+        scored = evaluate(frames, 0.5)
+        large = next(e for e in scored.loc_by_size if e.label.startswith("large"))
+
+        assert scored.tp == 10
+        assert large.median == pytest.approx(0.01)   # the typical frame is tight
+        assert large.mean > large.median             # one bad pair drags the mean
+        assert scored.loc_err_p90 > large.median     # and the tail names it

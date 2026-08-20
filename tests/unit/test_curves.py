@@ -4,6 +4,10 @@ The trap these guard is the one the module docstring names: precision and recall
 bin on *different* columns, and silently binning precision on `gt_size` would
 drop every false alarm — turning the chart into a restatement of recall while
 still being labelled precision.
+
+The localisation error has its own version of the same trap: it exists only for
+matched pairs, so a bin whose targets were all missed must come back empty rather
+than perfect.
 """
 
 from __future__ import annotations
@@ -11,15 +15,21 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.eval.curves import (MIN_RELIABLE, SIZE_EDGES, Curve, curve_rows,
-                             precision_by_size, recall_by_size)
+from src.eval.curves import (MIN_RELIABLE, SIZE_EDGES, Curve, ErrorCurve,
+                             curve_rows, loc_error_by_size, precision_by_size,
+                             recall_by_size)
 
 
-def row(outcome, pred_size=None, gt_size=None):
-    """One dump row, with only the columns the curves read."""
+def row(outcome, pred_size=None, gt_size=None, offset=None):
+    """One dump row, with only the columns the curves read.
+
+    `offset` is `center_dist_rel`, blank on anything that is not a matched pair
+    -- which is what the dump itself writes there.
+    """
     return {"outcome": outcome,
             "pred_size": "" if pred_size is None else str(pred_size),
-            "gt_size": "" if gt_size is None else str(gt_size)}
+            "gt_size": "" if gt_size is None else str(gt_size),
+            "center_dist_rel": "" if offset is None else str(offset)}
 
 
 def test_precision_counts_false_alarms_in_their_own_size_bin():
@@ -122,3 +132,65 @@ def test_empty_bin_value_is_none_in_the_written_rows():
                                   np.zeros(len(SIZE_EDGES) - 1),
                                   np.zeros(len(SIZE_EDGES) - 1))})
     assert all(r["value"] is None for r in rows)
+
+
+def test_loc_error_bins_on_true_size_not_predicted_size():
+    """The offset belongs to the target, so an oversized box must not move it."""
+    rows = [row("tp", pred_size=40, gt_size=10, offset=0.4)]
+    curve = loc_error_by_size(rows)
+
+    assert curve.binned_on == "gt_size"
+    assert curve.total[curve.labels.index("8-12")] == 1
+    assert curve.total[curve.labels.index(">=48")] == 0
+
+
+def test_loc_error_covers_matched_pairs_only():
+    """A miss has no box and a false alarm has no target: neither has an offset."""
+    rows = [row("tp", pred_size=10, gt_size=10, offset=0.2),
+            row("fn", gt_size=10),
+            row("fp", pred_size=10)]
+    curve = loc_error_by_size(rows)
+
+    bin_8_12 = curve.labels.index("8-12")
+    assert curve.total[bin_8_12] == 1
+    assert curve.mean[bin_8_12] == pytest.approx(0.2)
+
+
+def test_loc_error_reports_the_tail_not_just_the_mean():
+    """Nine tight hits and one near-miss: the median holds, p90 exposes it."""
+    rows = [row("tp", gt_size=10, offset=0.1) for _ in range(9)]
+    rows.append(row("tp", gt_size=10, offset=0.9))
+    curve = loc_error_by_size(rows)
+
+    bin_8_12 = curve.labels.index("8-12")
+    assert curve.median[bin_8_12] == pytest.approx(0.1)   # unmoved
+    assert curve.mean[bin_8_12] == pytest.approx(0.18)    # dragged
+    assert curve.p90[bin_8_12] > curve.median[bin_8_12]   # and the tail shows it
+
+
+def test_a_bin_whose_targets_were_all_missed_is_empty_not_perfect():
+    """The failure this guards: 0.000 offset reads as flawless placement."""
+    curve = loc_error_by_size([row("fn", gt_size=10)])
+
+    bin_8_12 = curve.labels.index("8-12")
+    assert curve.total[bin_8_12] == 0
+    assert np.isnan(curve.mean[bin_8_12])
+
+
+def test_error_rows_carry_the_spread_where_a_ratio_carries_hits():
+    """One row shape for both, with the inapplicable columns blank rather than 0."""
+    curve = loc_error_by_size([row("tp", gt_size=10, offset=0.2)])
+    written = {r["bin"]: r for r in curve_rows({"offsets": curve})}
+
+    assert written["8-12"]["metric"] == "loc_error"
+    assert written["8-12"]["value"] == pytest.approx(0.2)
+    assert written["8-12"]["p90"] == pytest.approx(0.2)
+    assert written["8-12"]["hits"] is None
+    assert written[">=48"]["value"] is None
+
+
+def test_a_ratio_and_an_error_share_one_x_axis():
+    """They are drawn against each other, so the bins must label identically."""
+    rows = [row("tp", pred_size=10, gt_size=10, offset=0.2)]
+    assert loc_error_by_size(rows).labels == precision_by_size(rows).labels
+    assert isinstance(loc_error_by_size(rows), ErrorCurve)

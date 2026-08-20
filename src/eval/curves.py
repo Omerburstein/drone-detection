@@ -42,21 +42,19 @@ SIZE_EDGES = (0.0, 8.0, 12.0, 16.0, 20.0, 24.0, 32.0, 48.0, float("inf"))
 MIN_RELIABLE = 30
 
 
-@dataclass(frozen=True)
-class Curve:
-    """One metric binned by size, with the counts it was computed from.
+class _BinAxis:
+    """Bin labels, plotting positions and the reliability flag.
 
-    Counts travel with the values because a bare 1.0 precision means nothing
-    until you know whether it came from 2 predictions or 2,000 -- and the
-    per-bin sample count is exactly what a reader needs to judge the tail.
+    A plain mixin rather than a base dataclass: the things binned here carry
+    different payloads -- a ratio has hits and a denominator, an error has a mean
+    and a spread -- but the size axis underneath them is one axis, and two series
+    drawn against each other must label it identically. A non-dataclass base also
+    leaves each subclass's own field order untouched, which matters because
+    `Curve` is constructed positionally at every call site.
     """
 
-    metric: str            # "precision" or "recall"
-    binned_on: str         # the column the bins were taken over
     edges: tuple[float, ...]
-    values: np.ndarray     # (n_bins,) the metric, NaN where the bin is empty
-    hits: np.ndarray       # (n_bins,) true positives
-    total: np.ndarray      # (n_bins,) denominator: preds for P, targets for R
+    total: np.ndarray
 
     @property
     def labels(self) -> list[str]:
@@ -85,6 +83,46 @@ class Curve:
         return self.total >= MIN_RELIABLE
 
 
+@dataclass(frozen=True)
+class Curve(_BinAxis):
+    """One ratio binned by size, with the counts it was computed from.
+
+    Counts travel with the values because a bare 1.0 precision means nothing
+    until you know whether it came from 2 predictions or 2,000 -- and the
+    per-bin sample count is exactly what a reader needs to judge the tail.
+    """
+
+    metric: str            # "precision" or "recall"
+    binned_on: str         # the column the bins were taken over
+    edges: tuple[float, ...]
+    values: np.ndarray     # (n_bins,) the metric, NaN where the bin is empty
+    hits: np.ndarray       # (n_bins,) true positives
+    total: np.ndarray      # (n_bins,) denominator: preds for P, targets for R
+
+
+@dataclass(frozen=True)
+class ErrorCurve(_BinAxis):
+    """Size-normalised localisation error binned by size.
+
+    Not a `Curve`: this is a distribution per bin, not a ratio, and it has no
+    numerator to report. Three statistics rather than one because the mean alone
+    hides the shape -- on tiny targets a handful of boundary near-misses pull it
+    well above where most of the mass sits, so the median says where the detector
+    usually lands and p90 says how bad its bad frames are.
+
+    `total` counts matched pairs, so `reliable` means what it does on a `Curve`
+    and the two can be read on one x axis.
+    """
+
+    metric: str            # "loc_error"
+    binned_on: str         # the column the bins were taken over
+    edges: tuple[float, ...]
+    mean: np.ndarray       # (n_bins,) all in multiples of the target's own size
+    median: np.ndarray
+    p90: np.ndarray
+    total: np.ndarray      # (n_bins,) matched pairs contributing
+
+
 def load_dump(path: Path) -> list[dict[str, str]]:
     """Read a dump CSV written by `records.write_dump`."""
     with path.open(encoding="utf-8", newline="") as handle:
@@ -100,13 +138,55 @@ def _floats(rows: list[dict[str, str]], column: str) -> np.ndarray:
 def _binned(sizes: np.ndarray, hit: np.ndarray,
             edges: tuple[float, ...]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Per-bin hits, totals and their ratio; NaN where a bin is empty."""
-    index = np.digitize(sizes, np.array(edges[1:-1], dtype=float), right=False)
+    index = _bin_index(sizes, edges)
     n_bins = len(edges) - 1
     hits = np.array([hit[index == b].sum() for b in range(n_bins)], dtype=float)
     total = np.array([(index == b).sum() for b in range(n_bins)], dtype=float)
     with np.errstate(invalid="ignore", divide="ignore"):
         values = np.where(total > 0, hits / np.maximum(total, 1), np.nan)
     return values, hits, total
+
+
+def _bin_index(sizes: np.ndarray, edges: tuple[float, ...]) -> np.ndarray:
+    """Which bin each object falls in, half-open at the top of every bin."""
+    return np.digitize(sizes, np.array(edges[1:-1], dtype=float), right=False)
+
+
+def _distribution(sizes: np.ndarray, values: np.ndarray,
+                  edges: tuple[float, ...]) -> tuple[np.ndarray, np.ndarray,
+                                                     np.ndarray, np.ndarray]:
+    """Per-bin mean, median, p90 and count; NaN statistics where a bin is empty."""
+    index = _bin_index(sizes, edges)
+    stats = []
+    for b in range(len(edges) - 1):
+        bucket = values[(index == b) & ~np.isnan(values)]
+        stats.append((float(bucket.mean()) if len(bucket) else np.nan,
+                      float(np.median(bucket)) if len(bucket) else np.nan,
+                      float(np.percentile(bucket, 90)) if len(bucket) else np.nan,
+                      float(len(bucket))))
+    mean, median, p90, total = (np.array(column, dtype=float)
+                                for column in zip(*stats))
+    return mean, median, p90, total
+
+
+def loc_error_by_size(rows: list[dict[str, str]],
+                      edges: tuple[float, ...] = SIZE_EDGES) -> ErrorCurve:
+    """Centre offset against the target's true size, in multiples of that size.
+
+    Only `tp` rows take part: a false alarm has no target to be offset from, and
+    a missed target has no box. So this is strictly "when it was found, how well
+    was it placed" -- read it against `recall_by_size` over the same bins, never
+    on its own. Both bin on `gt_size` for exactly that reason.
+
+    The column read is `center_dist_rel`, the same quantity `--match center`
+    thresholds on, so a bin sitting at 0.8 says that bucket is scraping the
+    inside of a 1.0 tolerance and would collapse if the tolerance tightened.
+    """
+    pairs = [r for r in rows if r["outcome"] == "tp"]
+    mean, median, p90, total = _distribution(_floats(pairs, "gt_size"),
+                                             _floats(pairs, "center_dist_rel"),
+                                             edges)
+    return ErrorCurve("loc_error", "gt_size", edges, mean, median, p90, total)
 
 
 def precision_by_size(rows: list[dict[str, str]],
@@ -137,7 +217,27 @@ def recall_by_size(rows: list[dict[str, str]],
     return Curve("recall", "gt_size", edges, values, hits, total)
 
 
-def curve_rows(curves: dict[str, Curve]) -> list[dict[str, object]]:
+def _rounded(value: float) -> float | None:
+    """A number for the CSV, or None where the bin had nothing to compute from."""
+    return None if np.isnan(value) else round(float(value), 4)
+
+
+def _payload(curve: Curve | ErrorCurve, i: int) -> dict[str, object]:
+    """The columns that differ between a ratio and a distribution.
+
+    One row shape serves both, so a reader groups the file by `metric` instead of
+    having to know which of two files a series lives in. Columns that do not
+    apply are left empty rather than filled with a plausible zero: an error curve
+    has no numerator, and a `hits` of 0 beside a real mean would read as one.
+    """
+    if isinstance(curve, ErrorCurve):
+        return {"value": _rounded(curve.mean[i]), "hits": None,
+                "median": _rounded(curve.median[i]), "p90": _rounded(curve.p90[i])}
+    return {"value": _rounded(curve.values[i]), "hits": int(curve.hits[i]),
+            "median": None, "p90": None}
+
+
+def curve_rows(curves: dict[str, Curve | ErrorCurve]) -> list[dict[str, object]]:
     """The plotted numbers as flat rows, keyed by series name.
 
     Written out beside the figure so the chart can be redrawn, checked or
@@ -153,9 +253,7 @@ def curve_rows(curves: dict[str, Curve]) -> list[dict[str, object]]:
                 "bin": label,
                 "bin_lo": curve.edges[i],
                 "bin_hi": curve.edges[i + 1],
-                "value": None if np.isnan(curve.values[i]) else round(
-                    float(curve.values[i]), 4),
-                "hits": int(curve.hits[i]),
+                **_payload(curve, i),
                 "total": int(curve.total[i]),
                 "reliable": bool(curve.reliable[i]),
             })

@@ -95,7 +95,9 @@ class TestEvaluateCli:
                          "--frame-size", "100", "100")
         assert result.returncode == 0, result.stderr
         assert "AP@0.50" in result.stdout
-        assert "recall by target size" in result.stdout.lower()
+        assert "by target size" in result.stdout.lower()
+        assert "false alarms" in result.stdout.lower()
+        assert "centre offset" in result.stdout.lower()
 
     def test_default_criterion_is_the_centre_rule(self, perfect_run):
         """The default is centre matching, and the report says so on every line

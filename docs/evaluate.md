@@ -41,8 +41,22 @@ because it rewards tight boxes. If this is much lower than AP@0.50, targets are 
 **Precision** — TP / (TP + FP). Of the boxes emitted, how many were real. Low precision
 means false alarms on clutter, birds, or sky texture.
 
-**Recall** — TP / (TP + FN). Of the drones present, how many were found. Low recall
-means misses. **On this project, recall is usually the binding constraint.**
+**Recall**, also **Pd** — TP / (TP + FN). Of the drones present, how many were found.
+Low recall means misses. **On this project, recall is usually the binding constraint.**
+The tracking literature calls this the probability of detection; ARD-MAV carries about
+one target per frame, so the per-target and per-frame readings coincide here and the
+report prints the one number under both names rather than duplicating it.
+
+**FAR** — `far` in the JSON: false alarms **per frame**, FP / frames. The question
+precision cannot answer. Precision says what fraction of the alarms raised were wrong;
+FAR says how often the alarm goes off at all, and the two come apart hard on air-to-air
+data — a detector that fires on 3% of frames and is right every other time posts
+precision 0.5 and FAR 0.015, which are the same run described as a coin flip and as a
+quiet sensor. Per frame rather than per second on purpose: frame rate belongs to the
+run, not to the scoring, so a rate in Hz would silently change meaning the moment the
+same JSONL were re-scored after a `--stride` change. Multiply by the source frame rate
+when an operator wants alarms per minute. Also broken out per condition bucket, as the
+`FA/frm` column.
 
 **F1** — harmonic mean of precision and recall. One number when you need one, but it
 hides which side is failing, so never read it alone.
@@ -52,20 +66,51 @@ scale-invariantly expressed. This is the well-posed version of "how far off are 
 coordinates" — but because it ignores every miss and every false alarm by construction,
 it is only meaningful next to precision and recall.
 
+**Centre offset** — `loc_err`, with `loc_err_p90` beside it: the distance between a
+matched pair's centres divided by the **target's own size** (`sqrt(w*h)`), averaged over
+matches. 0.20 means "one fifth of a drone-width off centre", and it means that whether
+the drone is 10 px or 100 px across — which a raw pixel error does not, since 2 px is
+fatal on a 12 px target and invisible on a 90 px one. This is the same quantity
+`--match center` thresholds on, so a run averaging 0.8 is scraping the inside of a
+`--match-tol 1.0` and would collapse if the tolerance tightened. Read it with mean IoU,
+not instead: the offset says where the box sat, IoU says whether it was also the right
+*size*, and GLAD's motion branch is the case that separates them — well centred, badly
+sized. p90 is carried because the mean hides the shape: a handful of near-misses at the
+tolerance boundary drag it well above where the mass sits, and p90 is where a tracker
+would lose lock.
+
 **Frames with a miss** — frames containing at least one unfound ground-truth drone.
 Directly comparable to the empty-frame rate printed by `baseline_detect.py`, but honest:
 it uses labels, so a box on a cloud no longer counts as a hit.
 
-**Recall by target size** — recall bucketed by ground-truth box area: tiny (<16 px),
-small (16–32), medium (32–96), large (>96). Buckets are finer at the small end than
-COCO's, because on air-to-air data nearly everything would otherwise land in one bucket.
+**By target size** — recall (Pd) and centre offset bucketed by ground-truth box area:
+tiny (<16 px), small (16–32), medium (32–96), large (>96). Buckets are finer at the small
+end than COCO's, because on air-to-air data nearly everything would otherwise land in one
+bucket.
+
+```
+  by target size  (recall is Pd; offsets in multiples of target size):
+    bucket           targets   recall   pairs   offset   median      p90
+    tiny   (<16px)     18265   0.8493   15514    0.231    0.190    0.440
+```
+
+Recall and offset sit in one table because they answer the same question at two removes:
+how often a drone of this size was found, and — when it was found — how well the box sat
+on it. The pairing is the diagnosis; read apart, they mislead.
+
+> **`pairs` is not `targets`.** The offset columns average over **matches only**, so a
+> bucket showing 3 pairs against 900 targets is describing three drones. A bucket whose
+> targets were all missed shows `-`, never `0.000`: a zero there reads as flawless
+> placement of drones that were never found.
 
 > **This is the most diagnostic block in the report.** Strong recall on medium/large
 > collapsing to near-zero on tiny means the problem is input resolution, not
 > architecture. Raise `--imgsz` or turn on `--tile` before reaching for a bigger model.
+> If instead recall holds while the offset climbs with shrinking size, the boxes are
+> being found and misplaced — a matching-threshold story, not a detection one.
 
-**Scores by condition** — precision, recall, F1 and AP@0.50 within each bucket, printed
-as **one table per axis**, enabled by `--conditions`. ARD-MAV declares three:
+**Scores by condition** — precision, recall, F1, AP@0.50 and false alarms per frame
+within each bucket, printed as **one table per axis**, enabled by `--conditions`. ARD-MAV declares three:
 
 | Axis | Level | Buckets |
 | --- | --- | --- |
@@ -249,7 +294,18 @@ d.groupby("video").outcome.value_counts().unstack()        # false alarms per se
 d.groupby("branch").outcome.value_counts().unstack()       # which GLAD branch is wrong
 d[d.outcome == "tp"].groupby("scene_category").iou.mean()  # localisation by background
 d[d.outcome == "tp"].center_dist_rel.quantile([.5, .9])    # how tight the centres are
+
+# the offset per size bin the report prints, at any bucketing you like
+hits = d[d.outcome == "tp"]
+hits.groupby(pd.cut(hits.gt_size, [0, 8, 12, 16, 24, 32, 48, 1e9])).center_dist_rel.agg(
+    ["count", "mean", "median"])
 ```
+
+> **FAR is the one headline number this file cannot reproduce.** Its denominator is
+> frames, and a frame holding neither a target nor a prediction emits no row at all —
+> 177 of EXP-004's 28,337 frames are exactly that. Counting `key` values undercounts the
+> denominator and overstates the rate. Take `far` from `--json-out` or the `--save` log,
+> where `n_frames` is recorded; every *other* cut here is a faithful re-derivation.
 
 `tests/unit/test_records.py` pins the claim that matters: the `tp`/`fp`/`fn` row counts
 equal what `evaluate` reports, under either criterion.

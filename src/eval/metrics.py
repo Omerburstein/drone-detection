@@ -58,7 +58,13 @@ class ConditionScore:
 
     `axis` names which split the bucket belongs to. It is last and defaulted so
     the JSON key order of every field that predates the multi-axis breakdown is
-    unchanged, and so a bare `scene_category` run reads exactly as before.
+    unchanged, and so a bare `scene_category` run reads exactly as before. `far`
+    is appended after it for the same reason.
+
+    `far` is per bucket what it is overall: this bucket's false alarms over this
+    bucket's frames. Precision says what fraction of the alarms were wrong; `far`
+    says how often the alarm goes off at all, and a bucket can look precise while
+    alarming constantly.
     """
 
     label: str
@@ -69,6 +75,31 @@ class ConditionScore:
     f1: float
     ap50: float
     axis: str = LEGACY_KEY
+    far: float = float("nan")
+
+
+@dataclass(frozen=True)
+class LocError:
+    """Size-normalised localisation error within one ground-truth size bucket.
+
+    The distance between a matched pair's centres divided by the target's own
+    size (`sqrt(w*h)`), so 0.5 means "half a drone-width off centre" whether the
+    drone is 10 px or 100 px across. A raw pixel offset cannot be compared across
+    buckets -- 2 px is fatal on a 12 px target and invisible on a 90 px one, and
+    that asymmetry is precisely why a fixed IoU threshold behaves so differently
+    by size on this data.
+
+    `n` counts **matched pairs, not targets**: an unmatched target has no offset,
+    so it is absent here rather than counted as an infinite error. Read this
+    beside the bucket's recall, never instead of it -- a detector that finds the
+    one easy target in a bucket and misses the rest posts a beautiful error.
+    """
+
+    label: str
+    n: int          # matched pairs contributing -- not the bucket's target count
+    mean: float     # in multiples of the target's own size
+    median: float   # the honest centre: the mean is dragged by boundary near-misses
+    p90: float      # the tail, which is where a tracker loses lock
 
 
 @dataclass(frozen=True)
@@ -96,6 +127,13 @@ class Metrics:
     # Which rule decided a match. Recorded because P/R/F1 are not comparable
     # across criteria, and a JSON file outlives the command that produced it.
     criterion: str = f"IoU@{0.5:.2f}"
+    # Appended after `criterion` so every key that predates them keeps its
+    # position in the JSON. NaN rather than 0.0 as the default: an unset
+    # false-alarm rate must never read as a perfect one.
+    far: float = float("nan")          # false alarms per frame -- fp / n_frames
+    loc_err: float = float("nan")      # mean centre offset, in target sizes
+    loc_err_p90: float = float("nan")
+    loc_by_size: list[LocError] = field(default_factory=list)
 
 
 def _concat(chunks: list[np.ndarray], dtype: type = float) -> np.ndarray:
@@ -119,12 +157,17 @@ def iou_matrix(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.where(union > 0, inter / np.maximum(union, EPS), 0.0)
 
 
+def box_centres(boxes: np.ndarray) -> np.ndarray:
+    """The (x, y) centre of each box, shaped (len(boxes), 2)."""
+    return (boxes[:, :2] + boxes[:, 2:]) / 2
+
+
 def center_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """Pairwise distance between box centres, shaped (len(a), len(b))."""
     if len(a) == 0 or len(b) == 0:
         return np.zeros((len(a), len(b)))
-    centres = lambda boxes: (boxes[:, :2] + boxes[:, 2:]) / 2  # noqa: E731
-    return np.linalg.norm(centres(a)[:, None, :] - centres(b)[None, :, :], axis=2)
+    return np.linalg.norm(box_centres(a)[:, None, :] - box_centres(b)[None, :, :],
+                          axis=2)
 
 
 def box_size(boxes: np.ndarray) -> np.ndarray:
@@ -302,12 +345,19 @@ class _PrimaryPass:
     gt_areas: np.ndarray
     gt_found: np.ndarray
     frames_with_miss: int
+    # One entry per matched pair, in the same order: the pair's centre offset in
+    # multiples of the target's size, and the area of the target it was matched
+    # to. Kept as a pair of parallel arrays so the error can be binned on the
+    # target's size with exactly the buckets recall already uses.
+    match_offsets: np.ndarray
+    match_gt_areas: np.ndarray
 
 
 def _primary_pass(frames: list[EvalFrame],
                   primary: MatchCriterion) -> _PrimaryPass:
     """Match every frame once at the primary criterion and pool the detail."""
     tp_all, iou_all, gt_areas, gt_found = [], [], [], []
+    offsets, offset_areas = [], []
     frames_with_miss = 0
     for frame in frames:
         tp, matched_gt, match_iou = match_frame(frame, primary)
@@ -317,10 +367,15 @@ def _primary_pass(frames: list[EvalFrame],
         found = np.zeros(len(frame.gt_boxes), dtype=bool)
         found[matched_gt[matched_gt >= 0]] = True
         wh = np.clip(frame.gt_boxes[:, 2:] - frame.gt_boxes[:, :2], 0, None)
-        gt_areas.append(wh[:, 0] * wh[:, 1])
+        areas = wh[:, 0] * wh[:, 1]
+        gt_areas.append(areas)
         gt_found.append(found)
         if len(frame.gt_boxes) and not found.all():
             frames_with_miss += 1
+
+        pairs = matched_gt[tp]
+        offsets.append(_relative_offset(frame.preds.boxes[tp], frame.gt_boxes[pairs]))
+        offset_areas.append(areas[pairs])
 
     return _PrimaryPass(
         tp=_concat(tp_all, bool),
@@ -328,7 +383,49 @@ def _primary_pass(frames: list[EvalFrame],
         gt_areas=_concat(gt_areas),
         gt_found=_concat(gt_found, bool),
         frames_with_miss=frames_with_miss,
+        match_offsets=_concat(offsets),
+        match_gt_areas=_concat(offset_areas),
     )
+
+
+def _relative_offset(preds: np.ndarray, gts: np.ndarray) -> np.ndarray:
+    """Centre offset of each already-matched pair, in multiples of target size.
+
+    Paired element-wise, not pairwise: these boxes are matched already, so the
+    (n, n) grid `center_distance` builds would be thrown away but for its
+    diagonal.
+
+    A degenerate target has no scale to normalise by and yields NaN rather than
+    an infinity, so it drops out of a mean instead of destroying it. Under centre
+    matching such a target cannot be matched at all; under IoU it can, which is
+    the case this guard exists for.
+    """
+    if len(preds) == 0:
+        return np.zeros(0)
+    distance = np.linalg.norm(box_centres(preds) - box_centres(gts), axis=1)
+    sizes = box_size(gts)
+    return np.where(sizes > 0, distance / np.maximum(sizes, EPS), np.nan)
+
+
+def _loc_error_by_size(areas: np.ndarray, offsets: np.ndarray) -> list[LocError]:
+    """Size-normalised centre offset within each ground-truth area bucket.
+
+    Bins on the *target's* area, the same quantity recall bins on, so a bucket's
+    error and its recall are two statements about one set of drones. Binning on
+    the predicted box instead would put a badly oversized box in the wrong
+    bucket -- exactly the boxes whose offset most needs reading.
+    """
+    by_size = []
+    for label, lo, hi in AREA_BUCKETS:
+        sel = (areas >= lo) & (areas < hi) & ~np.isnan(offsets)
+        bucket = offsets[sel]
+        by_size.append(LocError(
+            label, int(len(bucket)),
+            float(bucket.mean()) if len(bucket) else float("nan"),
+            float(np.median(bucket)) if len(bucket) else float("nan"),
+            float(np.percentile(bucket, 90)) if len(bucket) else float("nan"),
+        ))
+    return by_size
 
 
 def _recall_by_size(areas: np.ndarray,
@@ -356,6 +453,7 @@ def _score(frames: list[EvalFrame], primary: float | MatchCriterion,
 
     n_tp = int(pass_.tp.sum())
     n_fp = int((~pass_.tp).sum())
+    offsets = pass_.match_offsets[~np.isnan(pass_.match_offsets)]
     return Metrics(
         n_frames=len(frames),
         n_gt=n_gt,
@@ -372,6 +470,14 @@ def _score(frames: list[EvalFrame], primary: float | MatchCriterion,
         frames_with_miss=pass_.frames_with_miss,
         by_size=_recall_by_size(pass_.gt_areas, pass_.gt_found),
         criterion=primary.label,
+        # Per frame, not per second: frame rate is a property of the run, not of
+        # the scoring, and a rate in Hz would silently change meaning the moment
+        # the same JSONL were re-scored after a --stride change.
+        far=n_fp / max(len(frames), 1),
+        loc_err=float(offsets.mean()) if len(offsets) else float("nan"),
+        loc_err_p90=(float(np.percentile(offsets, 90)) if len(offsets)
+                     else float("nan")),
+        loc_by_size=_loc_error_by_size(pass_.match_gt_areas, pass_.match_offsets),
     )
 
 
@@ -388,7 +494,7 @@ def _score_condition(label: str, frames: list[EvalFrame],
     n_gt = sum(len(f.gt_boxes) for f in frames)
     if n_gt == 0:
         return ConditionScore(label, len(frames), 0, float("nan"), float("nan"),
-                              float("nan"), float("nan"), axis)
+                              float("nan"), float("nan"), axis, float("nan"))
 
     scored = _score(frames, primary, iou_sweep)
     return ConditionScore(
@@ -400,6 +506,7 @@ def _score_condition(label: str, frames: list[EvalFrame],
         f1=f1_score(scored.precision, scored.recall),
         ap50=scored.ap50,
         axis=axis,
+        far=scored.far,
     )
 
 
