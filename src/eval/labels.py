@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -94,14 +95,23 @@ def _resolve_size(record: dict[str, Any],
 
 
 def load_frames(pred_path: Path, labels_dir: Path,
-                frame_size: tuple[int, int] | None) -> list[EvalFrame]:
-    """Pair each prediction record in a run's JSONL with its label file."""
+                frame_size: tuple[int, int] | None,
+                key_filter: Callable[[str], bool] | None = None) -> list[EvalFrame]:
+    """Pair each prediction record in a run's JSONL with its label file.
+
+    `key_filter` keeps only the frames whose key it accepts, and is applied
+    *before* the label file is read — a caller after one video out of fifteen
+    (`src.render_video`) would otherwise pay 28,000 file reads to discard 26,000
+    of the results.
+    """
     frames = []
     for line in pred_path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         record = json.loads(line)
         stem, width, height = _resolve_size(record, frame_size)
+        if key_filter is not None and not key_filter(stem):
+            continue
         rows, gt_classes = load_label_file(labels_dir / f"{stem}.txt")
         frames.append(EvalFrame(
             key=stem,

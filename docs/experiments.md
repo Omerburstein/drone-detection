@@ -280,6 +280,12 @@ as the expected value for EXP-001, which was an error.
     detection, but neither has been isolated.
 - **Next:** M4b — GLAD on video it has never seen, where the number finally means
   something about the model rather than about us.
+- **Watchable version (2026-08-20):** `runs/exp004_glad/examples/phantom19_overlay.mp4`,
+  all 2,158 scored frames of phantom19 with the ground truth and GLAD's box drawn
+  together and coloured by outcome — `src.render_video`, see
+  [render_video.md](render_video.md). phantom19 is `small_mav` and the worst-lit video in
+  the split, so this is the 0.642/0.522 row as footage. Not committed (`runs/` is
+  gitignored, and it is 251 MB); re-render from the persisted JSONL in ~4 minutes.
 
 ### What EXP-004 changes
 

@@ -56,6 +56,8 @@ src/algo/     config.py     InferenceConfig
               detections.py Detections
 src/output/   recording.py  RunRecorder (JSONL + counters)
               annotate.py   AnnotationSink -> VideoSink / ImageDirSink / NullSink
+              video.py      LazyVideoWriter: an mp4 sized by its first frame
+              overlay.py    ground truth + prediction on one frame, coloured by outcome
 src/eval/     labels.py     EvalFrame; ground truth paired with recorded preds
               metrics.py    matching, AP, the Metrics record
               conditions.py Axis; grouping frames by capture conditions
@@ -66,6 +68,7 @@ src/eval/     labels.py     EvalFrame; ground truth paired with recorded preds
 src/baseline_detect.py      CLI: inference — parser, run loop, wiring
 src/evaluate.py             CLI: scoring a recorded run against labels
 src/plot_eval.py            CLI: precision-against-size figure from a dump
+src/render_video.py         CLI: a scored run drawn back onto its source video
 ```
 
 **`src/data/` is source code, not a dataset.** The gitignore rules for `data/`,
@@ -98,9 +101,10 @@ Load-bearing points:
   prediction and every target appears **exactly once**, so counting rows reproduces the
   metric block rather than approximating it; `tests/unit/test_records.py` pins that.
   Add a column here rather than re-deriving one downstream.
-- `MatchCriterion` — the one place a match is decided. `records` and `curves` call
-  `match_frame`, they do not reimplement it, so a dump's `outcome` cannot disagree with
-  the metric block it explains.
+- `MatchCriterion` — the one place a match is decided. `records`, `curves` and the
+  `overlay` renderer call `match_frame`, they do not reimplement it, so neither a dump's
+  `outcome` nor the colour of a box on a rendered video can disagree with the metric
+  block it explains.
 
 `src/evaluate.py` is the second CLI: it reads a run's JSONL and scores it against
 labels. It shares the package but not the inference path — `src/eval/` imports only

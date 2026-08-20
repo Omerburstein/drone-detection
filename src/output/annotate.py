@@ -16,6 +16,7 @@ import numpy as np
 from ..algo.detections import Detections
 from ..data.frames import DEFAULT_FPS
 from ..data.sources import IMAGES, VIDEO
+from .video import LazyVideoWriter
 
 BOX_COLOUR = (0, 255, 0)  # BGR
 BOX_THICKNESS = 2
@@ -64,25 +65,18 @@ class VideoSink(AnnotationSink):
     """Writes one annotated video.
 
     The writer is opened on the first frame because its dimensions come from the
-    footage, not from the arguments.
+    footage, not from the arguments — see `LazyVideoWriter`, shared with the
+    ground-truth overlay in `src.render_video`.
     """
 
     def __init__(self, path: Path, fps: float) -> None:
-        self._path = path
-        self._fps = fps
-        self._writer: cv2.VideoWriter | None = None
+        self._writer = LazyVideoWriter(path, fps)
 
     def write(self, frame: np.ndarray, _name: str, dets: Detections, names) -> None:
-        if self._writer is None:
-            h, w = frame.shape[:2]
-            self._writer = cv2.VideoWriter(
-                str(self._path), cv2.VideoWriter_fourcc(*"mp4v"), self._fps, (w, h))
         self._writer.write(draw(frame, dets, names))
 
     def close(self) -> None:
-        if self._writer is not None:
-            self._writer.release()
-            self._writer = None
+        self._writer.close()
 
 
 class ImageDirSink(AnnotationSink):
