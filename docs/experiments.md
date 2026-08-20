@@ -769,8 +769,35 @@ frame. New CLI [`src.alarm_eval`](alarm_eval.md) over `src/eval/alarms.py`.
 | no target in frame | 18 | 9.6% | 18 | 0.5% |
 | **total** | **188** | | **3,658** | |
 
-In pixels, the same two populations: centre@1× has a median alarm distance of **100 px**,
-IoU@0.50 a median of **2.2 px**.
+**The same run in pixels** (`--unit px`, `runs/exp004_glad/alarm_distance_px.csv`).
+Median alarm distance is **100.2 px** under centre matching and **2.2 px** under
+IoU@0.50.
+
+| Distance | centre@1× | share | cum | IoU@0.50 | share | cum |
+| --- | --- | --- | --- | --- | --- | --- |
+| **<5 px** | **0** | 0.0% | 0.0% | **3,427** | **93.7%** | 93.7% |
+| 5–10 | 5 | 2.7% | 2.7% | 37 | 1.0% | 94.7% |
+| 10–25 | 11 | 5.9% | 8.5% | 19 | 0.5% | 95.2% |
+| 25–50 | 46 | 24.5% | 33.0% | 49 | 1.3% | 96.6% |
+| 50–100 | 23 | 12.2% | 45.2% | 23 | 0.6% | 97.2% |
+| **100–250** | **53** | **28.2%** | 73.4% | 53 | 1.4% | 98.6% |
+| 250–500 | 28 | 14.9% | 88.3% | 28 | 0.8% | 99.4% |
+| ≥500 | 4 | 2.1% | 90.4% | 4 | 0.1% | 99.5% |
+| no target in frame | 18 | 9.6% | | 18 | 0.5% | |
+| **total** | **188** | | | **3,658** | | |
+
+**Read the two unit views together — they disagree in an informative way.** In target
+sizes the two criteria are identical from the 1–2 bin outward. In pixels they are not:
+IoU@0.50 adds 32 alarms in the 5–10 px bin, 8 in 10–25 and 3 in 25–50, on top of the
+3,427 under 5 px. Those 43 extras (3,427 + 32 + 8 + 3 = **3,470**, exactly the criterion
+gap) are still all inside one target size — the largest sits at **0.97** — they simply sit
+on *large* targets, up to 69 px, so a sub-1 offset is tens of pixels wide.
+
+That is the whole argument for binning relative by default. **The matching boundary is
+size-relative, so only the relative ladder shows it as a clean cut**; the pixel ladder
+smears it across three bins and would invite reading 43 localisation misses as clutter.
+Pixels are still the right view for an operator sizing a rejection gate, which is why
+both are available — but the relative one is what a criterion argument should be made on.
 
 **The three baselines**, centre@1× (every 10th frame, so counts are a tenth-scale sample):
 

@@ -177,7 +177,10 @@ dates, not priorities.
   re-derived from the frame's own rows, so no run needed re-scoring. Result in
   [experiments.md](experiments.md): **all 3,470 alarms IoU@0.50 adds over centre matching
   are inside one target size** (median 2.2 px), while GLAD's 188 real alarms have **zero**
-  inside one target size and a median of 100 px. The baselines are 65–78% beyond 32 target
+  inside one target size and a median of 100 px. Tabled in both units (`--unit px` added
+  to the ledger 2026-08-20, `runs/exp004_glad/alarm_distance_px.csv`); the pixel ladder
+  smears the criterion boundary across three bins because the boundary is size-relative,
+  which is why `rel` is the default. The baselines are 65–78% beyond 32 target
   sizes at a ~600–870 px median — their failure was never localisation.
 
 - [x] 2026-08-20 — [algo] **Cross-cut the scoring dump by target size *and* capture
