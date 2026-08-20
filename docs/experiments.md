@@ -578,3 +578,155 @@ that makes GLAD tiled, and no flag that disables its resize. Running GAD alone
 (`--pad`-style measurements in [glad_detect.md](glad_detect.md)) is the closest thing to
 "GLAD in resize mode", and running GAD over tiles is item 7 in
 [glad-model.md §6](glad-model.md) — an unbuilt experiment, not an option.
+
+---
+
+### EXP-004 cross-cut — size and background at the same time
+
+Added 2026-08-20. **No inference and no re-scoring.** This is a `GROUP BY` over the same
+two persisted dumps every section above is cut from, `runs/exp004_glad/matches_center.csv`
+and `matches_iou50.csv`, along **two axes at once** rather than one. New CLI
+[`src.cross_eval`](cross_eval.md) over `src/eval/crosscut.py`.
+
+- **Command:**
+  ```
+  py -3.13 -m src.cross_eval \
+      --dump "centre@1x=runs/exp004_glad/matches_center.csv" \
+      --dump "IoU@0.50=runs/exp004_glad/matches_iou50.csv" \
+      --axis scene_category --band "<8" --condition complex \
+      --csv runs/exp004_glad/small_complex.csv
+  ```
+  The full ladder is the same command without `--band`/`--condition`, written to
+  `runs/exp004_glad/size_by_scene.csv`.
+- **Validity check:** pooling every cell reproduces this entry's headline **exactly** —
+  28,178 frames / 28,160 targets, P 0.8559, Pd 0.7713, F1 0.8114, FA 0.1298 per frame
+  under IoU@0.50. A cross-cut that did not sum back to the metric block would be a second
+  measurement pretending to be a re-cut.
+
+**Why one-way cuts could not answer this.** The `Background` and `Target size` tables in
+the breakdown section above are marginals, and they cannot be multiplied together because
+the axes are correlated: **5,032 of the split's 5,677 sub-8 px targets are `small_mav`**,
+so the published "tiny" row is mostly a statement about one scene category.
+
+**The asked-for cell — targets under 8 px on `complex` background.** 640 frames, 640
+targets (ARD-MAV is one target per frame).
+
+| | TP | FN | FP | Pd | P | F1 | FA/frame | mean IoU | median offset |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| centre@1× | 552 | 88 | **2** | **0.8625** | 0.9964 | 0.9246 | **0.0031** | 0.5537 | 0.2236 |
+| IoU@0.50 | 374 | 266 | **180** | **0.5844** | 0.6751 | 0.6265 | **0.2812** | 0.6112 | 0.1891 |
+
+**The full ladder within `complex`**, both criteria, Pd and FA per frame:
+
+| Band | frames | targets | Pd centre | FA/frm centre | Pd IoU@0.50 | FA/frm IoU@0.50 |
+| --- | --- | --- | --- | --- | --- | --- |
+| **<8 px** | 640 | 640 | **0.8625** | **0.0031** | **0.5844** | **0.2812** |
+| 8–12 | 3,671 | 3,671 | 0.8891 | 0.0022 | 0.7559 | 0.1354 |
+| 12–16 | 2,535 | 2,535 | 0.8982 | 0.0008 | 0.8556 | 0.0434 |
+| 16–20 | 1,080 | 1,080 | 0.9380 | 0.0009 | 0.9204 | 0.0185 |
+| 20–24 | 668 | 668 | 0.9775 | 0.0000 | 0.9731 | 0.0045 |
+| 24–32 | 601 | 601 | 0.9834 | 0.0000 | 0.9834 | 0.0000 |
+| 32–48 | 373 | 373 | 0.9946 | 0.0000 | 0.9946 | 0.0000 |
+| ≥48 † | 10 | 10 | 1.0000 | 0.0000 | 1.0000 | 0.0000 |
+| no target † | 4 | 0 | — | 1.0000 | — | 1.0000 |
+| **pooled** | 9,582 | 9,578 | 0.9116 | 0.0018 | 0.8284 | 0.0850 |
+
+† under 30 targets — a ratio, not a measurement.
+
+**The sub-8 px band across all three backgrounds**, centre@1×:
+
+| Background | frames | targets | TP | FN | FP | Pd | FA/frm | mean IoU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| complex | 640 | 640 | 552 | 88 | 2 | 0.8625 | 0.0031 | 0.5537 |
+| ordinary † | 5 | 5 | 5 | 0 | 0 | 1.0000 | 0.0000 | 0.6261 |
+| small_mav | 5,032 | 5,032 | 3,905 | 1,127 | 145 | 0.7760 | 0.0288 | 0.5071 |
+| **pooled** | 5,677 | 5,677 | 4,462 | 1,215 | 147 | 0.7860 | 0.0259 | — |
+
+Under IoU@0.50 the same band reads complex 0.5844 Pd / 0.2812 FA, small_mav 0.4108 /
+0.3941, pooled 0.4309 / 0.3810.
+
+**The same cell in the three baseline runs**, centre@1×. Those runs sampled every 10th
+frame, so the cell holds 68 targets against EXP-004's 640 — same split, same labels, same
+criterion, **different frame sampling**. Pd and FA/frame are both densities, so the
+comparison is legitimate in kind; the 68-target denominator is what limits it, not the
+sampling itself. Read the Pd column as exact and the FA column as ±1 alarm.
+
+| Run | targets | TP | FN | FP | Pd | FA/frame |
+| --- | --- | --- | --- | --- | --- | --- |
+| EXP-001 whole @640 | 68 | 0 | 68 | 1 | **0.0000** | 0.0147 |
+| EXP-002 whole @1280 | 68 | 0 | 68 | 8 | **0.0000** | 0.1176 |
+| EXP-003 tiled @640 | 68 | 0 | 68 | 63 | **0.0000** | 0.9265 |
+| EXP-004 GLAD | 640 | 552 | 88 | 2 | **0.8625** | 0.0031 |
+
+#### What the cross-cut adds
+
+1. **The hardest cell is not the one the marginals point at.** Sub-8 px on `complex`
+   scores Pd 0.8625 — *higher* than the pooled sub-8 px 0.7860, and only 5 points below
+   the `complex` category's own aggregate 0.9116. The pooled tiny number is dragged down
+   by `small_mav` (0.7760 on 5,032 targets), not by background complexity. **Background
+   clutter and target size are not additive failures here.**
+2. **Within `complex`, size costs 13 points of Pd and clutter costs almost nothing.**
+   Pd runs 0.8625 → 0.9946 monotonically from the <8 px band to 32–48 px, while false
+   alarms run 0.0031 → 0.0000. Whatever `complex` means visually, GLAD's local search
+   regime is largely immune to it once the target is above ~12 px.
+3. **The criterion gap is concentrated exactly here and nowhere else.** In this one cell,
+   moving from centre@1× to IoU@0.50 costs **28 points of Pd (0.8625 → 0.5844) and
+   multiplies the false-alarm rate 90× (0.0031 → 0.2812)** — on an unchanged set of
+   predictions. The gap closes monotonically with size and is **zero at and above 24 px**.
+   That is the localisation-error mechanism from the M5 section stated as one number: at
+   a median offset of 0.22 target-widths on a 6 px target, IoU 0.50 is unreachable while
+   the detection is plainly correct. **Any comparison of this cell against a published
+   figure is meaningless without the paper's IoU threshold.**
+4. **The complex/small_mav difference at <8 px is video identity, not background —
+   settled, not suspected.** Re-cutting the same band with `--axis video` (free, the
+   dumps already carry the column) shows that **562 of the 640 sub-8 px `complex` targets
+   are one video, phantom58**, at Pd 0.9128. The remaining four `complex` videos
+   contribute 78 targets between them, three of them below the 30-target reliability
+   floor:
+
+   | Video | category | targets | Pd | FA/frm | mean IoU |
+   | --- | --- | --- | --- | --- | --- |
+   | phantom58 | complex | 562 | 0.9128 | 0.0018 | 0.5502 |
+   | phantom86 | complex | 45 | 0.7556 | 0.0000 | 0.6310 |
+   | phantom65 † | complex | 13 | 0.1538 | 0.0769 | 0.2774 |
+   | phantom08 † | complex | 12 | 0.2500 | 0.0000 | 0.4736 |
+   | phantom05 † | complex | 8 | 0.0000 | 0.0000 | — |
+   | phantom19 | small_mav | 765 | 0.8967 | 0.0013 | 0.5397 |
+   | phantom41 | small_mav | 315 | 0.8032 | 0.0032 | 0.6017 |
+   | phantom43 | small_mav | 1,320 | 0.8917 | 0.0144 | 0.4730 |
+   | phantom46 | small_mav | 899 | 0.7264 | 0.0011 | 0.5138 |
+   | phantom63 | small_mav | 1,733 | 0.6555 | 0.0710 | 0.4978 |
+   | phantom47 † | ordinary | 5 | 1.0000 | 0.0000 | 0.6261 |
+
+   † under 30 targets. Among the seven reliable cells, Pd spans **0.6555 to 0.9128 — a
+   26-point range, three times the 8.7-point complex-vs-small_mav gap it is supposed to
+   explain.** phantom43 is `small_mav` and scores 0.8917, above every `complex` video but
+   phantom58. **`scene_category` does not predict sub-8 px performance; the video does.**
+   Quote the 0.8625 figure as "phantom58, plus 78 targets of noise", never as "GLAD on
+   tiny targets against complex backgrounds".
+5. **Mean IoU falls with size even among the targets that were found** — 0.5537 in the
+   sub-8 px complex cell against 0.8379 at 32–48 px. The boxes that do land are landing
+   loosely, which is the same story as (3) from the localisation side and confirms these
+   are marginal misses rather than a detector defeated by clutter.
+6. **The baseline runs are a clean floor.** All three score **exactly zero** in this cell
+   while their false-alarm rate spans 0.015 to 0.93 per frame — tiling buys 63 alarms and
+   no detections at all below 8 px on complex background. The ~30× motion-over-appearance
+   result from the original entry is, in this cell, unbounded.
+
+#### Next
+
+- **Already run (item 4 above):** `--axis video --band "<8"`. Its result is the reason
+  the recommendations below changed. **`scene_category` has stopped being a useful
+  predictor at small sizes**, so per-video variance is now the thing to model, and M4b's
+  ARD100 run should be scored per video from the start rather than per published
+  category. Budget for it: none — it is a flag on a CLI that reads a persisted CSV.
+- **Also free:** the same cross-cut against `relative_range` instead of
+  `scene_category`, once the lighting/range axes land for the ARD-MAV test split (open
+  item in [todo.md](todo.md)). Range is the dominant marginal per the breakdown section;
+  crossing it with size separates "far" from "small", which apparent size alone conflates
+  by construction.
+- **Not yet worth running:** anything that costs a GPU. The sub-8 px complex cell already
+  scores 0.86 Pd at 0.003 false alarms per frame under the project's own criterion. The
+  measured deficit is in `small_mav` and at range, and M4b (GLAD on unseen video) is
+  still the experiment that decides whether any of these numbers survive contact with
+  data GLAD was not tuned on.

@@ -310,6 +310,12 @@ hits.groupby(pd.cut(hits.gt_size, [0, 8, 12, 16, 24, 32, 48, 1e9])).center_dist_
 `tests/unit/test_records.py` pins the claim that matters: the `tp`/`fp`/`fn` row counts
 equal what `evaluate` reports, under either criterion.
 
+Two cuts of this file are packaged rather than left to a spreadsheet:
+[`src.plot_eval`](plot_eval.md) draws precision against target size, and
+[`src.cross_eval`](cross_eval.md) tables Pd and false alarms by size **and** capture
+condition at once — the conjunction the per-axis blocks above cannot express, since the
+two axes are correlated and their marginals cannot be multiplied.
+
 ## Comparability
 
 Two runs are comparable only if they share the validation split, `--imgsz`, `--conf`,

@@ -94,3 +94,11 @@ Writes the figure and `precision_by_size.csv` beside it:
 Seconds. It reads CSVs, never the detector or the images, so a re-style or a new bin
 edge costs nothing. Re-binning wants `--dump` regenerated only if you change the
 *matching*, not the plotting.
+
+## See also
+
+[`src.cross_eval`](cross_eval.md) cuts the same dumps on the same bin edges, but crosses
+size with a condition axis and prints a table instead of drawing a line. Use it when the
+question is a conjunction — tiny **and** cluttered — and this when the question is size
+alone across the whole run. The edges are shared deliberately: a band there and a bin
+here must mean the same thing.

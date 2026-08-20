@@ -42,6 +42,25 @@ SIZE_EDGES = (0.0, 8.0, 12.0, 16.0, 20.0, 24.0, 32.0, 48.0, float("inf"))
 MIN_RELIABLE = 30
 
 
+def bin_labels(edges: tuple[float, ...] = SIZE_EDGES) -> list[str]:
+    """Human bin labels for a set of edges, `<8`, `8-12`, ... `>=48`.
+
+    Module level rather than a method, because the bins are named the same way
+    wherever they are cut: `crosscut` bands frames on these edges and must label
+    them identically, or the same band would appear under two names in two
+    tables of the same run.
+    """
+    names = []
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        if lo == 0:
+            names.append(f"<{hi:g}")
+        elif hi == float("inf"):
+            names.append(f">={lo:g}")
+        else:
+            names.append(f"{lo:g}-{hi:g}")
+    return names
+
+
 class _BinAxis:
     """Bin labels, plotting positions and the reliability flag.
 
@@ -59,15 +78,7 @@ class _BinAxis:
     @property
     def labels(self) -> list[str]:
         """Human bin labels, `<8`, `8-12`, ... `>=48`."""
-        names = []
-        for lo, hi in zip(self.edges[:-1], self.edges[1:]):
-            if lo == 0:
-                names.append(f"<{hi:g}")
-            elif hi == float("inf"):
-                names.append(f">={lo:g}")
-            else:
-                names.append(f"{lo:g}-{hi:g}")
-        return names
+        return bin_labels(self.edges)
 
     @property
     def centres(self) -> np.ndarray:
@@ -138,7 +149,7 @@ def _floats(rows: list[dict[str, str]], column: str) -> np.ndarray:
 def _binned(sizes: np.ndarray, hit: np.ndarray,
             edges: tuple[float, ...]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Per-bin hits, totals and their ratio; NaN where a bin is empty."""
-    index = _bin_index(sizes, edges)
+    index = bin_index(sizes, edges)
     n_bins = len(edges) - 1
     hits = np.array([hit[index == b].sum() for b in range(n_bins)], dtype=float)
     total = np.array([(index == b).sum() for b in range(n_bins)], dtype=float)
@@ -147,7 +158,7 @@ def _binned(sizes: np.ndarray, hit: np.ndarray,
     return values, hits, total
 
 
-def _bin_index(sizes: np.ndarray, edges: tuple[float, ...]) -> np.ndarray:
+def bin_index(sizes: np.ndarray, edges: tuple[float, ...]) -> np.ndarray:
     """Which bin each object falls in, half-open at the top of every bin."""
     return np.digitize(sizes, np.array(edges[1:-1], dtype=float), right=False)
 
@@ -156,7 +167,7 @@ def _distribution(sizes: np.ndarray, values: np.ndarray,
                   edges: tuple[float, ...]) -> tuple[np.ndarray, np.ndarray,
                                                      np.ndarray, np.ndarray]:
     """Per-bin mean, median, p90 and count; NaN statistics where a bin is empty."""
-    index = _bin_index(sizes, edges)
+    index = bin_index(sizes, edges)
     stats = []
     for b in range(len(edges) - 1):
         bucket = values[(index == b) & ~np.isnan(values)]

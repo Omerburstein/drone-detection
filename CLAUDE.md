@@ -65,9 +65,11 @@ src/eval/     labels.py     EvalFrame; ground truth paired with recorded preds
               results.py    the append-only results log (settings + metrics)
               records.py    the per-object dump: one row per tp / fp / fn
               curves.py     binning that dump into precision/recall vs size
+              crosscut.py   that dump cut by size *and* condition at once
 src/baseline_detect.py      CLI: inference — parser, run loop, wiring
 src/evaluate.py             CLI: scoring a recorded run against labels
 src/plot_eval.py            CLI: precision-against-size figure from a dump
+src/cross_eval.py           CLI: Pd and false alarms per (size x condition) cell
 src/render_video.py         CLI: a scored run drawn back onto its source video
 ```
 
@@ -101,6 +103,10 @@ Load-bearing points:
   prediction and every target appears **exactly once**, so counting rows reproduces the
   metric block rather than approximating it; `tests/unit/test_records.py` pins that.
   Add a column here rather than re-deriving one downstream.
+- `crosscut.cross_cut` — cells are built **frame by frame, not row by row**. A false
+  alarm has no target and therefore no target size, so it inherits the band of the frame
+  it fired in; that is what makes a cell's `far` mean what `far` means in the metric
+  block. Frames whose targets straddle a band go to `mixed sizes`, not into one of them.
 - `MatchCriterion` — the one place a match is decided. `records`, `curves` and the
   `overlay` renderer call `match_frame`, they do not reimplement it, so neither a dump's
   `outcome` nor the colour of a box on a rendered video can disagree with the metric

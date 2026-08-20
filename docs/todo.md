@@ -148,6 +148,19 @@ dates, not priorities.
 
 ## Done
 
+- [x] 2026-08-20 — [algo] **Cross-cut the scoring dump by target size *and* capture
+  condition at once.** `src/eval/crosscut.py` + CLI `src/cross_eval.py`, documented in
+  [cross_eval.md](cross_eval.md). Answers the conjunction the metric block's one-way
+  blocks cannot — the marginals are not multipliable, since 5,032 of ARD-MAV's 5,677
+  sub-8 px targets are `small_mav`. Cells are built frame-by-frame so a false alarm
+  inherits the band of the frame it fired in, which is what makes per-cell `far`
+  comparable to the metric block's. Zero cost: a `GROUP BY` over persisted dumps, and
+  pooling every cell reproduces EXP-004's headline exactly. Result in
+  [experiments.md](experiments.md): the sub-8 px / `complex` cell is Pd 0.8625 at 0.0031
+  FA/frame under centre matching and Pd 0.5844 at 0.2812 under IoU@0.50 — and 562 of its
+  640 targets are one video (phantom58), so the background label is not what the number
+  is about.
+
 - [x] 2026-08-20 — [tools] [algo] **`src.render_video`: a scored run drawn back onto its source video.** Both boxes on every frame — ground truth and the detector's claim — coloured by the match outcome, with a nearest-neighbour magnified inset (a 9 px drone is otherwise a speck) and a caption strip carrying the frame key, the frame's TP/FP/missed tally, the matching rule and whatever the run recorded per frame (`branch`, for GLAD). **Verdicts come from `match_frame`**, the same function `records` and `curves` call, so the picture cannot disagree with the ledger; nothing is re-inferred, the boxes come from the persisted `detections.jsonl`. Rendered `phantom19` from EXP-004 to `runs/exp004_glad/examples/phantom19_overlay.mp4` (2,158 frames, 251 MB, not committed — `runs/` is gitignored). New `src/output/overlay.py` and `src/output/video.py` (`LazyVideoWriter`, now shared with `annotate.VideoSink`); `load_frames` gained a `key_filter` so one video does not pay 28,337 label reads. 32 new tests; reference in [render_video.md](render_video.md).
 
 - [x] 2026-08-20 — [M5] [algo] **`src.evaluate` now reports FAR and a size-normalised localisation error per size bin.** `far` (FP/frame), `loc_err` + `loc_err_p90` (centre offset in multiples of the target's own size) and `loc_by_size` on `Metrics`, `far` on `ConditionScore`, `loc_error_by_size` in `src.eval.curves` (new `ErrorCurve`, written into the `plot_eval` sidecar). All appended after `criterion`, so the `--json-out` key order the ledger cites is unchanged. **No separate `Pd` field: Pd *is* recall** — ARD-MAV carries ~1 target per frame so the per-target and per-frame readings coincide, and a duplicate field would be two names for one number that could drift; the report labels it `recall (Pd)`. **Applied to EXP-004 (M4a) only** — see [M5-1] for the three baselines. Both criteria re-scored from the persisted JSONL with every headline number reproducing exactly. **The finding:** relative localisation error degrades 5x monotonically as targets shrink (0.051 target-widths at 32-48 px to 0.255 below 8 px), which is the measured mechanism behind the IoU/centre gap this project has been asserting from P/R since EXP-004 — at 0.255 no pair can clear IoU 0.50. FAR 0.0066/frame centre vs 0.1291 IoU, and **69% of the centre-matched false alarms are one video** (phantom63, 129 of 188), so the aggregate rate is not a property of the detector. 11 new tests; full write-up in docs/experiments.md.
