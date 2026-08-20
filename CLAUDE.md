@@ -216,7 +216,10 @@ When it does fire, **stage only the paths your task touched** (`git add <paths>`
 
 `.claude/agents/` — `dataset-agent` owns ingest, label validation, and splits;
 `algo-agent` owns the model registry, the `docs/experiments.md` ledger, and next-step
-recommendations. They split at the data/model boundary.
+recommendations; `deploy-agent` owns the target hardware — `docs/edge-budget.md`, latency
+and power budgets, export/quantisation, board selection, and renting the GPU that training
+runs on. Data / model / does-it-run-in-the-field are the three boundaries. Accuracy numbers
+stay `algo-agent`'s property even when `deploy-agent` produced the run that moved them.
 
 `.claude/skills/` — `/clean-up` (quality only, not a bug hunt), `/test-creation`,
 `/eval`, `/todo` (captures a task in `docs/todo.md`; capture only, does not do the work).

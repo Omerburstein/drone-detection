@@ -158,8 +158,8 @@ dates, not priorities.
 ### M5–M7
 
 - [ ] 2026-08-20 — [M5-1] [algo] **Re-score EXP-001/002/003 to pick up `far`, `loc_err` and `loc_by_size`.** The metrics landed on 2026-08-20 and were applied to EXP-004 only; the three baseline runs still carry pre-M5 JSON, so the ledger's resize-vs-tile comparison has no false-alarm rate on either side. No inference — all three `detections.jsonl` are persisted. **The cost is labels, not scoring:** ~25 min wall-clock per criterion for the per-frame label read, so six re-scorings is an evening, and doing it *after* the per-video label store below turns it into minutes. Expect the localisation error to be the interesting column: these runs box 1.7x too large, so a large offset beside their near-zero recall would separate "never found it" from "found it and drew the wrong box".
-- [ ] 2026-08-13 — [M6] [deploy] Write `docs/edge-budget.md`: target FPS, resolution, power and latency ceiling, and what "real-time" means for closing speed. Add FPS-on-target as a required ledger field, recommend a board (Jetson Orin Nano 8 GB, ~$250 — GLAD's published 23.6 FPS on the older Xavier NX is a floor), and plan the TensorRT export path. On-device benchmarking deferred until hardware exists.
-- [ ] 2026-08-13 — [M7] [algo] Fine-tune GLAD from its released weights on ARD-MAV's official training split, on a rented GPU (Kaggle 2×T4 free, or RunPod ~$1–2 for 3–4 h). Extract the 45 training videos **on the instance**, not locally. Score on the same held-out 15 videos; record whether it still fits the edge budget.
+- [ ] 2026-08-13 — [M6] [deploy] Write `docs/edge-budget.md`: target FPS, resolution, power and latency ceiling, and what "real-time" means for closing speed. Add FPS-on-target as a required ledger field, recommend a board (Jetson Orin Nano 8 GB, ~$250 — GLAD's published 23.6 FPS on the older Xavier NX is a floor), and plan the TensorRT export path. On-device benchmarking deferred until hardware exists. **Route this to `deploy-agent`** (added 2026-08-20) — the doc is the artifact that agent owns. Two inputs are the user's to supply and nothing can be sized without them: **assumed closing speed** and **how many frames of persistence** the design needs before it will act.
+- [ ] 2026-08-13 — [M7] [algo] [deploy] Fine-tune GLAD from its released weights on ARD-MAV's official training split, on a rented GPU (Kaggle 2×T4 free, or RunPod ~$1–2 for 3–4 h). Extract the 45 training videos **on the instance**, not locally. Score on the same held-out 15 videos; record whether it still fits the edge budget. Split across agents: `algo-agent` owns the training recipe and the ledger entry, `deploy-agent` owns provisioning, staging and the cost/wall-clock report.
 
 ### Backlog — no mission, revisit when the trigger fires
 
@@ -167,6 +167,37 @@ dates, not priorities.
 - [ ] 2026-08-13 — [data] Store labels per-video (one file, one row per frame) instead of one `.txt` per frame, and expand to the per-image tree only on the training instance. 28,337 tiny files cost minutes per full read — measured: two `find` calls and the MANIFEST regeneration all blew a 120 s timeout — and the per-image layout is only actually required by the ultralytics dataloader at M7, which runs on the rented GPU, not here. Space is not the issue (NTFS keeps sub-700-byte files resident in the MFT); per-file syscall latency is. **Trigger:** label reading starts dominating the M5 re-scoring loop, or the 45 training videos push the tree past ~100k files.
 
 ## Done
+
+- [x] 2026-08-20 — [meta] [deploy] **Added `deploy-agent`, a third boundary beside data
+  and model.** `.claude/agents/deploy-agent.md`, registered in `CLAUDE.md`. M6 and M7 were
+  both open and **neither existing agent owned them**: `dataset-agent` opens with "models
+  are somebody else's problem", and `algo-agent`'s only contact with hardware is one bullet
+  telling it to quote GPU cost. Nobody owned *does it run on the target board at the target
+  frame rate*. The new agent owns `docs/edge-budget.md`, latency/power budgets, export and
+  quantisation, board selection, and renting the GPU that training runs on — while the
+  accuracy ledger stays `algo-agent`'s property, so the M6/M7 split is stated in both
+  agents' terms rather than left to be discovered.
+
+  **Three project-specific traps written into it**, all of which would otherwise have been
+  rediscovered on the hardware:
+
+  1. **A mean frame rate is not a guarantee.** GLAD's 23.6 FPS on a Xavier NX is an
+     *average* over a pipeline whose expensive motion path fires only when appearance
+     detection fails — GMD alone is 5.1 FPS on that board. Throughput collapses ~4.6x
+     exactly when the scene is hard, so the agent reports worst case and percentiles.
+  2. **Export is a protocol change, not packaging.** FP32→FP16→INT8 is the `imgsz` rule
+     `algo-agent` already enforces, wearing a deployment badge — and the damage lands in
+     the smallest size bands, where a 10–30 px target is a handful of activations.
+     Re-score through `src.evaluate`; the size cut is a re-cut of a persisted dump, not a
+     new experiment.
+  3. **Every number in the ledger came from our CPU shim, not from TensorRT.** EXP-004 ran
+     `src/algo/glad/`; the released entry point deserialises TRT 7.2 engines through
+     `detector*_trt.py`. A Jetson means returning to a code path **no measurement in this
+     project was taken on** — a new implementation to validate, not an export.
+
+  Also derives "real-time" from closing speed and persistence frames rather than inheriting
+  30 FPS, and separates detection latency from inference latency. No tests: an agent
+  definition is markdown config, with no behaviour under `src/` to cover.
 
 - [x] 2026-08-20 — [algo] **Bin false alarms by distance from the nearest real drone.**
   `src/eval/alarms.py` + CLI `src/alarm_eval.py`, documented in
