@@ -214,9 +214,25 @@ target is ~0.01% of frame area, with **42.18% of objects under 12×12 px** and a
 the *observer* platforms, both multirotors. Conditions deliberately include complex
 backgrounds, low and strong light, **abrupt camera movement**, and fast-moving targets.
 
-**Access.** Via `github.com/Irisky123/YOLOMG` → Baidu Netdisk, code `1x2z`. Baidu needs an
-account and usually the desktop client. Note the YOLOMG *code* is GPL-3.0; the data is
-separate.
+**Access.** ✅ **Held locally since 2026-08-19.** Zenodo, DOI `10.5281/zenodo.15870538`,
+27.35 GB, CC-BY-4.0, MD5 verified — no Baidu needed. The original route (`github.com/
+Irisky123/YOLOMG` → Baidu Netdisk, code `1x2z`) needs an account and is throttled to
+roughly 100 KB/s. Note the YOLOMG *code* is GPL-3.0; the data is separate. Full download
+and archive audit in [PROVENANCE.md](data/raw/ARD100/PROVENANCE.md).
+
+**Prepared.** 15 videos — ARD100's test split ∩ "not in our local 60" — extracted to
+`data/raw/ARD100/{videos,Annotations}` and converted with the *same* converter as ARD-MAV:
+
+```
+py -3.13 -m src.data.prepare_ardmav --dataset ARD100 --split test --no-images
+py -3.13 -m src.glad_detect --dataset ARD100 --pad released --out runs/exp005_glad_ard100
+```
+
+`--no-images` because `src.glad_detect` reads the `.mp4` and never opens an extracted
+frame — 25 MB of labels instead of 30 GB of JPEGs. One caveat carries into any result:
+ARD100 publishes **no scene-category grouping**, so the per-category rows EXP-004 reports
+have no counterpart here; compare in aggregate and by `gt_size`. See
+[prepare_ardmav.md](prepare_ardmav.md) and [glad_detect.md](glad_detect.md).
 
 **Verdict.** The natural M4b "extra" set: exclude by filename any video matching our local
 60, and the remainder is unseen. Format-identical to ARD-MAV, so a drop is attributable to

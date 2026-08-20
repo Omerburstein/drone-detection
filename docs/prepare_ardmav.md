@@ -1,10 +1,10 @@
 # `src.data.prepare_ardmav` — reference
 
-Converts the raw ARD-MAV download into the canonical YOLO layout that
-`src.baseline_detect` and `src.evaluate` consume.
+Converts a raw ARD-MAV-shaped download into the canonical YOLO layout that
+`src.baseline_detect`, `src.glad_detect` and `src.evaluate` consume.
 
 ```
-py -3.13 -m src.data.prepare_ardmav [--split test]
+py -3.13 -m src.data.prepare_ardmav [--dataset ARD-MAV|ARD100] [--split test] [--no-images]
 ```
 
 Re-runnable. `data/raw/` is never modified, so the processed tree can be deleted and
@@ -14,12 +14,60 @@ rebuilt at any time.
 
 | Parameter | Default | What it does |
 | --- | --- | --- |
-| `--raw` | `data/raw/ARD-MAV` | Source tree, containing `videos/` and `Annotations/`. |
-| `--out` | `data/processed/ARD-MAV` | Destination for images, labels, and metadata. |
+| `--dataset` | `ARD-MAV` | Which download to convert. Sets the defaults for `--raw`, `--out` and `--videos`. See "Two datasets, one converter" below. |
+| `--raw` | the dataset's own | Source tree, containing `videos/` and `Annotations/`. |
+| `--out` | the dataset's own | Destination for images, labels, and metadata. |
 | `--split` | `test` | Split name. Written as `images/<split>/` and `labels/<split>/`. |
-| `--videos` | official test 15 | Override the video list. Mostly for smoke-testing one sequence. |
+| `--videos` | the dataset's test split | Override the video list. Mostly for smoke-testing one sequence. |
+| `--no-images` | off (images written) | Write labels and metadata but no JPEGs. See "Labels only" below. |
 | `--verify-sample` | `20` | Frames rendered with boxes into `_verify/` for visual checking. |
 | `--seed` | `42` | Seeds the verify sample, so re-running inspects the same frames. |
+
+## Two datasets, one converter
+
+`src/data/datasets.py` holds a `DatasetSpec` per download: raw and processed roots, the
+test videos, the published scene grouping if there is one, and the provenance its
+`MANIFEST.md` records. **The conversion code itself does not branch on the dataset.** That
+is deliberate and it is what M4b rests on — the question there is how much GLAD loses on
+video it has never seen, and if the extractor differed between the two runs, part of the
+answer would be about the extractor.
+
+| | ARD-MAV | ARD100 |
+| --- | --- | --- |
+| Raw | `data/raw/ARD-MAV` | `data/raw/ARD100` |
+| Processed | `data/processed/ARD-MAV` | `data/processed/ARD100` |
+| Test videos | GLAD's published 15 | 15 — ARD100's own test split ∩ "not in our local 60" |
+| Resolution / rate | 1920×1080 @ 30 fps | identical |
+| Annotation | VOC XML, one-based, class `Drone` | identical |
+| `scene_category` axis | ✅ published by GLAD | ❌ none published |
+| License | MIT | CC-BY-4.0 |
+
+Two consequences for ARD100 specifically, both recorded in its generated `MANIFEST.md`:
+
+- **No `scene_category`.** GLAD's `ordinary` / `complex` / `small_mav` grouping is from
+  the paper and has no ARD100 equivalent. `conditions.json` therefore carries only the
+  measured `lighting` and `relative_range` axes, and the EXP-004 comparison is available
+  in aggregate and along those, not per published category. Inventing a grouping of our
+  own would look like the same axis while comparing nothing.
+- **`relative_range` is not comparable across datasets.** It is scaled to *each split's*
+  own closest approach, so ARD100's "near" is not ARD-MAV's "near". Compare `gt_size` in
+  pixels from a `--dump` CSV instead.
+
+## Labels only
+
+`--no-images` skips the JPEGs and the `data.yaml` that points at them. It exists because
+the entire GLAD path needs no extracted pixels:
+
+- `src.glad_detect` reads the source `.mp4` — it must, the motion branches difference
+  consecutive frames — and opens no extracted frame. It uses `--labels` only to decide
+  which frames were annotated, and `--images` only as the JSONL row key.
+- `src.evaluate --frame-size 1920 1080` takes the frame size from the flag instead of an
+  image header.
+
+At ~900 KB a frame that is 25 MB against 30 GB on a 34k-frame split. A stills run
+(`src.baseline_detect`) does need the images — re-run without the flag to add them, since
+`data/raw/` is untouched either way. `_verify/` renders are still produced: they are
+encoded from the decoded frame during extraction rather than read back from the tree.
 
 ## Output
 
@@ -33,13 +81,17 @@ data/processed/ARD-MAV/
   _verify/                           # sampled frames with labels drawn on
 ```
 
-`conditions.json` carries three axes. `scene_category` is GLAD's published per-video
-grouping; `lighting` and `relative_range` are **measured per frame** during extraction,
+With `--no-images` the same tree appears without `images/` and without `data.yaml`;
+everything else, `_verify/` included, is identical.
+
+`conditions.json` carries three axes on ARD-MAV and two on ARD100. `scene_category` is
+GLAD's published per-video grouping and exists only where the release publishes one;
+`lighting` and `relative_range` are **measured per frame** during extraction,
 from the frame already decoded, so they cost no extra decode. See
 [scene_stats.md](scene_stats.md) for what they mean and
 `py -3.13 -m src.data.scene_stats` for regenerating them on a tree that already exists.
 
-## The official split
+## The official split (ARD-MAV)
 
 The 15 test videos are **GLAD's published split, used verbatim** — 05, 08, 09, 10, 19,
 30, 41, 43, 46, 47, 58, 63, 65, 70, 86. Inventing our own split would make our numbers
@@ -95,7 +147,7 @@ Printed at the end of every run; a failure exits non-zero.
 
 ### What the size histogram showed
 
-Measured over the full test split — 28,160 boxes across 28,337 frames:
+Measured over ARD-MAV's full test split — 28,160 boxes across 28,337 frames:
 
 | Bucket | Count | Share |
 | --- | --- | --- |

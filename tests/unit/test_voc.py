@@ -11,11 +11,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.data.prepare_ardmav import (
-    OFFICIAL_TEST_VIDEOS,
-    SCENE_CATEGORIES,
-    annotation_path,
-)
+from src.data.datasets import ARD_MAV
+from src.data.prepare_ardmav import annotation_path
 from src.data.voc import parse_voc, to_yolo
 from src.eval.labels import yolo_to_xyxy
 
@@ -123,16 +120,16 @@ class TestOfficialSplit:
     comparable to GLAD's. Pinned so an edit cannot silently change it."""
 
     def test_fifteen_test_videos(self):
-        assert len(OFFICIAL_TEST_VIDEOS) == 15
-        assert len(set(OFFICIAL_TEST_VIDEOS)) == 15
+        assert len(ARD_MAV.videos) == 15
+        assert len(set(ARD_MAV.videos)) == 15
 
     def test_categories_partition_the_test_set(self):
-        categorised = [v for members in SCENE_CATEGORIES.values() for v in members]
-        assert sorted(categorised) == sorted(OFFICIAL_TEST_VIDEOS)
+        categorised = [v for members in ARD_MAV.scene_categories.values() for v in members]
+        assert sorted(categorised) == sorted(ARD_MAV.videos)
         assert len(categorised) == len(set(categorised)), "a video is in two categories"
 
     def test_each_category_has_five_videos(self):
-        assert {k: len(v) for k, v in SCENE_CATEGORIES.items()} == {
+        assert {k: len(v) for k, v in ARD_MAV.scene_categories.items()} == {
             "ordinary": 5, "complex": 5, "small_mav": 5}
 
 

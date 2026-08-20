@@ -1,27 +1,33 @@
 # `src.glad_detect` — reference
 
-Runs GLAD's released detection pipeline over ARD-MAV video and writes a
+Runs GLAD's released detection pipeline over ARD-MAV or ARD100 video and writes a
 `detections.jsonl` that `src.evaluate` scores like any other run.
 
 ```
-py -3.13 -m src.glad_detect [options]
+py -3.13 -m src.glad_detect [--dataset ARD-MAV|ARD100] [options]
 ```
 
-> **What this measures is our harness, not GLAD.** GLAD's weights were trained on
+> **On ARD-MAV, what this measures is our harness, not GLAD.** GLAD's weights were trained on
 > ARD-MAV's other 45 videos and its architecture was tuned against this very split, so
 > the result is optimistic by construction. Never report it as "GLAD scores X for us".
 > Its one job is to check M1's evaluation math and M2's VOC→YOLO conversion against a
 > published number: a large gap means *we* have a bug. See [glad-model.md](glad-model.md)
 > for the model itself.
+>
+> **On ARD100 it measures GLAD**, on 15 videos it never trained on — bounded by the fact
+> that they come from the same lab and likely the same campaign. See "Running it on
+> ARD100 (M4b)" below for what may and may not be concluded from it.
 
 ## Parameters
 
 | Parameter | Default | What it does |
 | --- | --- | --- |
-| `--videos` | `data/raw/ARD-MAV/videos` | Directory of source `.mp4` files. |
-| `--labels` | `data/processed/ARD-MAV/labels/test` | Label directory for the split. Frames with no label file are **processed but not recorded** — see "Which frames are scored" below. |
-| `--images` | `data/processed/ARD-MAV/images/test` | Directory the JSONL rows are keyed by. Nothing is read from it; it is what lets `src.evaluate` resolve labels exactly as for a stills run. |
-| `--video-names` | official test 15 | Videos to run, without the `.mp4`. |
+| `--dataset` | `ARD-MAV` | Which prepared dataset to run over: `ARD-MAV` (M4a, the harness check) or `ARD100` (M4b, unseen video). Sets the defaults for the four parameters below. |
+| `--split` | `test` | Split whose labels are scored. Selects `labels/<split>` and `images/<split>`. |
+| `--videos` | the dataset's `videos/` | Directory of source `.mp4` files. |
+| `--labels` | the dataset's `labels/<split>` | Label directory for the split. Frames with no label file are **processed but not recorded** — see "Which frames are scored" below. |
+| `--images` | the dataset's `images/<split>` | Directory the JSONL rows are keyed by. Nothing is read from it and **it need not exist** — a labels-only tree (`prepare_ardmav --no-images`) runs fine. It is what lets `src.evaluate` resolve labels exactly as for a stills run. |
+| `--video-names` | the dataset's test 15 | Videos to run, without the `.mp4`. |
 | `--out` | `runs/glad` | Output directory. Give every experiment its own. |
 | `--max-frames-per-video` | none | Stop each video after N frames. A **contiguous prefix**, so the motion branches still work — for smoke tests, not for results. |
 | `--glad-repo` | `third_party/GLAD` | Clone of the GLAD release. Its `weights/` must hold `yolov5s_GLAD.pt`, `yolov5s_GLAD-crop.pt` and `Net_best.pth`. |
@@ -91,6 +97,45 @@ recall of the paper's own ablation figure**, which is independent evidence that 
 M1's evaluation math and M2's conversion are all sound. Per-category recall is
 0.42 ordinary / 0.03 complex / 0.01 small_mav — the same shape the full pipeline is
 expected to show, and a reminder that GAD's job is acquisition, not detection.
+
+## Running it on ARD100 (M4b)
+
+`--dataset ARD100` points the same pipeline at 15 videos GLAD has never seen — ARD100's
+own test split intersected with the videos absent from our local ARD-MAV 60. Prepare the
+labels once, then run:
+
+```
+py -3.13 -m src.data.prepare_ardmav --dataset ARD100 --split test --no-images
+
+py -3.13 -m src.glad_detect --dataset ARD100 --pad released --out runs/exp005_glad_ard100
+
+py -3.13 -m src.evaluate \
+    --pred runs/exp005_glad_ard100/detections.jsonl \
+    --labels data/processed/ARD100/labels/test \
+    --conditions data/processed/ARD100/conditions.json \
+    --frame-size 1920 1080 \
+    --dump runs/exp005_glad_ard100/matches.csv \
+    --json-out runs/exp005_glad_ard100/metrics.json
+```
+
+`--no-images` is deliberate: nothing on this path opens an extracted frame, and the JPEGs
+would cost 30 GB. See [prepare_ardmav.md](prepare_ardmav.md) § "Labels only".
+
+**Match EXP-004 on every setting or the comparison is not a comparison.** Same `--pad`,
+same IoU threshold, same full-rate contiguous decode, same 1920×1080. The one variable is
+the video content — that is the entire experiment, and this dataset was chosen over more
+independent ones (FL-Drones) precisely because it changes nothing else.
+
+Two differences are unavoidable and must be stated with any number that comes out:
+
+- **No per-category rows.** ARD100 publishes no `ordinary` / `complex` / `small_mav`
+  grouping, so `--conditions` gives `lighting` and `relative_range` only. Since EXP-004's
+  headline is per category, the like-for-like cut is aggregate P/R/F1 plus the size
+  breakdown — and `relative_range` buckets are scaled per split, so compare `gt_size` in
+  pixels from the `--dump`, not range labels.
+- **Same lab, likely the same campaign.** The result is optimistic as a generalisation
+  measure. The honest sentence is "GLAD retains X on unseen video from the same
+  campaign", not "GLAD generalises".
 
 ## Scoring a run
 

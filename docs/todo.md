@@ -73,8 +73,37 @@ dates, not priorities.
   `phantomNN_0001` naming as ARD-MAV, so criterion 6 (no new code path) holds and
   `prepare_ardmav` should run unmodified. Same `CAP_PROP_FRAME_COUNT` overstatement as
   ARD-MAV (header exceeds XML by 0-30 frames per video). Full record in
-  `data/raw/ARD100/PROVENANCE.md`. **Next: prepare the split, then run `src.glad_detect`
-  over these 15 and score against EXP-004.**
+  `data/raw/ARD100/PROVENANCE.md`.
+
+  **DONE 2026-08-20 — the split is prepared and the CLIs take `--dataset ARD100`.**
+  `prepare_ardmav` did need a change after all, but not to the conversion: the dataset's
+  video list, split rule, provenance and (absent) scene grouping moved into
+  `src/data/datasets.py` as a `DatasetSpec`, so the conversion code itself does not branch
+  on the dataset — criterion 6 holds in the strong sense that both sides of the M4b
+  comparison run byte-identical extraction and inference code. `src.glad_detect` takes the
+  same flag. Prepared with `--no-images`: nothing on the GLAD path opens an extracted
+  frame, so the tree is 25 MB of labels instead of 30 GB of JPEGs (re-runnable without the
+  flag if a stills run ever needs them). Verify renders confirmed the boxes land on the
+  drone, so the one-based numbering matches ARD-MAV's.
+
+  **Next: the run and the score.**
+
+  ```bash
+  py -3.13 -m src.glad_detect --dataset ARD100 --pad released --out runs/exp005_glad_ard100
+  py -3.13 -m src.evaluate --pred runs/exp005_glad_ard100/detections.jsonl \
+      --labels data/processed/ARD100/labels/test \
+      --conditions data/processed/ARD100/conditions.json \
+      --frame-size 1920 1080 --dump runs/exp005_glad_ard100/matches.csv \
+      --json-out runs/exp005_glad_ard100/metrics.json
+  ```
+
+  ~34,287 frames at the measured 4.8 fps is **roughly 2 hours** — background it. `--pad
+  released` and the IoU threshold must match EXP-004 exactly, and the IoU sweep is still
+  the dominant variable. **One thing the plan above cannot deliver: ARD100 publishes no
+  `ordinary`/`complex`/`small_mav` grouping**, so EXP-004's per-category rows have no
+  counterpart. Compare aggregate P/R/F1 and the size breakdown from the dump; do not
+  compare `relative_range` labels across the two, as that axis is scaled to each split's
+  own closest approach.
 
   **Constraints on the run.** 10–15 unseen videos carry the same statistical weight as
   EXP-004's 15, so the full 100 is unnecessary. If disk is tight, subsample by whole

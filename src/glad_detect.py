@@ -19,9 +19,17 @@ image path, so `src.evaluate` scores it against the same labels as EXP-001–003
 with no extra flags. Each row also carries the `branch` that produced it, which
 is what makes the paper's ablation visible in our own numbers.
 
+`--dataset` picks which prepared tree to run over. `ARD-MAV` is M4a above;
+`ARD100` is M4b, the same pipeline and the same 15-video count over videos GLAD
+has never seen, which is the run this is a control for. Nothing else may differ
+between the two -- same code path, same thresholds, same 1920x1080 -- or the
+gap stops being about generalisation.
+
 Example
 -------
     py -3.13 -m src.glad_detect --out runs/exp004_glad
+    py -3.13 -m src.glad_detect --dataset ARD100 --pad released \
+        --out runs/exp005_glad_ard100
     py -3.13 -m src.evaluate --pred runs/exp004_glad/detections.jsonl \
         --labels data/processed/ARD-MAV/labels/test \
         --conditions data/processed/ARD-MAV/conditions.json \
@@ -40,7 +48,7 @@ import cv2
 from .algo.glad.pipeline import GladPipeline
 from .algo.glad.vendor import GLAD_DIR
 from .algo.glad.yolo import PAD_STYLES
-from .data.prepare_ardmav import OFFICIAL_TEST_VIDEOS
+from .data.datasets import SPECS, spec_for
 from .output.recording import RunRecorder
 
 # GLAD emits no confidence -- see `StepResult.as_detections`. Every box is
@@ -53,19 +61,26 @@ def build_parser() -> argparse.ArgumentParser:
     """Command-line interface for the GLAD reproduction run."""
     ap = argparse.ArgumentParser(prog="src.glad_detect", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--videos", type=Path, default=Path("data/raw/ARD-MAV/videos"),
-                    help="Directory of source .mp4 files.")
-    ap.add_argument("--labels", type=Path,
-                    default=Path("data/processed/ARD-MAV/labels/test"),
+    ap.add_argument("--dataset", choices=sorted(SPECS), default="ARD-MAV",
+                    help="Which prepared dataset to run over (default: ARD-MAV). Sets "
+                         "the defaults for --videos, --labels, --images and "
+                         "--video-names. 'ARD100' is M4b: the same pipeline over 15 "
+                         "videos GLAD has never seen.")
+    ap.add_argument("--split", default="test",
+                    help="Split whose labels are scored (default: test).")
+    ap.add_argument("--videos", type=Path, default=None,
+                    help="Directory of source .mp4 files. Defaults to the dataset's.")
+    ap.add_argument("--labels", type=Path, default=None,
                     help="Label directory for the split. Frames with no label were "
                          "never annotated and are processed but not recorded, which "
                          "keeps the scored frame set identical to M2's.")
-    ap.add_argument("--images", type=Path,
-                    default=Path("data/processed/ARD-MAV/images/test"),
+    ap.add_argument("--images", type=Path, default=None,
                     help="Image directory the JSONL rows are keyed by, so "
-                         "src.evaluate resolves labels exactly as for a stills run.")
+                         "src.evaluate resolves labels exactly as for a stills run. "
+                         "Nothing is read from it, so it need not exist -- a "
+                         "labels-only tree (prepare --no-images) runs fine.")
     ap.add_argument("--video-names", nargs="*", default=None,
-                    help="Videos to run. Defaults to the official 15-video test split.")
+                    help="Videos to run. Defaults to the dataset's 15-video test split.")
     ap.add_argument("--out", type=Path, default=Path("runs/glad"),
                     help="Output directory (default: runs/glad).")
     ap.add_argument("--max-frames-per-video", type=int, default=None,
@@ -136,7 +151,11 @@ def print_branches(branches: Counter) -> None:
 def main() -> None:
     """Load the pipeline once and run it over every video in the split."""
     args = build_parser().parse_args()
-    names = list(args.video_names or OFFICIAL_TEST_VIDEOS)
+    spec = spec_for(args.dataset)
+    args.videos = args.videos or spec.videos_dir
+    args.labels = args.labels or spec.out / "labels" / args.split
+    args.images = args.images or spec.out / "images" / args.split
+    names = list(args.video_names or spec.videos)
     args.out.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading GLAD from {args.glad_repo} ...")

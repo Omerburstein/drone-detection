@@ -1,9 +1,16 @@
-"""Convert the raw ARD-MAV download into the canonical YOLO layout.
+"""Convert a raw ARD-MAV-shaped download into the canonical YOLO layout.
 
-Reads `data/raw/ARD-MAV/{videos,Annotations}` and writes
-`data/processed/ARD-MAV/{images,labels}/<split>/` plus `data.yaml`,
+Reads `data/raw/<dataset>/{videos,Annotations}` and writes
+`data/processed/<dataset>/{images,labels}/<split>/` plus `data.yaml`,
 `conditions.json` and `MANIFEST.md`. Re-runnable: raw is never modified, so any
 step can be re-derived by deleting the processed tree and running again.
+
+Two datasets ship in this shape and `--dataset` selects between them -- ARD-MAV
+and ARD100, same lab, same VOC XML, same 1920x1080 30 fps `.mp4`. The
+conversion code is identical across the two by construction; everything that
+differs lives in `src.data.datasets`. That matters for M4b, where the question
+is how much GLAD loses on unseen video: if the extractor differed at all, part
+of the answer would be about the extractor.
 
 Two conventions in the source data drive the whole design, and both fail
 silently if assumed wrong:
@@ -12,22 +19,29 @@ silently if assumed wrong:
 four-digit. Decoded frame *i* (zero-based) therefore pairs with `i + 1`. An
 off-by-one here still produces boxes that land near the drone -- adjacent
 frames are near-identical -- so it cannot be caught numerically. That is what
-`--verify` renders exist for.
+the `_verify/` renders exist for.
 
 **Unlabelled frames are not negatives.** Each video's XMLs run contiguously
 from 1 to N. A frame with no XML was never annotated, so emitting it with an
 empty label would count any detection there as a false positive and understate
 precision; extraction skips it instead.
 
-On the test 15 this guard never fires: every decodable frame has an
+On ARD-MAV's test 15 this guard never fires: every decodable frame has an
 annotation. `CAP_PROP_FRAME_COUNT` claims 28,644 frames against 28,337 XMLs,
 but that is container metadata and it overstates -- decoding yields exactly
 28,337. Trust the decoder, not the header. The guard stays because the
 training videos have not been checked and it costs nothing.
 
+`--no-images` writes labels and metadata but no JPEGs. `src.glad_detect` reads
+the source `.mp4` and never opens an extracted frame, and `src.evaluate
+--frame-size` skips the image-header read, so the whole GLAD path runs off
+labels alone -- at roughly 900 KB a frame that is the difference between 25 MB
+and 30 GB. A stills detector (`src.baseline_detect`) does need the images.
+
 Example
 -------
-    py -3.13 -m src.data.prepare_ardmav --split test
+    py -3.13 -m src.data.prepare_ardmav --dataset ARD-MAV --split test
+    py -3.13 -m src.data.prepare_ardmav --dataset ARD100 --split test --no-images
 """
 
 from __future__ import annotations
@@ -43,30 +57,15 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from .datasets import SPECS, DatasetSpec, spec_for
 from .scene_stats import FrameStats, measure_frame, update_conditions
 from .voc import parse_voc, to_yolo
 
-# The official split published with GLAD. Using it verbatim is what makes our
-# numbers comparable to the paper's; a split of our own invention would not be.
-OFFICIAL_TEST_VIDEOS = (
-    "phantom05", "phantom08", "phantom09", "phantom10", "phantom19",
-    "phantom30", "phantom41", "phantom43", "phantom46", "phantom47",
-    "phantom58", "phantom63", "phantom65", "phantom70", "phantom86",
-)
-
-# GLAD reports results split three ways, so the same grouping is recorded here.
-# Without it the M4 comparison against their published per-category P/R/F1
-# cannot be made.
-SCENE_CATEGORIES = {
-    "ordinary": ("phantom09", "phantom10", "phantom30", "phantom47", "phantom70"),
-    "complex": ("phantom05", "phantom08", "phantom58", "phantom65", "phantom86"),
-    "small_mav": ("phantom19", "phantom41", "phantom43", "phantom46", "phantom63"),
-}
-
 CLASS_NAMES = ("drone",)
-SOURCE_CLASS = "Drone"  # the single `<name>` used throughout ARD-MAV's XML
+SOURCE_CLASS = "Drone"  # the single `<name>` used throughout both datasets' XML
 JPEG_QUALITY = 95
 PROGRESS_EVERY = 250
+VERIFY_PAD = 12  # px of slack around a drawn box, so a tiny target stays visible
 
 
 @dataclass
@@ -100,12 +99,78 @@ class Stats:
         self.degenerate += other.degenerate
 
 
+class VerifySampler:
+    """A uniform sample of converted frames, drawn with the labels just written.
+
+    The only check that can catch a corner/centre mix-up or an off-by-one in
+    frame numbering: both produce coordinates that pass every numeric test.
+    Boxes are drawn back from the emitted YOLO *text*, so the round trip
+    through normalisation is part of what gets eyeballed.
+
+    Frames are offered as they decode and held as encoded JPEG bytes, which is
+    what lets the check survive `--no-images` -- there is no extracted tree to
+    re-read afterwards. Reservoir sampling because the frame count is not known
+    until decoding ends, and listing a 28k-file annotation tree up front to
+    learn it costs minutes.
+    """
+
+    def __init__(self, size: int, seed: int) -> None:
+        self.size = max(size, 0)
+        self._rng = random.Random(seed)
+        self._seen = 0
+        self._kept: list[tuple[str, bytes]] = []
+
+    def offer(self, frame: np.ndarray, label_lines: list[str], stem: str) -> None:
+        """Consider one frame for the sample."""
+        if not self.size:
+            return
+        self._seen += 1
+        if len(self._kept) < self.size:
+            self._kept.append((stem, self._render(frame, label_lines)))
+            return
+        slot = self._rng.randrange(self._seen)
+        if slot < self.size:
+            self._kept[slot] = (stem, self._render(frame, label_lines))
+
+    @staticmethod
+    def _render(frame: np.ndarray, label_lines: list[str]) -> bytes:
+        """Draw the labels onto a copy of the frame and encode it."""
+        image = frame.copy()
+        height, width = image.shape[:2]
+        for line in label_lines:
+            _, cx, cy, box_w, box_h = (float(v) for v in line.split())
+            x1 = int((cx - box_w / 2) * width) - VERIFY_PAD
+            y1 = int((cy - box_h / 2) * height) - VERIFY_PAD
+            x2 = int((cx + box_w / 2) * width) + VERIFY_PAD
+            y2 = int((cy + box_h / 2) * height) + VERIFY_PAD
+            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        encoded = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])[1]
+        return encoded.tobytes()
+
+    def flush(self, verify_dir: Path) -> Path:
+        """Write the sample out."""
+        verify_dir.mkdir(parents=True, exist_ok=True)
+        for stem, encoded in self._kept:
+            (verify_dir / f"{stem}.jpg").write_bytes(encoded)
+        return verify_dir
+
+
+@dataclass(frozen=True)
+class Extraction:
+    """Where converted frames go, and whether the images go at all."""
+
+    images_dir: Path
+    labels_dir: Path
+    write_images: bool
+    verify: VerifySampler
+
+
 def annotation_path(raw: Path, video: str, frame_number: int) -> Path:
     """Path of the XML for a one-based frame number."""
     return raw / "Annotations" / video / f"{video}_{frame_number:04d}.xml"
 
 
-def convert_video(raw: Path, video: str, images_dir: Path, labels_dir: Path) -> Stats:
+def convert_video(raw: Path, video: str, extraction: Extraction) -> Stats:
     """Extract and convert one video's annotated frames.
 
     Decoding is sequential -- seeking per frame is far slower and, on some
@@ -132,7 +197,7 @@ def convert_video(raw: Path, video: str, images_dir: Path, labels_dir: Path) -> 
                 continue
 
             stem = f"{video}_{frame_index:04d}"
-            _write_frame(frame, xml, stem, images_dir, labels_dir, stats)
+            _write_frame(frame, xml, stem, extraction, stats)
 
             if stats.frames % PROGRESS_EVERY == 0:
                 print(f"    {video} {stats.frames} frames", flush=True)
@@ -141,7 +206,7 @@ def convert_video(raw: Path, video: str, images_dir: Path, labels_dir: Path) -> 
     return stats
 
 
-def _write_frame(frame, xml: Path, stem: str, images_dir: Path, labels_dir: Path,
+def _write_frame(frame, xml: Path, stem: str, extraction: Extraction,
                  stats: Stats) -> None:
     """Write one image and its YOLO label, recording any anomaly found."""
     annotation = parse_voc(xml)
@@ -170,47 +235,20 @@ def _write_frame(frame, xml: Path, stem: str, images_dir: Path, labels_dir: Path
     # frame rather than what survived compression.
     stats.scene.append(measure_frame(frame, np.array(boxes, dtype=float).reshape(-1, 4),
                                      stem))
+    extraction.verify.offer(frame, lines, stem)
 
-    cv2.imwrite(str(images_dir / f"{stem}.jpg"), frame,
-                [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+    if extraction.write_images:
+        cv2.imwrite(str(extraction.images_dir / f"{stem}.jpg"), frame,
+                    [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
     # Explicit encoding on every write: Path.write_text defaults to the system
     # ANSI codepage on Windows, which mangles non-ASCII (it corrupted the em
     # dashes in a generated MANIFEST before this was pinned).
-    (labels_dir / f"{stem}.txt").write_text(
+    (extraction.labels_dir / f"{stem}.txt").write_text(
         "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
     stats.frames += 1
     stats.boxes += len(lines)
     stats.empty_labels += not lines
-
-
-def render_verify(processed: Path, split: str, sample: int, seed: int) -> Path:
-    """Draw labels back onto a random sample of converted frames.
-
-    The only check that can catch a corner/centre mix-up or an off-by-one in
-    frame numbering: both produce coordinates that pass every numeric test.
-    """
-    verify_dir = processed / "_verify"
-    verify_dir.mkdir(parents=True, exist_ok=True)
-    labels = sorted((processed / "labels" / split).glob("*.txt"))
-
-    for label_path in random.Random(seed).sample(labels, min(sample, len(labels))):
-        image = cv2.imread(str(processed / "images" / split / f"{label_path.stem}.jpg"))
-        if image is None:
-            continue
-        height, width = image.shape[:2]
-        for line in label_path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            _, cx, cy, box_w, box_h = (float(v) for v in line.split())
-            x1 = int((cx - box_w / 2) * width)
-            y1 = int((cy - box_h / 2) * height)
-            x2 = int((cx + box_w / 2) * width)
-            y2 = int((cy + box_h / 2) * height)
-            # Padded, so a tiny target is still visible in the rendered check.
-            cv2.rectangle(image, (x1 - 12, y1 - 12), (x2 + 12, y2 + 12), (0, 255, 0), 2)
-        cv2.imwrite(str(verify_dir / f"{label_path.stem}.jpg"), image)
-    return verify_dir
 
 
 def _area_histogram(areas: list[float]) -> list[tuple[str, int]]:
@@ -253,53 +291,68 @@ def report(stats: Stats, videos: list[str]) -> bool:
     return ok
 
 
-def write_metadata(processed: Path, split: str, videos: list[str], stats: Stats) -> None:
-    """Write data.yaml, conditions.json and MANIFEST.md."""
-    (processed / "data.yaml").write_text(
-        f"path: {processed.as_posix()}\n"
-        f"{split}: images/{split}\n"
-        f"nc: {len(CLASS_NAMES)}\n"
-        f"names: {list(CLASS_NAMES)}\n",
-        encoding="utf-8",
-    )
+def _category_table(spec: DatasetSpec) -> str:
+    """The published scene grouping as a markdown table, or why there is none."""
+    if not spec.scene_categories:
+        return ("No scene grouping is published for this dataset, so "
+                "`conditions.json` carries only the measured `lighting` and "
+                "`relative_range` axes.")
+    rows = "\n".join(f"| {category} | {', '.join(members)} |"
+                     for category, members in spec.scene_categories.items())
+    return ("Scene categories (GLAD reports separately for each, see "
+            f"`conditions.json`):\n\n| Category | Videos |\n| --- | --- |\n{rows}")
 
-    category_of = {v: cat for cat, members in SCENE_CATEGORIES.items() for v in members}
-    (processed / "conditions.json").write_text(json.dumps(
-        {"scene_category": category_of,
-         "categories": {k: list(v) for k, v in SCENE_CATEGORIES.items()}}, indent=2),
-        encoding="utf-8")
-    # Folds in the measured `lighting` and `relative_range` axes alongside the
+
+def write_metadata(spec: DatasetSpec, out: Path, split: str, videos: list[str],
+                   stats: Stats, wrote_images: bool) -> None:
+    """Write data.yaml, conditions.json and MANIFEST.md."""
+    if wrote_images:
+        # Only meaningful with an images tree to point at; a data.yaml naming a
+        # directory that does not exist is a trap, not a convenience.
+        (out / "data.yaml").write_text(
+            f"path: {out.as_posix()}\n"
+            f"{split}: images/{split}\n"
+            f"nc: {len(CLASS_NAMES)}\n"
+            f"names: {list(CLASS_NAMES)}\n",
+            encoding="utf-8",
+        )
+
+    published = {"scene_category": spec.category_of(),
+                 "categories": {k: list(v) for k, v in spec.scene_categories.items()}
+                 } if spec.scene_categories else {}
+    (out / "conditions.json").write_text(json.dumps(published, indent=2),
+                                         encoding="utf-8")
+    # Folds in the measured `lighting` and `relative_range` axes alongside any
     # published `scene_category`. Written second, from the stats gathered during
     # extraction, so no frame is decoded twice.
-    update_conditions(processed, stats.scene)
+    update_conditions(out, stats.scene)
 
     histogram = "\n".join(f"| {label.strip()} | {count} |"
                           for label, count in _area_histogram(stats.areas))
-    (processed / "MANIFEST.md").write_text(f"""# ARD-MAV — processed
+    images_note = ("" if wrote_images else
+                   "\n> **Labels only.** Built with `--no-images`: no JPEGs and no\n"
+                   "> `data.yaml`. `src.glad_detect` reads the source `.mp4` and\n"
+                   "> `src.evaluate --frame-size 1920 1080` needs no pixels, so the GLAD\n"
+                   "> path runs off this tree as-is. Re-run without the flag to add the\n"
+                   "> images; `data/raw/` is untouched either way.\n")
+    (out / "MANIFEST.md").write_text(f"""# {spec.name} — processed
 
-Generated by `src.data.prepare_ardmav`. Re-derive by deleting this tree and
-re-running; `data/raw/` is never modified.
-
+Generated by `src.data.prepare_ardmav --dataset {spec.name}`. Re-derive by deleting
+this tree and re-running; `data/raw/` is never modified.
+{images_note}
 ## Provenance
 
-- **Source:** ARD-MAV, 60 videos / 107,497 frames, released with GLAD.
-- **License:** MIT.
-- **Raw layout:** `data/raw/ARD-MAV/{{videos,Annotations}}`, Pascal VOC XML.
+- **Source:** {spec.source}
+- **License:** {spec.license}
+- **Raw layout:** `{spec.raw.as_posix()}/{{videos,Annotations}}`, Pascal VOC XML.
 
 ## Split rule
 
-**The official split published with GLAD, used verbatim** so results are
-comparable to the paper's. 45 training videos, 15 test videos.
+{spec.split_rule}
 
-Test videos: {', '.join(videos)}
+Videos ({split}): {', '.join(videos)}
 
-Scene categories (GLAD reports separately for each, see `conditions.json`):
-
-| Category | Videos |
-| --- | --- |
-| ordinary | {', '.join(SCENE_CATEGORIES['ordinary'])} |
-| complex | {', '.join(SCENE_CATEGORIES['complex'])} |
-| small_mav | {', '.join(SCENE_CATEGORIES['small_mav'])} |
+{_category_table(spec)}
 
 ## Counts ({split})
 
@@ -318,15 +371,12 @@ Scene categories (GLAD reports separately for each, see `conditions.json`):
 
 ## Known issues
 
-- **`CAP_PROP_FRAME_COUNT` overstates.** The container header reports more
-  frames than actually decode (28,644 vs 28,337 on the test 15). Every
-  decodable frame does have an annotation. Any frame-count reconciliation
-  should use the decoder, not the header.
+{spec.known_issues}
 - **Unlabelled frames are skipped, not emitted as negatives.** A frame with no
   XML was never annotated rather than confirmed empty, so scoring detections
   against it would understate precision. Frames whose XML contains zero objects
   *are* genuine negatives and are kept.
-- Frame numbering is one-based and four-digit (`phantom05_0001`), matching the
+- Frame numbering is one-based and four-digit (`{videos[0]}_0001`), matching the
   XML stems exactly. Verified visually via `_verify/`.
 """, encoding="utf-8")
 
@@ -335,11 +385,20 @@ def build_parser() -> argparse.ArgumentParser:
     """Command-line interface for dataset preparation."""
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--raw", type=Path, default=Path("data/raw/ARD-MAV"))
-    ap.add_argument("--out", type=Path, default=Path("data/processed/ARD-MAV"))
+    ap.add_argument("--dataset", choices=sorted(SPECS), default="ARD-MAV",
+                    help="Which download to convert (default: ARD-MAV). Sets the "
+                         "defaults for --raw, --out and --videos.")
+    ap.add_argument("--raw", type=Path, default=None,
+                    help="Source tree. Defaults to the dataset's own.")
+    ap.add_argument("--out", type=Path, default=None,
+                    help="Destination tree. Defaults to the dataset's own.")
     ap.add_argument("--split", default="test", help="Split name to write (default: test).")
     ap.add_argument("--videos", nargs="*", default=None,
-                    help="Override the video list. Defaults to the official test 15.")
+                    help="Override the video list. Defaults to the dataset's test split.")
+    ap.add_argument("--no-images", dest="images", action="store_false",
+                    help="Write labels and metadata but no JPEGs. The GLAD path needs "
+                         "no extracted pixels and this saves ~900 KB per frame; a "
+                         "stills run (src.baseline_detect) does need them.")
     ap.add_argument("--verify-sample", type=int, default=20,
                     help="Frames to render with boxes for visual checking.")
     ap.add_argument("--seed", type=int, default=42)
@@ -349,23 +408,33 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     """Convert, validate, and write metadata."""
     args = build_parser().parse_args()
-    videos = list(args.videos or OFFICIAL_TEST_VIDEOS)
+    spec = spec_for(args.dataset)
+    raw = args.raw or spec.raw
+    out = args.out or spec.out
+    videos = list(args.videos or spec.videos)
 
-    images_dir = args.out / "images" / args.split
-    labels_dir = args.out / "labels" / args.split
-    images_dir.mkdir(parents=True, exist_ok=True)
+    images_dir = out / "images" / args.split
+    labels_dir = out / "labels" / args.split
     labels_dir.mkdir(parents=True, exist_ok=True)
+    if args.images:
+        images_dir.mkdir(parents=True, exist_ok=True)
 
+    extraction = Extraction(images_dir=images_dir, labels_dir=labels_dir,
+                            write_images=args.images,
+                            verify=VerifySampler(args.verify_sample, args.seed))
+
+    mode = "images + labels" if args.images else "labels only"
+    print(f"{spec.name}: {raw} -> {out} ({mode})")
     total = Stats()
     for n, video in enumerate(videos, 1):
         print(f"[{n}/{len(videos)}] {video}", flush=True)
-        total.merge(convert_video(args.raw, video, images_dir, labels_dir))
+        total.merge(convert_video(raw, video, extraction))
 
     ok = report(total, videos)
-    write_metadata(args.out, args.split, videos, total)
-    verify_dir = render_verify(args.out, args.split, args.verify_sample, args.seed)
+    write_metadata(spec, out, args.split, videos, total, args.images)
+    verify_dir = extraction.verify.flush(out / "_verify")
 
-    print(f"\nWrote {args.out}")
+    print(f"\nWrote {out}")
     print(f"Inspect {verify_dir} before trusting these labels.")
     if not ok:
         sys.exit("Validation found problems -- see above.")
