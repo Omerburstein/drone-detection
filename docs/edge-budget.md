@@ -309,6 +309,55 @@ conclusion is:
 global network plus a 640 local network plus full-frame OpenCV motion buffers on a shared
 8 GB pool. Unmeasured. If it binds, the escape is Orin NX 16 GB, not a smaller model.
 
+### 4.1 Orin NX 16 GB — what the step up actually buys
+
+Asked directly, and the answer is smaller than the price gap suggests.
+
+| | Orin Nano Super 8 GB | **Orin NX 16 GB** | ratio |
+| --- | --- | --- | --- |
+| CUDA / tensor cores | 1024 / 32 | 1024 / 32 | **1.00×** |
+| Memory bandwidth | 102 GB/s LPDDR5 | 102.4 GB/s LPDDR5 | **1.00×** |
+| CPU | 6× A78AE @1.7 GHz | 8× A78AE @2.0 GHz | ~1.6× |
+| Peak INT8 | 67 TOPS | 100 TOPS | 1.5× (tensor-core peak; not reached here) |
+| Memory | 8 GB shared | **16 GB shared** | 2× |
+| Power modes | 7 / 15 / 25 W | 10 / 25 W (40 W Super) | — |
+| Price | ~$249 | ~$600–900 | **2.5–3.5×** |
+
+**The GPU is the same silicon at a slightly higher clock, on the same memory bus.** Since
+§4 argues this workload is bandwidth-bound rather than TOPS-bound, the 1.5× TOPS figure
+does not transfer, and the empirical anchor confirms it: Ultralytics benchmark **YOLO26n,
+TensorRT FP16, 640, batch 1, MAX power, pre/post excluded** at **4.13 ms on Orin NX 16 GB
+against 4.57 ms on Orin Nano Super — 1.11×**. That is GLAD's modal frame almost exactly
+(88.4% of frames are one small `yolov5s` pass), so it is the right multiplier for it.
+
+The CPU is where Orin NX is genuinely ahead, and GLAD's expensive branch — KLT grid,
+pyramidal Lucas–Kanade, RANSAC homography, full-frame warp, morphology — is OpenCV on the
+CPU. Two more cores at a higher clock is ~1.6× on paper, less in practice because LK and
+RANSAC do not scale linearly.
+
+#### GLAD projection **[EXTRAPOLATED — no board has been benchmarked]**
+
+Built by scaling the paper's published Xavier NX figures the same way §4 does, then
+applying 1.11× (GPU path) and ~1.3–1.5× (motion path):
+
+| Branch | Xavier NX (published) | Orin Nano Super | **Orin NX 16 GB** |
+| --- | --- | --- | --- |
+| Modal frame, LAD only (88.4%) | ~30 | ~60 | **~65** |
+| Motion path firing (11.6%) | **5.1** (GMD, published) | ~10–14 | **~14–19** |
+| Sustained mean over content | 23.6 (published mean) | ~47 | **~50–55** |
+
+> **Answer in one line: roughly 50 FPS mean and — the number that matters — 15–20 FPS in
+> the hard scenes, about 1.15× an Orin Nano Super for 2.5–3.5× the money.**
+>
+> Every figure above is arithmetic on someone else's benchmark, at **MAX power**, with
+> pre/post-processing excluded, and through a TensorRT path **this project has never run**
+> (§4's toolchain break). Treat the shape — modal frame cheap, motion path 4–5× worse —
+> as the finding; treat the digits as provisional until a board is in hand.
+
+**So buy Orin NX for the 16 GB, not for the frame rate.** §4 already names memory as the
+plausible binding constraint at 1080p; that is the case for this board, and it is a good
+one. Frame rate is not.
+
 **What would change the board recommendation** — see [§6](#6-recommendation).
 
 ---
@@ -446,9 +495,11 @@ an incomplete entry.
 | YOLOMG 133 / 35 FPS @640 / @1280 | **RTX 2080Ti**, precision & batch unstated | ❌ non-transferable to edge |
 | A2A-YOLO 15 FPS | RK3588, precision & resolution unstated, Det-Fly (4K, large targets) | ❌ non-transferable |
 | YOLO26n TensorRT 15.60 / 7.53 / 4.57 / 3.80 ms (PyTorch FP32 / TRT FP32 / FP16 / INT8) | Orin Nano Super, 640, batch 1, JetPack 6.1, **MAX power**, **excludes pre/post-processing**, COCO | ⚠️ optimistic bound; use ratios not absolutes |
+| YOLO26n TensorRT 13.90 / 7.01 / 4.13 / 3.49 ms (same four formats) | **Orin NX 16 GB**, same conditions as the row above | ⚠️ same caveats; the 4.13 / 4.57 pair is the **1.11×** in §4.1 |
 | INT8 costs mAP50-95 0.480 → 0.449; literature 3–7 points, smaller models worse | COCO, not our split, not our size regime | ⚠️ directional only |
 | OpenVINO "up to 3× on CPU" | vendor claim, unspecified model/host | ⚠️ vendor |
 | Orin Nano Super $249, 67 TOPS, 102 GB/s | vendor spec | ✅ spec, not performance |
+| Orin NX 16 GB ~$600–900, 100 TOPS, 102.4 GB/s, 1024 CUDA / 8× A78AE | vendor spec | ✅ spec, not performance |
 | TRT 7.2 engines do not load on JetPack 6 / TRT 10 | NVIDIA forums, ProventusNova | ✅ well established |
 
 ### ⚠️ Assumed — invented for illustration, must be replaced
@@ -462,6 +513,7 @@ an incomplete entry.
 | Camera HFOV | 60° | the sensor choice |
 | Power mode | 15 W | thermal test on the airframe |
 | Orin Nano ÷ Xavier NX throughput | 2× (bandwidth) rather than 3.2× (TOPS) | on-device benchmark |
+| Orin NX 16 GB ÷ Orin Nano Super, GLAD end to end | ~1.15× overall — 1.11× GPU path, ~1.3–1.5× CPU motion path | on-device benchmark of both |
 
 ### Not measured, and worth measuring — in priority order
 
