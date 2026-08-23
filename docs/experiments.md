@@ -994,7 +994,8 @@ both are available — but the relative one is what a criterion argument should 
     this is 15, chosen for non-overlap with our local 60.
 
 - **Watchable version (2026-08-23):** `runs/exp005_glad_ard100/examples/phantom119_overlay.mp4`
-  (3,297 scored frames, 110 s) and `phantom97_overlay.mp4` (1,798, 60 s), ground truth and
+  (3,297 scored frames, 110 s), `phantom97_overlay.mp4` (1,798, 60 s) and
+  `phantom144_overlay.mp4` (2,698, 90 s), ground truth and
   GLAD's box drawn together and coloured by outcome — `src.render_video`, see
   [render_video.md](render_video.md). Rendered with `--zoom-span 320 --zoom 2`: the inset
   is **LAD's own 320×320 search region** (`REGION_HALF = 160`,
@@ -1007,18 +1008,39 @@ both are available — but the relative one is what a criterion argument should 
   P 1.000 / R 0.768 on 2,932 targets with **one** false alarm in the whole video,
   phantom97 is P 0.854 / R 0.378 — the worst recall of the fifteen **despite larger
   targets** (20.5 px median against 119's 13.4). Size does not explain phantom97, which is
-  what makes it the video to watch before M7. Not committed (`/runs/` is gitignored);
+  what makes it the video to watch before M7. phantom144 was added afterwards and is the
+  middle case, P 0.961 / R 0.514 at 13.9 px. Not committed (`/runs/` is gitignored);
   re-render from the persisted JSONL in ~2 minutes each.
 
-  **What the search-region panel shows on first viewing:** the two videos fail by opposite
-  mechanisms, which the aggregate branch table hides. phantom119's misses are mostly
-  `global miss` (405 against 275 `local miss`) — GAD failing to re-acquire, the failure the
-  entry's *Next* section already names. phantom97 inverts it: **680 `local miss` against
-  294 `global miss`**, i.e. the drone was inside LAD's 320×320 region and LAD did not fire,
-  plus 96 misses on frames where `local yolo` fired on something else. That is a different
-  defect from re-acquisition and it is the one costing the split its worst video. The
-  `lighting` axis does not separate the two (both ~50% `backlit`), so this distinction is
-  not visible in any cut taken so far — the panel is how it was found.
+  **What the search-region panel showed, and what checking it across the split found.**
+  The panel splits a miss into *the drone was not in the region* and *it was there and LAD
+  did not fire*. phantom97 turned out to be overwhelmingly the second — 680 `local miss`
+  against 294 `global miss` — and phantom144 repeats it at 834 against 387. phantom119 is
+  the one that inverts, 405 global against 275 local. Cutting **all fifteen videos** the
+  same way (from `matches_center.csv`, `branch` on `outcome == fn`):
+
+  | | share of all 10,458 misses |
+  | --- | --- |
+  | `local miss` | **52.1%** (5,453) |
+  | `global miss` | 35.2% (3,679) |
+  | `local yolo` — fired, matched nothing | 11.6% (1,213) |
+
+  **`local miss` is the dominant failure in 13 of the 15 videos**, and the two exceptions
+  are phantom119 (ratio 0.68) and phantom102 (0.37). That matters because **phantom102
+  alone supplies 45% of every `global miss` in the split** (1,647 of 3,679); it is also the
+  worst video at R 0.231. Drop it and the local:global ratio goes from 1.48 to **2.38**.
+
+  **This qualifies the *Next* section below.** Targeting `global miss` is defensible on
+  *change*: it grew 2.9% → 12.3% of frames from EXP-004, a 4.2× rise against `local miss`'s
+  2.2× (7.4% → 16.6%), so GAD re-acquisition is what generalises worst. But it is not the
+  larger pool — `local miss` is bigger in the branch table already (16.6% vs 12.3%), bigger
+  as a share of misses (52.1% vs 35.2%), and dominant per-video in 13 of 15 — and the
+  aggregate that makes `global miss` look central is 45% one video. A fine-tune aimed only
+  at re-acquisition leaves the larger half of the misses untouched.
+
+  Note the `lighting` axis does not separate any of this: phantom119 and phantom97 sit at
+  ~50% `backlit` and fail by opposite mechanisms, and phantom144 is 67% backlit. No cut
+  taken before this one would have surfaced it.
 
 - **New observation: the motion module's 50-candidate cap fired 35 times.**
   `third_party/GLAD/MOD2.py:60,183` returns an **empty** candidate list when a frame yields
@@ -1031,11 +1053,19 @@ both are available — but the relative one is what a criterion argument should 
 
 - **M4b is answered; the open question is now M7's target.** The deficit is acquisition at
   range and after lock-loss, not localisation and not box quality. Fine-tuning from these
-  weights is the obvious lever, and the branch table says where the gain has to come from:
-  `global miss` at 12.3%, i.e. GAD failing to re-acquire.
-- **Worth running, free:** `--group video` on this dump. EXP-004's alarms concentrated in
-  two videos out of fifteen; if EXP-005's 1,316 do the same, the per-video variance already
-  flagged in the cross-cut work is the thing to model, not the aggregate.
+  weights is the obvious lever. **Which failure to aim it at is no longer obvious, and the
+  per-video branch cut in the watchable-version note above is why.** `global miss` is the
+  branch that generalises worst — 2.9% → 12.3% of frames, a 4.2× rise — but `local miss` is
+  the larger pool on every measure that is not a delta: 16.6% of frames against 12.3%,
+  52.1% of all misses against 35.2%, and the dominant failure in 13 of the 15 videos, while
+  45% of the split's `global miss` comes from phantom102 alone. **Decide between LAD and
+  GAD on that evidence before renting a GPU**, and if the answer is "both", say so in the
+  training proposal rather than discovering it after the run.
+- **Already run:** the per-video cut. EXP-004's alarms concentrated in two videos out of
+  fifteen, and EXP-005's do the same — see the branch table in the watchable-version note.
+  Per-video variance is confirmed as the thing to model, not the aggregate. Still open on
+  this dump: `--group video` against the **false alarms** specifically, which is a
+  different question from the misses cut above and equally free.
 - **The backlit slice is closed, not open.** ARD-MAV's `lighting` axis was derived on
   2026-08-23 and the control is now symmetric: it costs 3.0 points of 20.7 and does not
   change this entry's conclusion. `relative_range` is the opposite case and is now
