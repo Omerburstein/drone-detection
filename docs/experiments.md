@@ -974,6 +974,33 @@ both are available — but the relative one is what a criterion argument should 
   - **Not comparable to any published ARD100 number.** YOLOMG reports on all 100 videos;
     this is 15, chosen for non-overlap with our local 60.
 
+- **Watchable version (2026-08-23):** `runs/exp005_glad_ard100/examples/phantom119_overlay.mp4`
+  (3,297 scored frames, 110 s) and `phantom97_overlay.mp4` (1,798, 60 s), ground truth and
+  GLAD's box drawn together and coloured by outcome — `src.render_video`, see
+  [render_video.md](render_video.md). Rendered with `--zoom-span 320 --zoom 2`: the inset
+  is **LAD's own 320×320 search region** (`REGION_HALF = 160`,
+  `src/algo/glad/pipeline.py:44`) drawn at 2×, i.e. 640×640 on the 1080p frame. That span
+  is deliberate — the panel shows the crop the local detector actually receives, so a miss
+  can be read as *the drone was not in the region* or *it was there and LAD did not fire*,
+  which the branch column alone cannot separate. 2× because at a 13 px median target 1×
+  leaves the drone an unreadable speck, and 3× (the `fit_zoom` ceiling here) would take 89%
+  of the frame height. The pair was chosen as the two ends of this split: phantom119 is
+  P 1.000 / R 0.768 on 2,932 targets with **one** false alarm in the whole video,
+  phantom97 is P 0.854 / R 0.378 — the worst recall of the fifteen **despite larger
+  targets** (20.5 px median against 119's 13.4). Size does not explain phantom97, which is
+  what makes it the video to watch before M7. Not committed (`/runs/` is gitignored);
+  re-render from the persisted JSONL in ~2 minutes each.
+
+  **What the search-region panel shows on first viewing:** the two videos fail by opposite
+  mechanisms, which the aggregate branch table hides. phantom119's misses are mostly
+  `global miss` (405 against 275 `local miss`) — GAD failing to re-acquire, the failure the
+  entry's *Next* section already names. phantom97 inverts it: **680 `local miss` against
+  294 `global miss`**, i.e. the drone was inside LAD's 320×320 region and LAD did not fire,
+  plus 96 misses on frames where `local yolo` fired on something else. That is a different
+  defect from re-acquisition and it is the one costing the split its worst video. The
+  `lighting` axis does not separate the two (both ~50% `backlit`), so this distinction is
+  not visible in any cut taken so far — the panel is how it was found.
+
 - **New observation: the motion module's 50-candidate cap fired 35 times.**
   `third_party/GLAD/MOD2.py:60,183` returns an **empty** candidate list when a frame yields
   more than 50 motion rects — it gives up rather than degrading. 35 frames of 34,287 is
