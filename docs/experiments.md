@@ -1061,6 +1061,14 @@ both are available — but the relative one is what a criterion argument should 
   130–165° shrinks every target here to 1–5 px and projected recall to ≈0.005.** Kept in the
   ledger because it is a cut of *this* run, taken with no re-inference.
 
+  **Reading this curve for a target that is not ARD100's.** The cut is in *pixels*, so
+  transferring it to another airframe needs the physical-size ratio. ARD100 flies
+  Phantom/Mavic-class targets (~0.4–0.5 m); this project's is a **10-inch quad, ~0.59 m**
+  (user, 2026-08-23), so ours is ~1.2–1.4× more pixels at equal range. That credit moves the
+  R1 Mini projection from 0.005 to **0.013–0.020** — real, and far too small to matter
+  against 5.3–6.7× of lost angular resolution. **Never compare `gt_size` across datasets
+  without this ratio**, the same trap `relative_range` carries.
+
 - **New observation: the motion module's 50-candidate cap fired 35 times.**
   `third_party/GLAD/MOD2.py:60,183` returns an **empty** candidate list when a frame yields
   more than 50 motion rects — it gives up rather than degrading. 35 frames of 34,287 is

@@ -106,19 +106,25 @@ over clutter has failed, because clutter is the only moment detection mattered.
 
 ### The resolution floor, and why it is not negotiable
 
-**[ASSUMED]** 0.3 m airframe, 1920 px wide sensor, ~60° horizontal FOV ⇒ 0.031°/px.
+**Target: a 10-inch-class quadrotor — 0.59 m frontal extent, 0.72 m tip-to-tip diagonal
+(supplied by the user 2026-08-23; 0.6 m used below).** 1920 px wide sensor, ~60° horizontal
+FOV ⇒ 0.031°/px.
 
 | Apparent size | Range | Time to contact at 40 m/s |
 | --- | --- | --- |
-| 10 px (first detectable) | ~55 m | **1.4 s** |
-| 30 px | ~18 m | 0.5 s |
+| 10 px (first detectable) | **~110 m** | **2.8 s** |
+| 30 px | ~37 m | 0.9 s |
 
-Sanity check against real data: ARD-MAV's own p95 closest approach is **34.2 px**
-([experiments.md](experiments.md)), i.e. ~16 m under these assumptions, and its smallest
-band is <8 px, ~70 m. The dataset's range span and this arithmetic agree.
+⚠️ **Do not carry 0.6 m into a dataset calculation.** ARD-MAV and ARD100 target
+Phantom/Mavic-class airframes, ~0.4–0.5 m — smaller than ours. Sanity check on *their*
+geometry at 0.45 m: ARD-MAV's p95 closest approach of **34.2 px**
+([experiments.md](experiments.md)) is ~24 m, and its smallest band, <8 px, is ~103 m. The
+dataset's range span and this arithmetic agree. **The two sizes differ by ~1.3×, and that
+factor is the whole of [§4.3.3](#433-projected-through-exp-005s-own-measured-curve)'s
+"credit".**
 
 **The whole engagement is on the order of one second.** That is what makes the latency
-budget tight, and it is why **input resolution cannot be traded for frame rate**: at 55 m
+budget tight, and it is why **input resolution cannot be traded for frame rate**: at 110 m
 the target is 10 px in a 1920-wide frame. Halving the input to 960 makes it 5 px and the
 detection range collapses. This project's founding trap
 ([CLAUDE.md](../CLAUDE.md)) wearing a deployment badge.
@@ -594,24 +600,25 @@ thrash it. Filed as a todo.
 12 MP is not only cost. At the **same FOV**, 4024 px against 1920 px is **2.096× finer
 linearly**, and that lands squarely on the project's hardest failure mode.
 
-**[ASSUMED]** 0.3 m airframe, ~60° horizontal FOV. 1080p: 0.03125°/px. C-1240:
-**0.014911°/px**.
+**0.6 m target** (10-inch class, §1), ~60° horizontal FOV. 1080p: 0.03125°/px. C-1240:
+**0.014911°/px**. The right-hand column is in *apparent pixels* and so is unaffected by
+target size.
 
 | Apparent size | Range @ 1080p | **Range @ 12 MP** | What EXP-004 measures at that size |
 | --- | --- | --- | --- |
-| 10 px | 55.0 m | **115.3 m** | `tiny` — recall 0.849 (centre@1×) |
-| 16 px | 34.4 m | **72.0 m** | boundary of the 0.984 band |
-| 20 px | 27.5 m | **57.6 m** | `small` — recall **0.984** |
-| 30 px | 18.3 m | **38.4 m** | `small` — recall 0.984 |
+| 10 px | 110.0 m | **230.6 m** | `tiny` — recall 0.849 (centre@1×) |
+| 16 px | 68.8 m | **144.1 m** | boundary of the 0.984 band |
+| 20 px | 55.0 m | **115.3 m** | `small` — recall **0.984** |
+| 30 px | 36.7 m | **76.9 m** | `small` — recall 0.984 |
 
-> **The headline: 12 MP moves the 0.98-recall boundary from ~34 m out to ~72 m**, and
-> first-detectable from 55 m to 115 m. A target at 55 m is a marginal 10 px at 1080p and a
+> **The headline: 12 MP moves the 0.98-recall boundary from ~69 m out to ~144 m**, and
+> first-detectable from 110 m to 231 m. A target at 110 m is a marginal 10 px at 1080p and a
 > comfortable 21 px at 12 MP. **18,265 of ARD-MAV's 28,160 targets are under 16 px** — this
 > sensor moves a large part of that population out of the band where the detector is
 > weakest, which is a more direct attack on the project's central problem than any
 > architecture change currently on the table.
 
-Time-to-contact at the **[ASSUMED]** 40 m/s closing speed: **1.4 s at 1080p, 2.9 s at
+Time-to-contact at the **[ASSUMED]** 40 m/s closing speed: **2.8 s at 1080p, 5.8 s at
 12 MP.** The sensor roughly **doubles the reaction time available**, which is what partly
 pays for the latency it costs.
 
@@ -751,20 +758,42 @@ The middle column is the honest one: **97.7% of targets fall below the size at w
 has ever detected anything.** The projected-recall column is arithmetic on top of that and
 should be read as "indistinguishable from zero", not as three significant figures.
 
+**The size "credit", and why it is small.** The table above rescales *measured pixels*, so
+it answers "re-shoot ARD100's own engagements through this camera" and is independent of how
+big the target physically is. Our target is a **10-inch quad at ~0.59 m** (§1) while ARD100
+flies **Phantom/Mavic-class, ~0.4–0.5 m**, so at equal range ours is ~1.2–1.4× more pixels.
+Dividing the shrink factor by that credit and re-reading the curve:
+
+| credit | R1 Mini 130°: ≥8 px / recall | R1 Mini 165°: ≥8 px / recall |
+| --- | ---: | ---: |
+| 1.0× (ARD100's own targets) | 0.5% / 0.005 | 0.2% / 0.001 |
+| **1.2×** | 1.3% / **0.013** | 0.4% / **0.004** |
+| **1.33×** | 2.2% / **0.020** | 0.6% / **0.006** |
+| 2.0× (a 0.9 m target — *not* ours) | 14.1% / 0.103 | 5.2% / 0.042 |
+
+**A 10-inch target moves projected recall from 0.005 to about 0.013–0.020.** It is a real
+factor and it changes nothing: 6.7× of angular resolution is not bought back by 1.3× of
+airframe. The 2.0× row is included only to show where the curve would start to move — and
+0.9 m is a different aircraft, not a bigger quad.
+
 #### 4.3.4 Detection range, which is the number that matters
 
-0.3 m airframe, so apparent size = px/° × 17.19 / R:
+**0.6 m target** (10-inch class, §1), so apparent size = px/° × 34.38 / R. **8 px is
+GLAD's measured floor** — below it recall is under a third, and below 6 px there is not one
+true positive in 33,517 targets:
 
-| Camera | 6 px | 10 px | 12 px | 20 px |
-| --- | ---: | ---: | ---: | ---: |
-| ARD100 as shot | 84.0 m | **50.4 m** | 42.0 m | 25.2 m |
-| R1 Mini CCD, 130° | 15.9 m | **9.5 m** | 7.9 m | 4.8 m |
-| R1 Mini 1200TVL, 165° | 12.5 m | **7.5 m** | 6.3 m | 3.8 m |
+| Camera | 6 px | **8 px (GLAD's floor)** | 10 px | 12 px | 20 px |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ARD100 optics | 168.0 m | **126.0 m** | 100.8 m | 84.0 m | 50.4 m |
+| R1 Mini CCD, 130° | 31.7 m | **23.8 m** | 19.0 m | 15.9 m | 9.5 m |
+| R1 Mini 1200TVL, 165° | 25.0 m | **18.8 m** | 15.0 m | 12.5 m | 7.5 m |
 
-At §1's 40 m/s closing speed, the 10 px range is **1,260 ms of warning on ARD100's optics
-and 188–238 ms on this camera** — *below* the 274 ms hard-scene pipeline latency already
-budgeted for an Orin Nano, and far below this laptop's 1,184 ms. **The detection would
-arrive after the collision.** No board, quantisation or retrain recovers that; it is optics.
+At §1's 40 m/s closing speed, the 8 px floor gives **3,149 ms of warning on ARD100's optics
+and 469–595 ms on this camera.** That does clear the 274 ms hard-scene pipeline latency
+budgeted for an Orin Nano — **on a 10-inch target the timing argument is tight but not
+fatal, and this section does not rest on it.** What is fatal is §4.3.3: reaching 8 px at
+19–24 m is worth little when only 0.4–2.2% of an engagement's frames get there, and 8 px is
+where GLAD recalls 0.348. It is optics, and no board, quantisation or retrain recovers it.
 
 #### 4.3.5 Four more reasons, all pushing the same way
 
@@ -938,6 +967,7 @@ an incomplete entry.
 | GLAD's branch split: 88.4% `local yolo`, 11.6% motion path | EXP-004 |
 | Recall/precision for every configuration above | experiments.md |
 | Fine-binned recall vs target size, 4→96+ px, 33,517 targets | EXP-005 dump; §4.3.3 |
+| Target airframe: 10-inch class, 0.59 m frontal / 0.72 m diagonal | **supplied by the user, 2026-08-23** |
 | GLAD has no tile or resize switch | experiments.md, glad_detect.md — architectural |
 | GLAD is single-target by construction | glad-model.md §5, pipeline.py |
 | Machine is CPU-only, no CUDA, no XPU | hardware.md |
@@ -970,7 +1000,6 @@ an incomplete entry.
 | **Closing speed** | 40 m/s | **the user** |
 | **Persistence frames** | 3 | **the user** |
 | Pipeline overhead outside detection | 60 ms | measurement, once a rig exists |
-| Target airframe size | 0.3 m | the use case |
 | Camera HFOV | 60° | the sensor choice |
 | Power mode | 15 W | thermal test on the airframe |
 | Orin Nano ÷ Xavier NX throughput | 2× (bandwidth) rather than 3.2× (TOPS) | on-device benchmark |
