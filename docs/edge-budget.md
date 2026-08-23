@@ -680,6 +680,135 @@ and makes the C-1240 the pick; and a cued sensor removes the case for 12 MP alto
 
 ---
 
+### 4.3 The opposite direction — an analog FPV camera (iFlight RaceCam R1 Mini)
+
+**Asked 2026-08-23: "what would my model results be, using this camera?" The answer is
+near-zero recall, and the arithmetic is not close.** This section exists so the question is
+not re-asked, and because it is the cleanest available demonstration of why §1's resolution
+floor is not negotiable.
+
+#### 4.3.1 What the camera is
+
+Two variants ship under the name; both are **analog CVBS**, not a digital sensor interface.
+
+| | R1 Mini (CCD) | R1 Mini 1200TVL |
+| --- | --- | --- |
+| Sensor | 1/3" CCD, 600 TVL | 1/1.8" starlight, 1200 TVL |
+| Lens / horizontal FOV | 2.5 mm / **130°** | 2.1 mm / **165°** |
+| Output | **CVBS**, PAL/NTSC, 4:3 | **CVBS**, PAL/NTSC, 4:3 & 16:9 |
+| Frame delivered after capture | 720×576i @ 25 / 720×480i @ 30 | same |
+| Shutter | electronic rolling | electronic rolling |
+
+**TVL is not pixels.** It is a resolvable-line count on the sensor side; what reaches a
+capture card is a composite analog line, digitised to **720 active samples**, interlaced.
+The 1200 TVL number cannot survive a 7–8 MHz composite link — 720 px is the generous
+reading, and every row below uses it.
+
+#### 4.3.2 Angular resolution — the whole answer
+
+ARD100 was shot on **DJI Mavic 2 / M300** gimbal cameras at 1920×1080 (≈28 mm equivalent,
+**65.5° horizontal**) ⇒ **29.3 px/°**. Against that:
+
+| Camera | px/° | Coarser by | EXP-005 median target | p95 |
+| --- | --- | --- | --- | --- |
+| **ARD100 as shot** (1920 px / 65.5°) | 29.31 | 1.00× | **14.7 px** | 27.2 px |
+| R1 Mini CCD (720 px / 130°) | 5.54 | **5.29×** | **2.8 px** | 5.1 px |
+| R1 Mini 1200TVL (720 px / 165°) | 4.36 | **6.72×** | **2.2 px** | 4.1 px |
+| R1 Mini 1200TVL, 960-px digitiser (generous) | 5.82 | 5.04× | 2.9 px | 5.4 px |
+
+**Every target in EXP-005's corpus lands between 1 and 5 px.** The whole distribution moves
+below the smallest size bin in which GLAD scores a single true positive.
+
+#### 4.3.3 Projected through EXP-005's own measured curve
+
+Fine-binned recall from `runs/exp005_glad_ard100/matches_center.csv` — 33,517 targets, the
+same dump the [EXP-005](experiments.md) metric block is built from:
+
+| gt size (px) | n | recall |
+| --- | ---: | ---: |
+| 4–6 | 4 | **0.0000** |
+| 6–8 | 300 | **0.1600** |
+| 8–10 | 1,850 | 0.3481 |
+| 10–12 | 5,270 | 0.5268 |
+| 12–14 | 6,975 | 0.6346 |
+| 14–16 | 6,218 | 0.7189 |
+| 16–20 | 6,712 | 0.7978 |
+| 20–24 | 3,244 | 0.8813 |
+| 24–32 | 2,201 | 0.9082 |
+| 32–48 | 653 | 0.6524 |
+| 48–96 | 77 | 0.7013 |
+| >96 | 13 | 0.1538 |
+
+Rescaling every target by the shrink factor and reading off the bin it lands in:
+
+| Camera | targets ≥6 px | ≥10 px | **projected recall** |
+| --- | ---: | ---: | ---: |
+| ARD100 as shot | 100.0% | 93.6% | 0.688 *(= the measured EXP-005 figure)* |
+| R1 Mini CCD, 130° | 2.3% | 0.2% | **≈0.005** |
+| R1 Mini 1200TVL, 165° | 0.6% | 0.1% | **≈0.001** |
+
+The middle column is the honest one: **97.7% of targets fall below the size at which GLAD
+has ever detected anything.** The projected-recall column is arithmetic on top of that and
+should be read as "indistinguishable from zero", not as three significant figures.
+
+#### 4.3.4 Detection range, which is the number that matters
+
+0.3 m airframe, so apparent size = px/° × 17.19 / R:
+
+| Camera | 6 px | 10 px | 12 px | 20 px |
+| --- | ---: | ---: | ---: | ---: |
+| ARD100 as shot | 84.0 m | **50.4 m** | 42.0 m | 25.2 m |
+| R1 Mini CCD, 130° | 15.9 m | **9.5 m** | 7.9 m | 4.8 m |
+| R1 Mini 1200TVL, 165° | 12.5 m | **7.5 m** | 6.3 m | 3.8 m |
+
+At §1's 40 m/s closing speed, the 10 px range is **1,260 ms of warning on ARD100's optics
+and 188–238 ms on this camera** — *below* the 274 ms hard-scene pipeline latency already
+budgeted for an Orin Nano, and far below this laptop's 1,184 ms. **The detection would
+arrive after the collision.** No board, quantisation or retrain recovers that; it is optics.
+
+#### 4.3.5 Four more reasons, all pushing the same way
+
+The size arithmetic alone is disqualifying, so these only matter for not overstating the
+projection above — **each makes the real number worse, never better**:
+
+1. **The 320×320 search region stops being local.** `REGION_HALF = 160`
+   (`src/algo/glad/pipeline.py:44`) is in *sensor* pixels. On a 720×576 frame that window is
+   **44% of the frame width** instead of 17%, so LAD degrades toward being a whole-frame
+   640 detector — EXP-001's failure mode, reintroduced by geometry.
+2. **Frame differencing against analog noise.** GAD and the motion module difference
+   consecutive frames. CVBS brings per-line noise, AGC flicker, chroma crawl and interlace
+   comb; a 2 px target has no SNR against that. This attacks the branch EXP-005 already
+   shows failing — `global miss` at 12.3%.
+3. **Rolling shutter on a hard-mounted racing airframe** — the case [§4.2.5](#425-rolling-vs-global-shutter--the-point-that-outranks-frame-rate)
+   flags as unmeasured and worst-case, since the homography behind motion compensation
+   assumes a single capture instant.
+4. **165° of barrel distortion.** Nothing in the pipeline undistorts, and the homography is
+   fitted assuming it does not need to.
+
+#### 4.3.6 If the camera is fixed, the lens is the only lever
+
+Swapping the 2.1 mm for a long lens is the one cheap move — it is
+[§4.2.8](#428-the-lens-is-a-competing-answer-and-it-is-cheaper)'s argument again. But
+**720 px is a hard ceiling**: even at a 30° FOV the camera gives 24 px/° against 1080p's
+29.3, so it still never reaches the optics EXP-005 was measured on, and a 30° search cone
+demands the cueing question of [§4.2.8](#428-the-lens-is-a-competing-answer-and-it-is-cheaper)
+be answered *yes*.
+
+**Recommendation: do not put this camera in the detection path.** It is an FPV pilot's
+video-link camera — low latency, low light, wide angle, human in the loop — and every one of
+those choices is the opposite of what small-target detection needs. Keep it as the pilot
+feed if the airframe wants one, and run detection off a separate digital sensor
+([§4.2.9](#429-camera-recommendation)). **The minimum for GLAD as measured is ~1920 px
+across ≲70°, digital, global shutter.**
+
+> **[PROJECTED — no footage from this camera has been run.]** §4.3.3 rescales EXP-005's
+> measured size/recall curve and assumes apparent size is the only variable. It is not;
+> §4.3.5 lists four effects that all push downward, so **treat these numbers as an upper
+> bound.** To measure it instead: capture CVBS to file, label it, and run
+> `src.glad_detect` + `src.evaluate` exactly as EXP-005 did.
+
+---
+
 **What would change the board recommendation** — see [§6](#6-recommendation).
 
 ---
@@ -808,6 +937,7 @@ an incomplete entry.
 | 640 → 1280 costs 2.44× | EXP-001 → EXP-002 |
 | GLAD's branch split: 88.4% `local yolo`, 11.6% motion path | EXP-004 |
 | Recall/precision for every configuration above | experiments.md |
+| Fine-binned recall vs target size, 4→96+ px, 33,517 targets | EXP-005 dump; §4.3.3 |
 | GLAD has no tile or resize switch | experiments.md, glad_detect.md — architectural |
 | GLAD is single-target by construction | glad-model.md §5, pipeline.py |
 | Machine is CPU-only, no CUDA, no XPU | hardware.md |
@@ -869,6 +999,7 @@ an incomplete entry.
 5. **ROI mode-switch latency** on the Alvium — decides whether sensor-side windowing beats
    §4.2.6's option (c).
 6. **Everything on the board.** All of §4–§6 is arithmetic until hardware exists.
+7. **Any real footage from the intended airframe's camera.** §4.3 projects an analog FPV camera to near-zero recall from optics alone, but the projection has never been checked against a frame this project actually captured — every accuracy number here comes from someone else's gimbal.
 
 ---
 

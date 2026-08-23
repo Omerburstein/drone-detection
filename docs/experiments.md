@@ -1042,6 +1042,25 @@ both are available — but the relative one is what a criterion argument should 
   ~50% `backlit` and fail by opposite mechanisms, and phantom144 is 67% backlit. No cut
   taken before this one would have surfaced it.
 
+- **Derived cut, 2026-08-23 — fine-binned recall vs target size, and what it says about
+  camera choice.** Re-binned from `matches_center.csv` at 2 px granularity below 16 px,
+  because the `tiny (<16 px)` bucket hides the shape of the collapse:
+
+  | gt size (px) | 4–6 | 6–8 | 8–10 | 10–12 | 12–14 | 14–16 | 16–20 | 20–24 | 24–32 |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+  | n | 4 | 300 | 1,850 | 5,270 | 6,975 | 6,218 | 6,712 | 3,244 | 2,201 |
+  | recall | 0.000 | 0.160 | 0.348 | 0.527 | 0.635 | 0.719 | 0.798 | 0.881 | 0.908 |
+
+  **GLAD's practical floor on this data is ~8 px** — below it recall is under a third, and
+  below 6 px there is not one true positive in 33,517 targets. Recall then rises roughly
+  linearly to 24–32 px and *falls* again past 32 (0.65 / 0.70 / 0.15), which is the
+  reacquisition failure, not a size effect — those buckets are 653 / 77 / 13 targets.
+  This curve is the input to
+  [edge-budget.md §4.3](edge-budget.md#43-the-opposite-direction--an-analog-fpv-camera-iflight-racecam-r1-mini),
+  which projects it onto a candidate airframe camera; **an analog FPV camera at 720 px /
+  130–165° shrinks every target here to 1–5 px and projected recall to ≈0.005.** Kept in the
+  ledger because it is a cut of *this* run, taken with no re-inference.
+
 - **New observation: the motion module's 50-candidate cap fired 35 times.**
   `third_party/GLAD/MOD2.py:60,183` returns an **empty** candidate list when a frame yields
   more than 50 motion rects — it gives up rather than degrading. 35 frames of 34,287 is
