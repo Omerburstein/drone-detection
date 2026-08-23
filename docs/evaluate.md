@@ -16,6 +16,7 @@ py -3.13 -m src.evaluate --pred <jsonl> --labels <dir> [options]
 | `--iou` | `0.5` | IoU threshold for the precision/recall/size breakdowns, when `--match iou`. AP@0.50 and mAP@0.50:0.95 always use the standard sweep regardless of this. Ignored under the default criterion. |
 | `--match` | `center` | How a prediction claims a target: `center` (centre-to-centre distance, the default) or `iou` (COCO overlap). See **Matching criteria** below. |
 | `--match-tol` | `1.0` | For `--match center`: the centre-distance tolerance in multiples of the target's own size. `1.0` means "more than one drone-width off centre is a miss". |
+| `--keys-from` | none | Score only the frames another run's `detections.jsonl` recorded. The control for a duty-cycled run — see **Comparing a duty-cycled run** below. |
 | `--frame-size W H` | none | Frame dimensions in pixels. **Required for video-keyed predictions** — the JSONL stores frame indices, not sizes. For image runs it is read from the image file, and this flag overrides it. |
 | `--conditions` | none | `conditions.json` from `src.data.prepare_ardmav`. Adds one breakdown table per axis the file declares — `scene_category` (required to compare against papers that report by category), plus the measured `lighting` and `relative_range`. See [scene_stats.md](scene_stats.md). |
 | `--json-out` | none | Also write metrics as JSON — one snapshot, overwritten each run. Pass it for anything you intend to cite in the ledger. |
@@ -319,6 +320,40 @@ two axes are correlated and their marginals cannot be multiplied — and
 [`src.alarm_eval`](alarm_eval.md) bins the false alarms by how far they landed from the
 nearest real drone, which is what separates a box two pixels off the target from a box on
 a rooftop.
+
+## Comparing a duty-cycled run
+
+`load_frames` iterates the **prediction rows**, not the label directory. A run that
+processed only some frames — `src.glad_detect --sample nth` or `--sample burst` — records
+only those, and is therefore scored on exactly those: the skipped frames are absent, not
+counted as misses. The number is meaningful, but it covers a different frame population
+than a full-rate run, so putting the two side by side attributes the frame-set difference
+to the duty cycle.
+
+`--keys-from` fixes that. Point `--pred` at the dense run and `--keys-from` at the sparse
+one, and both sides cover the same frames with the same weights, thresholds, resolution
+and criterion — leaving the duty cycle as the only variable:
+
+```
+py -3.13 -m src.evaluate \
+    --pred runs/exp004_glad/detections.jsonl \
+    --keys-from runs/exp006_half_rate/detections.jsonl \
+    --labels data/processed/ARD-MAV/labels/test \
+    --frame-size 1920 1080 \
+    --json-out runs/exp006_half_rate/control_metrics.json
+```
+
+Filtering happens **before** the label files are read, so the discarded frames cost
+nothing — a control over 900 frames out of 28,337 does not pay 28,337 file reads.
+
+Two safeguards:
+
+- **A shortfall is an error, not a smaller comparison.** If `--pred` does not cover every
+  frame `--keys-from` names, the command exits rather than scoring the intersection.
+  Silently comparing fewer frames is the exact confusion the flag exists to prevent.
+- **The restriction is recorded.** `--save` writes `keys_from` into the settings on the
+  result line, because it changes the numbers more than any threshold does and is the only
+  field that distinguishes the two scorings of one `detections.jsonl`.
 
 ## Comparability
 

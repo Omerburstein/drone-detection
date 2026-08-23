@@ -29,7 +29,11 @@ py -3.13 -m src.glad_detect [--dataset ARD-MAV|ARD100] [options]
 | `--images` | the dataset's `images/<split>` | Directory the JSONL rows are keyed by. Nothing is read from it and **it need not exist** — a labels-only tree (`prepare_ardmav --no-images`) runs fine. It is what lets `src.evaluate` resolve labels exactly as for a stills run. |
 | `--video-names` | the dataset's test 15 | Videos to run, without the `.mp4`. |
 | `--out` | `runs/glad` | Output directory. Give every experiment its own. |
-| `--max-frames-per-video` | none | Stop each video after N frames. A **contiguous prefix**, so the motion branches still work — for smoke tests, not for results. |
+| `--max-frames-per-video` | none | Stop each video after N frames. A **contiguous prefix**, so the motion branches still work — for smoke tests, not for results. Counts **decoded** frames, so it covers the same span of video under every `--sample` mode. |
+| `--sample` | `every` | Duty-cycle policy: `every` (what EXP-004 ran), `nth`, or `burst`. See "Duty cycling" below. **Not a stride.** |
+| `--sample-n` | `2` | For `--sample nth`: process every Nth frame. `2` is 15 fps from a 30 fps source. |
+| `--burst-length` | `2` | For `--sample burst`: frames per burst. The first frame of a burst follows a reset and can never detect, so a burst of K gives **K−1** chances. Must be ≥ 2. |
+| `--burst-period` | `60` | For `--sample burst`: frames between burst starts. 60 is every 2 s at 30 fps. Sets detection **latency**, not per-burst probability — see below. |
 | `--glad-repo` | `third_party/GLAD` | Clone of the GLAD release. Its `weights/` must hold `yolov5s_GLAD.pt`, `yolov5s_GLAD-crop.pt` and `Net_best.pth`. |
 | `--pad` | `trained` | Letterbox fill for the global detector. `trained` (114) is the value yolov5 v6.0 trained these weights against. `released` (black) reproduces upstream including its padding bug. `tensorrtx` (128) is what upstream intended. See "The letterbox fill" below. |
 
@@ -41,6 +45,87 @@ algorithm.
 
 `--pad` is the one exception, and it exists because the released value is a defect rather
 than a choice.
+
+## Duty cycling — running on fewer frames
+
+A camera delivers 30 fps and GLAD sustains 2.67 on this host, so processing fewer frames
+is the obvious lever. *Which* fewer is not a free choice.
+
+**`--sample` is not `--stride`, and the difference is the whole point.** Striding hands the
+motion module frame *n* and frame *n+10*, a third of a second apart; the differencing is
+then between two effectively unrelated views and the run measures a different algorithm.
+Both `--sample` modes keep a differenceable predecessor:
+
+| Mode | What it does | What the motion branch sees |
+| --- | --- | --- |
+| `nth` | Runs the whole pipeline at 1/N of the source rate | Adjacent *processed* frames, still adjacent to each other — just 2/30 s apart at N=2 instead of 1/30 s |
+| `burst` | Processes K consecutive frames, then sleeps until the next period | Frames **inside** a burst, a true 1/30 s apart. The sleep costs opportunity, not coherence |
+
+Each fails differently, and knowing which failure to look for is most of the analysis:
+
+- **`nth` doubles apparent motion.** `TrackingDetector.MAX_DISTANCE` is 50 px from the last
+  box centre, and the motion module's constants (`dist_ref=200`, blob area 30–3000) are
+  absolute pixels tuned for 30 fps at 1080p. Lowering the rate pushes against all of them
+  at once. Expect this as the **local regime losing lock** — a gate, not a gradient — while
+  acquisition, which is per-frame, is indifferent.
+- **`burst` never enters the local regime at all.** A lock does not survive the sleep, so
+  every burst is spent in the global regime: GAD, then GMD, then LAD confirmation. Burst
+  mode therefore measures **acquisition probability**, not tracking recall, and it runs the
+  expensive branch every time it runs at all.
+
+**The pipeline is reset at the head of every burst**, and this is load-bearing rather than
+tidy. Without it, `_prev` holds a frame from the previous burst — seconds of ego-motion
+ago — and `MOD2_global` differences two unrelated scenes into a field of blobs. Those blobs
+are an artefact of the harness, not a property of the scheme. The guard is the branch
+summary: a burst run must show **zero `local yolo`** and roughly `1/K` `first frame`.
+Anything else means the reset is misfiring.
+
+**Every frame is still decoded.** That cost is real on a live camera and is not what a duty
+cycle saves; the run prints processed-against-decoded so the two are never conflated.
+
+### Choosing the burst period
+
+The period sets detection **latency**. It does not change the per-burst detection
+probability, because each burst is an independent acquisition attempt on an arbitrary
+frame. So **measure dense and deploy sparse**: a 900-frame period (30 s) yields ~63 bursts
+across the test split, too thin to measure anything, while a 60-frame period yields ~470
+attempts at the identical quantity. Say which was measured in any number that is reported,
+or it reads as a result about a 2-second period.
+
+The latency consequence has to be stated next to the recall, because it is what decides
+the scheme. At the edge budget's illustrative 40 m/s closing speed, a 30-second period is
+**up to 1,200 m of approach unnoticed**. A scheme that keeps its recall for 0.2% of the
+compute is still unusable if the target crosses the whole engagement envelope between
+bursts.
+
+### Scoring a duty-cycled run
+
+`src.eval.labels` iterates the *prediction* rows, not the label directory, so a run that
+recorded only the frames it processed is scored on exactly those frames — the skipped ones
+are absent, not counted as misses. That makes the raw number meaningful but **not
+comparable to a full-rate run**, which covers a different frame population.
+
+Use `src.evaluate --keys-from` for the control. It restricts a dense run to the sparse
+run's frame set, so both sides carry identical weights, thresholds, resolution and match
+criterion, and the only variable is the duty cycle:
+
+```
+py -3.13 -m src.glad_detect --sample nth --sample-n 2 --out runs/exp006_half_rate
+
+py -3.13 -m src.evaluate --pred runs/exp006_half_rate/detections.jsonl \
+    --labels data/processed/ARD-MAV/labels/test --frame-size 1920 1080 \
+    --json-out runs/exp006_half_rate/metrics.json
+
+# The control: EXP-004 over the same frames. No inference — the JSONL is persisted.
+py -3.13 -m src.evaluate --pred runs/exp004_glad/detections.jsonl \
+    --keys-from runs/exp006_half_rate/detections.jsonl \
+    --labels data/processed/ARD-MAV/labels/test --frame-size 1920 1080 \
+    --json-out runs/exp006_half_rate/control_metrics.json
+```
+
+A burst run's rows additionally carry `burst` and `in_burst`, which `src.evaluate --dump`
+passes through, so "second frame of each burst only" is a filter on a CSV rather than a
+second run.
 
 ## The letterbox fill
 

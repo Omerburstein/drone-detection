@@ -48,6 +48,11 @@ class EvalSettings:
     match_value: float
     conditions: str | None = None
     frame_size: list[int] | None = None
+    # The run whose frame set this scoring was restricted to, if any. Recorded
+    # because it changes the numbers more than any threshold does: the same
+    # predictions scored over a duty cycle's frames and over all of them are two
+    # different measurements, and only this field tells them apart.
+    keys_from: str | None = None
 
     @classmethod
     def from_args(cls, args, criterion: MatchCriterion) -> EvalSettings:
@@ -63,6 +68,7 @@ class EvalSettings:
             match_value=criterion.value,
             conditions=str(args.conditions) if args.conditions else None,
             frame_size=list(args.frame_size) if args.frame_size else None,
+            keys_from=str(args.keys_from) if getattr(args, "keys_from", None) else None,
         )
 
     @property

@@ -166,3 +166,71 @@ class TestDetectionsRoundTrip:
         restored = Detections.from_records(Detections.empty().to_records(1, 1))
         assert restored.boxes.shape == (0, 4)
         assert len(restored) == 0
+
+
+class TestKeysFrom:
+    """Restricting a dense run to a sparse run's frames -- the duty-cycle control.
+
+    This is the only legal way to compare a `--sample` run against a full-rate
+    one. If it silently scored a different frame population, the difference
+    would be read as a recall change caused by the duty cycle when it was
+    caused by the frame set, which is the exact mistake the flag prevents.
+    """
+
+    @pytest.fixture
+    def dense_and_sparse(self, tmp_path):
+        """Three frames scored; a sparse run that saw only the first and third."""
+        hit = [{"bbox": [25, 25, 75, 75], "conf": 0.9, "cls": 0}]
+        dense = [{"image": f"a/v_{i:04d}.jpg", "detections": hit} for i in (1, 2, 3)]
+        labels = {f"v_{i:04d}": "0 0.5 0.5 0.5 0.5\n" for i in (1, 2, 3)}
+        pred, labels_dir = write_run(tmp_path, dense, labels)
+
+        sparse = tmp_path / "sparse.jsonl"
+        sparse.write_text("\n".join(
+            json.dumps({"image": f"a/v_{i:04d}.jpg", "detections": []})
+            for i in (1, 3)), encoding="utf-8")
+        return pred, labels_dir, sparse
+
+    def test_scores_only_the_named_frames(self, dense_and_sparse, tmp_path):
+        pred, labels, sparse = dense_and_sparse
+        out = tmp_path / "control.json"
+        result = run_cli("--pred", str(pred), "--labels", str(labels),
+                         "--frame-size", "100", "100", "--match", "iou",
+                         "--keys-from", str(sparse), "--json-out", str(out))
+
+        assert result.returncode == 0, result.stderr
+        metrics = json.loads(out.read_text())
+        assert metrics["n_frames"] == 2
+        assert "Restricting to 2 frames" in result.stdout
+
+    def test_without_the_flag_all_frames_are_scored(self, dense_and_sparse, tmp_path):
+        pred, labels, _ = dense_and_sparse
+        out = tmp_path / "full.json"
+        result = run_cli("--pred", str(pred), "--labels", str(labels),
+                         "--frame-size", "100", "100", "--match", "iou",
+                         "--json-out", str(out))
+        assert result.returncode == 0, result.stderr
+        assert json.loads(out.read_text())["n_frames"] == 3
+
+    def test_a_missing_frame_fails_instead_of_comparing_less(self, dense_and_sparse):
+        """The dense run must cover every frame the sparse one recorded."""
+        pred, labels, sparse = dense_and_sparse
+        sparse.write_text(sparse.read_text()
+                          + "\n" + json.dumps({"image": "a/v_0009.jpg",
+                                               "detections": []}), encoding="utf-8")
+        result = run_cli("--pred", str(pred), "--labels", str(labels),
+                         "--frame-size", "100", "100", "--keys-from", str(sparse))
+        assert result.returncode != 0
+        assert "not over the same frames" in (result.stderr + result.stdout)
+
+    def test_the_restriction_is_recorded_in_the_results_log(self, dense_and_sparse,
+                                                            tmp_path):
+        """A logged metric block that omitted this would be unreadable later."""
+        pred, labels, sparse = dense_and_sparse
+        log = tmp_path / "results.jsonl"
+        result = run_cli("--pred", str(pred), "--labels", str(labels),
+                         "--frame-size", "100", "100", "--keys-from", str(sparse),
+                         "--save", str(log))
+        assert result.returncode == 0, result.stderr
+        logged = json.loads(log.read_text().splitlines()[0])
+        assert logged["settings"]["keys_from"] == str(sparse)

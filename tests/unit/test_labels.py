@@ -13,7 +13,7 @@ import json
 import numpy as np
 import pytest
 
-from src.eval.labels import load_frames, load_label_file, yolo_to_xyxy
+from src.eval.labels import load_frames, load_label_file, read_keys, yolo_to_xyxy
 
 
 class TestYoloToXyxy:
@@ -129,3 +129,63 @@ class TestLoadFrames:
         pred, labels = self._write_run(tmp_path, [{"frame": 0, "detections": []}])
         pred.write_text(pred.read_text() + "\n\n", encoding="utf-8")
         assert len(load_frames(pred, labels, frame_size=(10, 10))) == 1
+
+
+class TestReadKeys:
+    """The frame set one run recorded, used to restrict another run to it."""
+
+    @staticmethod
+    def _write(tmp_path, records):
+        pred = tmp_path / "sparse.jsonl"
+        pred.write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
+        return pred
+
+    def test_reads_image_keyed_stems(self, tmp_path):
+        pred = self._write(tmp_path, [
+            {"image": "data/processed/x/phantom05_0001.jpg", "detections": []},
+            {"image": "data/processed/x/phantom05_0003.jpg", "detections": []},
+        ])
+        assert read_keys(pred) == {"phantom05_0001", "phantom05_0003"}
+
+    def test_reads_video_keyed_indices(self, tmp_path):
+        pred = self._write(tmp_path, [{"frame": 7, "detections": []}])
+        assert read_keys(pred) == {"7"}
+
+    def test_keys_match_what_load_frames_pairs_on(self, tmp_path):
+        """The two must agree, or the filter silently drops every frame."""
+        pred = self._write(tmp_path, [
+            {"image": "a/phantom05_0002.jpg", "detections": []}])
+        labels = tmp_path / "labels"
+        labels.mkdir()
+        frames = load_frames(pred, labels, frame_size=(100, 100))
+        assert {f.key for f in frames} == read_keys(pred)
+
+    def test_ignores_blank_lines(self, tmp_path):
+        pred = self._write(tmp_path, [{"frame": 1, "detections": []}])
+        pred.write_text(pred.read_text() + "\n\n", encoding="utf-8")
+        assert read_keys(pred) == {"1"}
+
+
+class TestKeyFilter:
+    """`load_frames` restricted to a frame subset -- the duty-cycle control."""
+
+    @staticmethod
+    def _write(tmp_path, stems):
+        pred = tmp_path / "dense.jsonl"
+        pred.write_text("\n".join(
+            json.dumps({"image": f"a/{s}.jpg", "detections": []}) for s in stems),
+            encoding="utf-8")
+        labels = tmp_path / "labels"
+        labels.mkdir(exist_ok=True)
+        return pred, labels
+
+    def test_keeps_only_the_named_frames(self, tmp_path):
+        pred, labels = self._write(tmp_path, ["v_0001", "v_0002", "v_0003"])
+        frames = load_frames(pred, labels, frame_size=(10, 10),
+                             key_filter={"v_0001", "v_0003"}.__contains__)
+        assert [f.key for f in frames] == ["v_0001", "v_0003"]
+
+    def test_a_filter_matching_nothing_yields_nothing(self, tmp_path):
+        pred, labels = self._write(tmp_path, ["v_0001"])
+        assert load_frames(pred, labels, frame_size=(10, 10),
+                           key_filter={"other"}.__contains__) == []

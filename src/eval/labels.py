@@ -94,6 +94,25 @@ def _resolve_size(record: dict[str, Any],
     return image_path.stem, width, height
 
 
+def read_keys(pred_path: Path) -> set[str]:
+    """The frame keys a run recorded, without reading a single label file.
+
+    This is how a duty-cycled run is compared against a full-rate one: the
+    frames the sparse run skipped are simply absent from its JSONL, so its key
+    set restricts the dense run to exactly the frames both processed. Anything
+    else compares two different frame populations and the difference stops
+    meaning what it appears to mean.
+    """
+    keys = set()
+    for line in pred_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        keys.add(Path(record["image"]).stem if "image" in record
+                 else str(record["frame"]))
+    return keys
+
+
 def load_frames(pred_path: Path, labels_dir: Path,
                 frame_size: tuple[int, int] | None,
                 key_filter: Callable[[str], bool] | None = None) -> list[EvalFrame]:

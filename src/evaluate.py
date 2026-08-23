@@ -44,7 +44,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .eval.conditions import load_conditions
-from .eval.labels import load_frames
+from .eval.labels import load_frames, read_keys
 from .eval.metrics import CENTER, IOU, MatchCriterion, evaluate
 from .eval.report import report
 from .eval.records import write_dump
@@ -73,6 +73,15 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Centre-distance tolerance for --match center, in multiples of "
                          "the target's own size, sqrt(w*h). Default 1.0: a prediction "
                          "more than one drone-width off centre is a miss.")
+    ap.add_argument("--keys-from", type=Path, default=None, metavar="JSONL",
+                    help="Score only the frames another run's detections.jsonl "
+                         "recorded. This is how a duty-cycled run (src.glad_detect "
+                         "--sample) is compared against a full-rate one: point --pred "
+                         "at the dense run and --keys-from at the sparse one, and both "
+                         "sides of the comparison cover the same frames with the same "
+                         "weights, thresholds and criterion. Filtering happens before "
+                         "the label files are read, so the discarded frames cost "
+                         "nothing.")
     ap.add_argument("--frame-size", type=int, nargs=2, metavar=("W", "H"),
                     default=None,
                     help="Frame dimensions. Required for video-keyed predictions.")
@@ -110,8 +119,24 @@ def main() -> None:
     criterion = (MatchCriterion(IOU, args.iou) if args.match == IOU
                  else MatchCriterion(CENTER, args.match_tol))
 
+    key_filter = None
+    if args.keys_from:
+        wanted = read_keys(args.keys_from)
+        if not wanted:
+            sys.exit(f"{args.keys_from} recorded no frames to restrict to.")
+        print(f"Restricting to {len(wanted)} frames recorded by {args.keys_from}")
+        key_filter = wanted.__contains__
+
     frames = load_frames(args.pred, args.labels,
-                         tuple(args.frame_size) if args.frame_size else None)
+                         tuple(args.frame_size) if args.frame_size else None,
+                         key_filter=key_filter)
+    if args.keys_from and len(frames) != len(wanted):
+        # A silent shortfall here would be read as a recall difference when it is
+        # really a frame-set difference -- the exact confusion --keys-from exists
+        # to prevent.
+        sys.exit(f"--pred covers {len(frames)} of the {len(wanted)} frames in "
+                 f"{args.keys_from}. The runs are not over the same frames; "
+                 f"comparing them would attribute the gap to the wrong thing.")
     conditions = load_conditions(args.conditions) if args.conditions else None
     metrics = evaluate(frames, criterion, conditions=conditions)
     report(metrics)
