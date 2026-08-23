@@ -137,6 +137,14 @@ Two differences are unavoidable and must be stated with any number that comes ou
   measure. The honest sentence is "GLAD retains X on unseen video from the same
   campaign", not "GLAD generalises".
 
+**This has been run — EXP-005, 2026-08-23**, full entry in
+[experiments.md](experiments.md). Recall **0.895 → 0.688** at `centre@1x`, precision
+0.993 → 0.946, false alarms 188 → 1,316. The backlit control the section above demands was
+applied and **does not explain the gap**: dropping every backlit frame recovers 2.5 points
+of the 20.7, leaving 18.2 attributable to the video content. Neither does size composition
+— the medium (32-96 px) control bucket falls 0.956 → 0.658. Localisation is untouched
+(mean IoU 0.6805 against 0.6829), so the deficit is acquisition, not regression.
+
 ## Scoring a run
 
 Every row is keyed by an image path, so no run-specific flags are needed:
@@ -242,8 +250,19 @@ never approaches. Neither is expected to move a detection.
 
 ## Cost
 
-Measured on the i7-1255U, CPU only: **~4.8 fps**, so the full 28,337-frame test split is
-roughly 1.6 hours. Throughput is content-dependent, not fixed — the expensive motion path
+Measured on the i7-1255U, CPU only. Throughput is content-dependent, not fixed — the expensive motion path
 only runs when appearance detection fails, so an easy sequence runs faster than a hard
 one. The same asymmetry is why the paper's 146.5 FPS on an RTX 3070 sits so far above its
 own GMD-only figure of 41.3.
+
+| Run | Frames | fps | Wall-clock |
+| --- | --- | --- | --- |
+| EXP-004, ARD-MAV test 15 | 28,337 | 2.67 | 2.9 h |
+| EXP-005, ARD100 test 15 | 34,287 | 3.60 | 2.65 h |
+
+**A faster run is not good news.** EXP-005 is 35% faster per frame than EXP-004 on the same
+machine and the same code because it *detects less*: `global miss` rises 2.9% → 12.3%, and a
+pipeline that has lost lock and found nothing skips the expensive confirmation path. Read
+fps alongside the branch summary, never on its own. A short smoke run over the first frames
+of each video is a poor predictor for the same reason — it measured 4.81 fps against the
+full run's 3.60.

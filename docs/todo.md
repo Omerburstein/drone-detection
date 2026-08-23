@@ -18,124 +18,6 @@ dates, not priorities.
 - [ ] 2026-08-18 — [data] Derive the **lighting** condition axis for the ARD-MAV test split: `py -3.13 -m src.data.scene_stats --processed data/processed/ARD-MAV --split test`. It merges `lighting` and `relative_range` into `conditions.json`, after which `src.evaluate --conditions` breaks every run down along them with no further work. **Budget ~1 h wall-clock and run it alone** — it decodes all 28,337 JPEGs and measured ~100 frames/min while competing with a scoring pass, which is why it was abandoned twice on 2026-08-18. `relative_range` is already available indirectly from `gt_size` in a `--dump` CSV; `lighting` is the part that needs the pixels.
 ### M4b — generalisation: does GLAD hold up on video it has never seen?
 
-- [ ] 2026-08-18 — [M4b] [algo] **Get ARD100 and score GLAD on 10–15 of its videos that
-  are not in our local 60.** ARD100 is 100 videos / 202,467 frames from the same lab as
-  ARD-MAV; excluding by filename whatever overlaps our 60 leaves an unseen remainder
-  without needing to know the overlap in advance.
-
-  **Why ARD100 and not a more independent dataset.** The comparison anchor is EXP-004,
-  our own run — not a published table — so what matters is *protocol identity with
-  EXP-004*, and M4b must change exactly one thing: the video content. M4a and M2b both
-  showed that uncontrolled variables dominate the effect being measured — moving the IoU
-  threshold 0.50→0.40 shifted `small_mav` precision 23 points, and target/background
-  contrast alone swings small-target recall 19 points. Both exceed any plausible
-  generalisation drop. Six things must therefore be held fixed:
-
-  1. **1920×1080** — GLAD's constants are absolute pixels.
-  2. **Same annotation standard** — box-tightness convention alone can outweigh the
-     effect being measured (see the 23-point swing above).
-  3. **Multirotor targets.**
-  4. **Air-to-air moving camera** — otherwise motion compensation is exercised
-     differently.
-  5. **Full-rate contiguous video** — the motion branches difference consecutive frames.
-  6. **No new code path.**
-
-  ARD100 is ✓ on all six: same lab, same VOC XML, same Mavic2/M300 rigs, distributed as
-  `.mp4`, so `prepare_ardmav` runs unmodified and every hardcoded pixel constant stays
-  valid. It is also genuinely *harder* — the smallest average target of any published set
-  (0.01% of frame vs ARD-MAV's 0.02%), plus low light and abrupt camera movement — so a
-  drop is informative. Its weakness, same lab and likely the same capture campaign, is
-  **bounded and statable**: the number is optimistic, and "GLAD retains X on unseen video
-  from the same campaign" is still a true and useful sentence.
-
-  **Access — solved 2026-08-18, no Baidu and no email needed.** ARD100 is mirrored open
-  access on **Zenodo**, DOI `10.5281/zenodo.15870538`: one `ARD100.zip`, **27.35 GB**,
-  **CC-BY-4.0**, uploaded by Yu-Hsi Chen and endorsed by the YOLOMG author in issue #7.
-
-  ```bash
-  wget -c --tries=0 --waitretry=15 --read-timeout=60     "https://zenodo.org/records/15870538/files/ARD100.zip?download=1" -O ARD100.zip
-  ```
-
-  **DONE 2026-08-19 — downloaded, verified, extracted.** 27.35 GB pulled from Zenodo;
-  **MD5 `b52a5c8aae7b7661b57dde5490c56580` matched**. Archive audited before extraction:
-  105 members, ratio 1.00x, 0 traversal entries, 0 symlinks; the one bundled script is a
-  33-line cv2 frame dumper with no network or subprocess use. Nested `annotations.zip`
-  (202,411 VOC XML) equally clean.
-
-  **The M4b set is 15 videos** — ARD100's own *test* split intersected with "not in our
-  local 60", which happens to be exactly 15, matching EXP-004's count, so the comparison is
-  like-for-like and the selection is not cherry-picked:
-  `phantom03, 92, 93, 94, 95, 97, 102, 110, 113, 119, 133, 135, 136, 141, 144`.
-  (ARD100 has 100 videos; 51 overlap our 60, 49 are unseen, 15 of those are test-split.)
-
-  Extracted to `data/raw/ARD100/{videos,Annotations}` — 4.81 GB, 34,287 XML. Confirmed
-  **drop-in**: all 15 are 1920x1080 @30fps with VOC XML, class `Drone`, and the same
-  `phantomNN_0001` naming as ARD-MAV, so criterion 6 (no new code path) holds and
-  `prepare_ardmav` should run unmodified. Same `CAP_PROP_FRAME_COUNT` overstatement as
-  ARD-MAV (header exceeds XML by 0-30 frames per video). Full record in
-  `data/raw/ARD100/PROVENANCE.md`.
-
-  **DONE 2026-08-20 — the split is prepared and the CLIs take `--dataset ARD100`.**
-  `prepare_ardmav` did need a change after all, but not to the conversion: the dataset's
-  video list, split rule, provenance and (absent) scene grouping moved into
-  `src/data/datasets.py` as a `DatasetSpec`, so the conversion code itself does not branch
-  on the dataset — criterion 6 holds in the strong sense that both sides of the M4b
-  comparison run byte-identical extraction and inference code. `src.glad_detect` takes the
-  same flag. Prepared with `--no-images`: nothing on the GLAD path opens an extracted
-  frame, so the tree is 25 MB of labels instead of 30 GB of JPEGs (re-runnable without the
-  flag if a stills run ever needs them). Verify renders confirmed the boxes land on the
-  drone, so the one-based numbering matches ARD-MAV's.
-
-  **Conversion landed 2026-08-20 15:11: 34,287 frames / 33,517 boxes, ~2 h 45 m.**
-  Validation clean — no size mismatches, no out-of-range coords, no degenerate boxes,
-  `Drone` the only class. Per-video decode counts match the XML counts exactly on all 15,
-  so the header overstatement never survives decoding. 777 frames are genuine negatives
-  (XML with zero objects). The `lighting` and `relative_range` axes came free in the same
-  decode, which is what the equivalent ARD-MAV task above still owes an hour to.
-
-  **Two findings to carry into the run** (full tables in
-  [prepare_ardmav.md](prepare_ardmav.md)):
-
-  1. **29.7% of frames are `backlit`** — >2% of pixels blown, against ARD-MAV's 0.0–0.2%.
-     Exposure regime is part of "video content" so this is not a protocol break, but a
-     recall drop **cannot be read as a generalisation failure without controlling for
-     it**. `lighting` is a measured axis, so the control is free: score the non-backlit
-     frames separately and compare *that* against EXP-004 before concluding anything.
-  2. **This subset is not the record-small one the survey describes.** That claim covers
-     all 100 videos; these 15 are slightly less tiny than ARD-MAV's test 15 (61.5% vs
-     64.8% under 16 px). What they lose is the easy end — medium targets fall 7.0% → 2.2%,
-     so 97.8% sit under 32 px against ARD-MAV's 93.0%.
-
-  **Next: the run and the score.**
-
-  ```bash
-  py -3.13 -m src.glad_detect --dataset ARD100 --pad released --out runs/exp005_glad_ard100
-  py -3.13 -m src.evaluate --pred runs/exp005_glad_ard100/detections.jsonl \
-      --labels data/processed/ARD100/labels/test \
-      --conditions data/processed/ARD100/conditions.json \
-      --frame-size 1920 1080 --dump runs/exp005_glad_ard100/matches.csv \
-      --json-out runs/exp005_glad_ard100/metrics.json
-  ```
-
-  ~34,287 frames at the measured 4.8 fps is **roughly 2 hours** — background it. `--pad
-  released` and the IoU threshold must match EXP-004 exactly, and the IoU sweep is still
-  the dominant variable. **One thing the plan above cannot deliver: ARD100 publishes no
-  `ordinary`/`complex`/`small_mav` grouping**, so EXP-004's per-category rows have no
-  counterpart. Compare aggregate P/R/F1 and the size breakdown from the dump; do not
-  compare `relative_range` labels across the two, as that axis is scaled to each split's
-  own closest approach.
-
-  **Constraints on the run.** 10–15 unseen videos carry the same statistical weight as
-  EXP-004's 15, so the full 100 is unnecessary. If disk is tight, subsample by whole
-  videos at **native resolution** — never downscale, since shrinking targets destroys
-  exactly the small-object performance being measured — and never stride frames.
-
-  **If a frames-based dataset is ever substituted:** `src.glad_detect` reads `.mp4`
-  through `cv2.VideoCapture` only. The video/images handling in `src/data/sources.py` is
-  wired into `baseline_detect`, not into it, so a frame-sequence source needs an
-  ordered-file reader added to `run_video` first — modest, but a new code path to
-  validate before it can carry a comparison, and it breaks criterion 6 above.
-
 - [ ] 2026-08-18 — [M4b] [algo] **Stretch, only after ARD100 lands: FL-Drones** (14
   videos / 38,948 frames, air-to-air, via the TransVisDrone repo). Genuinely held out —
   GLAD published on ARD-MAV and NPS-Drones but never on FL-Drones — but its confounds are
@@ -173,6 +55,42 @@ dates, not priorities.
 - [ ] 2026-08-13 — [data] Store labels per-video (one file, one row per frame) instead of one `.txt` per frame, and expand to the per-image tree only on the training instance. 28,337 tiny files cost minutes per full read — measured: two `find` calls and the MANIFEST regeneration all blew a 120 s timeout — and the per-image layout is only actually required by the ultralytics dataloader at M7, which runs on the rented GPU, not here. Space is not the issue (NTFS keeps sub-700-byte files resident in the MFT); per-file syscall latency is. **Trigger:** label reading starts dominating the M5 re-scoring loop, or the 45 training videos push the tree past ~100k files.
 
 ## Done
+
+- [x] 2026-08-23 — [M4b] [algo] **Scored GLAD on ARD100's 15 unseen videos — M4b is
+  answered. Recorded as EXP-005 in [experiments.md](experiments.md).** 34,287 frames /
+  33,517 boxes, 2.65 h at 3.60 fps on CPU, byte-identical settings to EXP-004 so the one
+  variable is the video content.
+
+  **GLAD retains roughly three-quarters of its recall on unseen video from the same
+  campaign.** At `centre@1x` — recall **0.895 → 0.688**, precision 0.993 → 0.946, false
+  alarms **188 → 1,316** (0.0066 → 0.0384 per frame). At IoU@0.50, 0.834 / 0.606 / 0.702.
+  The honest sentence is *"retains 77% of its recall on unseen video from the same
+  campaign"*, never *"GLAD generalises"* — same lab, same rigs, likely the same capture
+  campaign, so this is the optimistic end of any generalisation estimate.
+
+  **Both confounds the plan warned about were checked, and neither explains the drop:**
+  1. **Backlighting** (29.7% of frames, against ARD-MAV's ~0%) — cutting every backlit
+     frame lifts recall only **2.5 points, 0.688 → 0.713**. An **18.2-point gap survives
+     the control**, so exposure is ~1/8 of the effect.
+  2. **Size composition** — recall falls in the **medium (32–96 px)** control bucket too,
+     0.956 → 0.658. A composition shift reweights buckets; it cannot move them.
+
+  **The mechanism is lock-loss, not localisation.** `global miss` rises 2.9% → 12.3% and
+  `local yolo` falls 88.4% → 66.6%: GLAD loses lock four times as often and re-acquires
+  worse. Meanwhile mean IoU on matched boxes is **0.6805 against 0.6829** — when it finds
+  a drone it places the box exactly as well as on its training campaign. Range collapses:
+  near 0.784 / mid 0.561 / **far 0.164**.
+
+  **What this hands M7:** the lever is acquisition — GAD failing to re-acquire after lock
+  loss, and at range — not a box-regression head and not a tighter matching rule.
+
+  Two smaller notes carried into the ledger: ARD100 publishes no
+  `ordinary`/`complex`/`small_mav` grouping, so EXP-004's headline cut has no counterpart
+  and the comparison is aggregate plus **size in pixels** (never `relative_range`, which is
+  scaled per split); and the motion module's 50-candidate cap
+  (`third_party/GLAD/MOD2.py:60,183`, which returns an *empty* list rather than degrading)
+  **fired 35 times** — never triggered on ARD-MAV, negligible here, but a silent recall
+  floor on genuinely cluttered data.
 
 - [x] 2026-08-23 — [M6] [deploy] **Added §4.2 to `docs/edge-budget.md`: the camera and the
   capture stage.** Answers "what FPS with a 12 MP Allied Vision 1800?" — and the honest

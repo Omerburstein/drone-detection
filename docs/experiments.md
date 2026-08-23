@@ -860,3 +860,136 @@ both are available — but the relative one is what a criterion argument should 
   for `dataset-agent`, not an architecture question.
 - **Not worth running:** anything on the near population. It is already zero under the
   criterion this project scores on.
+
+---
+
+## EXP-005 — GLAD on ARD100, video it has never seen (M4b)
+- **Date:** 2026-08-23
+- **Question:** How much of EXP-004's performance does GLAD keep on video it was not
+  trained on? EXP-004 is optimistic by construction; this is the run where the number
+  means something. **The one variable is the video content** — same weights, same code
+  path, same `--pad released`, same 1920×1080, same full-rate contiguous decode.
+- **Model / weights:** identical to EXP-004 — `third_party/GLAD/weights/{yolov5s_GLAD.pt,
+  yolov5s_GLAD-crop.pt, Net_best.pth}`, CPU port at `src/algo/glad/`. Nothing retrained,
+  nothing re-tuned.
+- **Data:** ARD100 test split ∩ "not in our local ARD-MAV 60" = **15 videos**, matching
+  EXP-004's count: `phantom03, 92, 93, 94, 95, 97, 102, 110, 113, 119, 133, 135, 136, 141,
+  144`. **34,287 frames / 33,517 boxes**, every frame of the original `.mp4`s. 777 frames
+  are genuine negatives.
+- **Hyperparameters:** all fixed at the released values, byte-identical to EXP-004.
+  Letterbox fill **black** (`--pad released`).
+- **Hardware:** i7-1255U CPU, 9,531 s (2.65 h), **3.60 fps**.
+- **Command:**
+  `py -3.13 -m src.glad_detect --dataset ARD100 --pad released --out runs/exp005_glad_ard100`
+  then `py -3.13 -m src.evaluate --pred runs/exp005_glad_ard100/detections.jsonl --labels
+  data/processed/ARD100/labels/test --conditions data/processed/ARD100/conditions.json
+  --frame-size 1920 1080 --match center --match-tol 1.0 --dump
+  runs/exp005_glad_ard100/matches_center.csv --json-out
+  runs/exp005_glad_ard100/metrics_center.json`
+- **Metrics:** `runs/exp005_glad_ard100/metrics_center.json` (centre@1×) and
+  `metrics_iou50.json` (IoU@0.50).
+
+  | | EXP-004 (ARD-MAV) | EXP-005 (ARD100) | Δ |
+  | --- | --- | --- | --- |
+  | **centre@1× P** | 0.9926 | **0.9460** | −0.047 |
+  | **centre@1× R** | 0.8946 | **0.6880** | **−0.207** |
+  | **centre@1× F1** | 0.9410 | **0.7966** | −0.144 |
+  | false alarms (n) | 188 | **1,316** | 7.0× |
+  | false alarms / frame | 0.0066 | **0.0384** | 5.8× |
+  | mean IoU (matched) | 0.6829 | 0.6805 | −0.002 |
+  | IoU@0.50 P / R / F1 | 0.856 / 0.771 / 0.811 | **0.834 / 0.606 / 0.702** | −0.165 R |
+
+  Recall by target size, centre@1× — **the drop is in every bucket, including the easiest**:
+
+  | bucket | EXP-004 n / R | EXP-005 n / R |
+  | --- | --- | --- |
+  | tiny (<16 px) | 18,265 / 0.8493 | 20,617 / **0.5997** |
+  | small (16–32) | 7,927 / 0.9835 | 12,157 / **0.8401** |
+  | medium (32–96) | 1,968 / 0.9563 | 730 / **0.6575** |
+  | large (>96 px) | 0 / n/a | 13 / 0.1538 |
+
+- **Result: GLAD retains roughly three-quarters of its recall on unseen video from the
+  same campaign — 0.895 → 0.688 — and its false-alarm rate rises almost sixfold.**
+  Precision holds up well (0.993 → 0.946); the loss is overwhelmingly missed detections,
+  not spurious ones.
+
+- **The backlit control, and it does not explain the gap.** 29.7% of these frames are
+  backlit against ARD-MAV's ~0%, so this was the confound that had to be cleared before
+  reading anything as generalisation. Cut from `matches_center.csv`:
+
+  | subset | frames | TP / FP / FN | P | R | F1 |
+  | --- | --- | --- | --- | --- | --- |
+  | all | 34,287 | 23,059 / 1,316 / 10,458 | 0.9460 | 0.6880 | 0.7966 |
+  | backlit | 10,195 | 6,107 / 362 / 3,622 | 0.9440 | 0.6277 | 0.7540 |
+  | **non-backlit** | 23,785 | 16,952 / 951 / 6,836 | 0.9469 | **0.7126** | 0.8132 |
+
+  Removing every backlit frame lifts recall by **2.5 points, from 0.688 to 0.713**, against
+  EXP-004's 0.895. **An 18.2-point gap survives the control**, so backlighting accounts for
+  roughly one-eighth of the drop and the remaining seven-eighths is the video content
+  itself. This is the entry's load-bearing number: without it the 20.7-point headline could
+  have been dismissed as an exposure artefact, and it cannot be.
+
+- **Nor is it size composition.** The obvious second explanation — ARD100's targets are
+  smaller — fails on its own evidence: recall falls in the **medium (32–96 px)** bucket
+  from 0.956 to 0.658. That is the easy control bucket, targets large enough that neither
+  tininess nor exposure is plausible, and it lost 30 points. A composition shift moves the
+  aggregate by reweighting buckets; it cannot move the buckets themselves.
+
+- **The mechanism is visible in the branch summary.** Same pipeline, same thresholds:
+
+  | branch | EXP-004 | EXP-005 |
+  | --- | --- | --- |
+  | `local yolo` | 88.4% | **66.6%** |
+  | `local miss` | 7.4% | **16.6%** |
+  | `global miss` | 2.9% | **12.3%** |
+  | `local mod` | 1.0% | 4.3% |
+
+  GLAD is a lock-and-track state machine, and on this data it **loses lock four times as
+  often** (2.9% → 12.3% unlocked-and-finding-nothing). Detections fall to 0.71 per frame
+  from EXP-004's 0.90, and 28.9% of frames come back empty. The 3.60 fps versus EXP-004's
+  2.67 fps is consistent: the expensive motion path runs on demand, and a pipeline that has
+  given up looking is a pipeline doing less work.
+
+- **Localisation is untouched.** Mean IoU on matched boxes is 0.6805 against 0.6829, and
+  the centre offset is 0.082 target sizes. **When GLAD finds a drone here it places the box
+  exactly as well as it does on its training campaign.** The failure is acquisition, not
+  regression — the same conclusion EXP-004's alarm analysis reached, now on unseen data.
+
+- **Range degrades hard.** near (<2×) 0.784, mid (2–3×) 0.561, far (3–5×) **0.164**. The
+  far bucket is only 1,046 frames, but losing 84% of targets there is the sharpest
+  single-axis collapse this project has measured.
+
+- **Caveats — what may and may not be said:**
+  - **"GLAD retains 77% of its recall on unseen video from the same campaign"** is the
+    honest sentence. *Not* "GLAD generalises" — ARD100 is the same lab, same rigs, likely
+    the same capture campaign, so this is the optimistic end of any generalisation estimate.
+  - **No per-category rows.** ARD100 publishes no `ordinary`/`complex`/`small_mav`
+    grouping, so EXP-004's headline cut has no counterpart. The comparison above is
+    aggregate plus size in pixels, which is why size is quoted in pixels and **not** via
+    `relative_range` — that axis is scaled to each split's own closest approach and the two
+    are not comparable across datasets.
+  - **Ignore the AP** (0.5226 @ IoU 0.50, mAP 0.2031). GLAD emits no confidence; every box
+    is recorded at 1.0, so a ranking metric over a constant score is degenerate. P, R and F1
+    are the only honest columns, exactly as in EXP-004.
+  - **Not comparable to any published ARD100 number.** YOLOMG reports on all 100 videos;
+    this is 15, chosen for non-overlap with our local 60.
+
+- **New observation: the motion module's 50-candidate cap fired 35 times.**
+  `third_party/GLAD/MOD2.py:60,183` returns an **empty** candidate list when a frame yields
+  more than 50 motion rects — it gives up rather than degrading. 35 frames of 34,287 is
+  negligible for these metrics, and it had never been triggered on ARD-MAV, so it is
+  recorded as observed rather than as an effect. It would matter on genuinely cluttered
+  data, where it is a silent recall floor.
+
+#### Next
+
+- **M4b is answered; the open question is now M7's target.** The deficit is acquisition at
+  range and after lock-loss, not localisation and not box quality. Fine-tuning from these
+  weights is the obvious lever, and the branch table says where the gain has to come from:
+  `global miss` at 12.3%, i.e. GAD failing to re-acquire.
+- **Worth running, free:** `--group video` on this dump. EXP-004's alarms concentrated in
+  two videos out of fifteen; if EXP-005's 1,316 do the same, the per-video variance already
+  flagged in the cross-cut work is the thing to model, not the aggregate.
+- **The backlit slice is not the follow-up it looks like.** It is controlled for above and
+  costs 2.5 points. Deriving ARD-MAV's own `lighting` axis (still open in `todo.md`) would
+  make the control symmetric, but it cannot change this entry's conclusion.
