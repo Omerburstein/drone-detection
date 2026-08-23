@@ -158,8 +158,10 @@ dates, not priorities.
 ### M5–M7
 
 - [ ] 2026-08-20 — [M5-1] [algo] **Re-score EXP-001/002/003 to pick up `far`, `loc_err` and `loc_by_size`.** The metrics landed on 2026-08-20 and were applied to EXP-004 only; the three baseline runs still carry pre-M5 JSON, so the ledger's resize-vs-tile comparison has no false-alarm rate on either side. No inference — all three `detections.jsonl` are persisted. **The cost is labels, not scoring:** ~25 min wall-clock per criterion for the per-frame label read, so six re-scorings is an evening, and doing it *after* the per-video label store below turns it into minutes. Expect the localisation error to be the interesting column: these runs box 1.7x too large, so a large offset beside their near-zero recall would separate "never found it" from "found it and drew the wrong box".
-- [ ] 2026-08-13 — [M6] [deploy] Write `docs/edge-budget.md`: target FPS, resolution, power and latency ceiling, and what "real-time" means for closing speed. Add FPS-on-target as a required ledger field, recommend a board (Jetson Orin Nano 8 GB, ~$250 — GLAD's published 23.6 FPS on the older Xavier NX is a floor), and plan the TensorRT export path. On-device benchmarking deferred until hardware exists. **Route this to `deploy-agent`** (added 2026-08-20) — the doc is the artifact that agent owns. Two inputs are the user's to supply and nothing can be sized without them: **assumed closing speed** and **how many frames of persistence** the design needs before it will act.
 - [ ] 2026-08-13 — [M7] [algo] [deploy] Fine-tune GLAD from its released weights on ARD-MAV's official training split, on a rented GPU (Kaggle 2×T4 free, or RunPod ~$1–2 for 3–4 h). Extract the 45 training videos **on the instance**, not locally. Score on the same held-out 15 videos; record whether it still fits the edge budget. Split across agents: `algo-agent` owns the training recipe and the ledger entry, `deploy-agent` owns provisioning, staging and the cost/wall-clock report.
+
+- [ ] 2026-08-23 — [deploy] **Profile `GladPipeline.step` per stage on idle hardware.** `time.perf_counter()` around GAD, LAD, `MOD2_global`, `MOD2_local` and the classifier gate in `src/algo/glad/pipeline.py`, over ~2,000 contiguous frames. [edge-budget.md §2.3](edge-budget.md) currently *estimates* the split by solving `0.884*T_LAD + 0.116*(T_LAD + T_MOD) = 374 ms` and infers `T_MOD ~ 1.5 s`; that is arithmetic, not a profile, and it is the one number the whole edge budget rests on. **Could not be taken on 2026-08-23** — `exp005_glad_ard100` was occupying the CPU and a contended timing run violates the benchmarking rules in `deploy-agent`'s own charter. Cheap: minutes, no GPU. Also worth emitting p50/p95/p99 and the worst video rather than a run mean.
+- [ ] 2026-08-23 — [deploy] **Export the two GLAD `yolov5s` checkpoints to ONNX and re-run through ONNX Runtime / OpenVINO on this host.** [edge-budget.md §3](edge-budget.md) item 1: expected 1.5-3x on the stage that dominates 88.4% of frames, and the ONNX artifact is the same one a Jetson TensorRT build would start from, so the work is not throwaway. **Not free of accuracy risk despite being fp32->fp32** — the NMS implementation changes — so it needs an `src.evaluate` re-score at the same criterion before the number is carried anywhere. Blocked on nothing.
 
 ### Backlog — no mission, revisit when the trigger fires
 
@@ -167,6 +169,56 @@ dates, not priorities.
 - [ ] 2026-08-13 — [data] Store labels per-video (one file, one row per frame) instead of one `.txt` per frame, and expand to the per-image tree only on the training instance. 28,337 tiny files cost minutes per full read — measured: two `find` calls and the MANIFEST regeneration all blew a 120 s timeout — and the per-image layout is only actually required by the ultralytics dataloader at M7, which runs on the rented GPU, not here. Space is not the issue (NTFS keeps sub-700-byte files resident in the MFT); per-file syscall latency is. **Trigger:** label reading starts dominating the M5 re-scoring loop, or the 45 training videos push the tree past ~100k files.
 
 ## Done
+
+- [x] 2026-08-23 — [M6] [deploy] **Wrote `docs/edge-budget.md`**, answering "this model is
+  very slow, is there a faster one I can deploy?" — and the answer is **no, and you do not
+  need one.** The slowness decomposes almost entirely onto the **host**: GLAD is published
+  at 23.6 FPS on a 2019 Jetson Xavier NX and 146.5 FPS on an RTX 3070 against our **2.67
+  fps** sustained (EXP-004, 28,337 frames, fp32 PyTorch, CPU-only laptop) — **~9x and ~55x,
+  closed by a $249 board, not by research.** Protocol contributes ~1x (GLAD has no tile or
+  resize switch, and striding is incoherent for a pipeline that differences consecutive
+  frames) and the model ~1x (`yolov5s` at 640 is already the cheap end of what works).
+
+  **The premise inverts on the measured numbers.** GLAD is the *second-fastest* of the five
+  configurations this project has timed and carries 7-70x the recall of every one of them;
+  the two fastest score exactly **zero** tiny-target recall. There is no speed/accuracy
+  trade available because the fast end of the curve is empty.
+
+  **Two premises in the prompt were corrected in the doc.** The 11 fps / 0.72 fps pair in
+  `CLAUDE.md` is `src.baseline_detect` with **`yolov8n` at 720p** — a different CLI, model
+  and resolution, not GLAD's number. And GLAD's own two figures disagree: **4.8 fps spot vs
+  2.67 fps sustained**, with `exp005` observed at 3.16-3.92 — the mean-vs-worst-case rule
+  applying to our own measurement, not just to vendors'.
+
+  Recommendation: **Jetson Orin Nano Super 8 GB (~$249, 67 TOPS, 102 GB/s, 15 W)**, GLAD
+  unchanged, `.pt` -> ONNX -> **TensorRT 10 FP16**, stopping short of INT8 (1.2x for a
+  3-7 point mAP risk landing in exactly the smallest size bands, where 18,265 of ARD-MAV's
+  28,160 targets live). Confirmed a **toolchain break** that makes this a port and not an
+  export: the released `detector*_trt.py` deserialises **TensorRT 7.2** engines, and TRT
+  engines do not load across JetPack versions — JetPack 6 ships TRT 10.x with a changed
+  API, so the engines and the `libmyplugins.so` plugin must be rebuilt. Six explicit
+  change-my-mind triggers recorded, including **multi-intruder, which architecturally
+  disqualifies GLAD** (single target by construction) and promotes YOLOMG regardless of
+  speed.
+
+  Alternatives surveyed with board/precision/resolution/batch/content on every figure and
+  the non-transferable ones marked: YOLOMG (133/35 FPS but on an **RTX 2080Ti**, different
+  dataset *and* split from EXP-004, GPL-3.0, no pretrained weights), A2A-YOLO (15 FPS on
+  RK3588 but Det-Fly's 4K large targets, appearance-only), TransVisDrone, and plain
+  YOLO26n/YOLO11n at 3.80 ms INT8 on Orin — which is the "fast model" the question reaches
+  for and which EXP-001-003 already measured at **AP@0.5 0.006-0.025**.
+
+  **The whole document is marked as assumption where it is one.** Closing speed and
+  persistence frames remain **the user's calls and are still unsupplied**, so §1 is worked
+  with invented values and labelled as an illustration; §8 separates measured / published-
+  under-their-conditions / assumed line by line. No edge hardware has been benchmarked and
+  the doc says so at the top. Every accuracy claim about a swapped or quantised model is
+  flagged unproven until re-scored through `src.evaluate` at the same criterion — that
+  verdict is `algo-agent`'s property, not `deploy-agent`'s.
+
+  **No tests: docs-only change, no behaviour and no parameters under `src/`.** Two
+  follow-ups filed under Open — the per-stage profile (which could not be taken because
+  `exp005` was holding the CPU) and the ONNX/OpenVINO export.
 
 - [x] 2026-08-20 — [meta] [deploy] **Added `deploy-agent`, a third boundary beside data
   and model.** `.claude/agents/deploy-agent.md`, registered in `CLAUDE.md`. M6 and M7 were
