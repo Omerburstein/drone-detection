@@ -63,12 +63,13 @@ See [§7](#7-export-and-quantisation-is-a-protocol-change).
 
 **Derived, never inherited.** "30 FPS" is not a requirement, it is a familiar number.
 
-### The two unknowns
+### The three unknowns
 
 | Input | Status | Who decides |
 | --- | --- | --- |
 | **Closing speed** | ⚠️ **UNKNOWN — not measured, not specified** | the user |
 | **Persistence frames** before the system acts | ⚠️ **UNKNOWN — not measured, not specified** | the user |
+| **Is the sensor cued or searching?** | ⚠️ **UNKNOWN** — added when the camera question landed; see [§4.2.8](#428-the-lens-is-a-competing-answer-and-it-is-cheaper) | the user |
 
 Everything else in this section is downstream of those two. Until they are supplied, no
 board can be *justified* — only, as in [§6](#6-recommendation), recommended on the
@@ -126,6 +127,13 @@ detection range collapses. This project's founding trap
 stylistic — GLAD's motion branches difference against the previous frame, so `src.glad_detect`
 has no `--stride` by deliberate design. **Frame striding is not available as a speed lever
 on this pipeline.**
+
+> **This table assumes a 1920-px sensor. [§4.2.7](#427-the-upside-stated-fairly--this-is-a-real-win)
+> redoes it for a 12 MP Alvium 1800 (4024 px, 0.014911°/px), where first-detectable range
+> moves from 55 m to 115 m and the engagement window from 1.4 s to 2.9 s — and
+> [§4.2.4](#424-what-12-mp-does-to-glad--the-crux) prices what that costs in frame rate.
+> The 60 ms pipeline overhead assumed above is also **too low for a 12 MP sensor**: capture
+> alone is ~30–35 ms there, so read it as ~80–90 ms in any 12 MP row.**
 
 ---
 
@@ -358,6 +366,320 @@ applying 1.11× (GPU path) and ~1.3–1.5× (motion path):
 plausible binding constraint at 1080p; that is the case for this board, and it is a good
 one. Frame rate is not.
 
+### 4.2 The camera — Allied Vision Alvium 1800 at 12 MP
+
+**The document had no camera model at all until now, and that was a real gap: capture is
+the first term in the end-to-end chain [§1](#1-the-requirement) defines, and at 12 MP it
+stops being a rounding error.**
+
+#### 4.2.1 Which camera, exactly — the answer differs by variant
+
+"12 MP Allied Vision 1800" resolves to **four** Alvium 1800 products, and they are not
+interchangeable. Vendor datasheet figures, at full resolution:
+
+| Variant | Sensor | Resolution | MP | Shutter | Interface | **Max fps @ full res** | Sensor depth | Power |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **1800 U-1240** | Sony IMX226 | 4024 × 3036 | 12.22 | Rolling (+ global *reset*) | USB3 Vision | **29** | 8 / 10-bit | ~2.5 W |
+| **1800 C-1240** | Sony IMX226 | 4024 × 3032 | 12.20 | Rolling (+ global *reset*) | **MIPI CSI-2, 4 lanes** | **41** | 10-bit | 2.9 W |
+| **1800 U-1236** | Sony IMX304 | 4112 × 3008 | 12.37 | **Global** | USB3 Vision | **22–23** | 12-bit | — |
+| **1800 C-1236** | Sony IMX304 | 4112 × 3008 | 12.37 | **Global** | **MIPI CSI-2, 4 lanes** | **22** | 12-bit | 2.6 W |
+
+> **Budgeted below: the `1800 C-1240` (IMX226, CSI-2, 41 fps).** It is the fastest of the
+> four and therefore the honest worst case for compute. **[§4.2.5](#425-rolling-vs-global-shutter--the-point-that-outranks-frame-rate)
+> argues the C-1236 is probably the better buy anyway, for a reason that is not about
+> speed.**
+
+#### 4.2.2 The sensor ceiling, and where the link actually caps
+
+**CSI-2 (C-1240) — the sensor is the limit, not the link.**
+
+```
+4024 x 3032              = 12,200,768 px  x 10 bit = 122.0 Mbit/frame
+122.0 Mbit x 41 fps      = 5.00 Gbit/s
+Orin NX 4-lane D-PHY 2.1 = 4 x 2.5        = 10.0 Gbit/s
+```
+
+**50% link utilisation at the sensor's maximum** — two-times headroom. The 41 fps is a
+sensor readout limit; CSI-2 is nowhere near binding.
+
+**USB3 (U-1240) — the link caps first, and the bit depth chooses the frame rate.**
+USB3 Vision sustains roughly **350–400 MB/s** of payload in practice, not the 5 Gbit/s the
+PHY advertises:
+
+| Pixel format | Bytes/frame | fps at 350 MB/s | Published |
+| --- | --- | --- | --- |
+| Mono8 / Bayer8 | 12.22 MB | **28.6** | **29** ✅ |
+| RAW10 (packed) | 15.27 MB | **22.9** | — |
+
+**The published 29 fps is the USB3 bandwidth cap at 8 bit, not a sensor figure.** Asking
+for 10-bit over USB3 costs ~21% of the frame rate. This is precisely why a frame-rate
+number without its pixel format and bit depth is incomplete.
+
+**IMX304 (the 1236 pair) is 22 fps on *both* interfaces**, so there the sensor binds and
+the interface choice carries no frame-rate consequence.
+
+#### 4.2.3 Can the Orin NX ingest it? — yes, and this path is *supported*
+
+| Question | Answer | Status |
+| --- | --- | --- |
+| CSI-2 lanes on Orin NX | Two 4-lane **or** four 2-lane D-PHY groups; 2.5 Gbit/s per lane, **20 Gbit/s aggregate** | ✅ vendor datasheet |
+| Lanes the Alvium driver needs | **4 lanes only — no 2-lane fallback** | ⚠️ carrier must expose a 4-lane connector |
+| ISP throughput | **1.75 GPixel/s**; raw Bayer sensors up to **24 MP** | ✅ |
+| ISP load at 12.2 MP × 41 fps | 500 MPixel/s = **29% of capacity** | ✅ comfortable |
+| Driver | `alliedvision/alvium-jetson-driver-release` — **JetPack 6.2**, `.deb` via APT, **all Orin modules incl. Orin NX**, V4L2 + Vimba X | ✅ |
+
+> **Worth noting against the rest of this document:** the ingest side is the *one* part of
+> this deployment that is a vendor-supported, currently-maintained path. That is the
+> opposite of [§4's toolchain break](#-toolchain-break--load-bearing-and-it-is-not-an-export),
+> where GLAD's TensorRT 7.2 entry point is dead and must be rebuilt. **The camera is not
+> the risk here. The detector runtime is.**
+
+**Does USB3 ingest cost CPU that GLAD needs? Yes — and it lands on the wrong branch.**
+USB3 Vision payload assembly and memcpy happen in the host driver and SDK, typically
+**15–30% of a core** at 350 MB/s plus interrupt load. GLAD's expensive branch — KLT,
+pyramidal Lucas–Kanade, RANSAC homography, warp, morphology — is **CPU-bound OpenCV**. USB3
+therefore taxes exactly the resource the bottleneck runs on, while CSI-2 DMAs into memory
+at near-zero CPU. **[ASSUMED — vendor-typical figures, not measured on this rig.]**
+
+**Capture latency is now a first-order term.** At 41 fps the rolling readout occupies
+~24 ms of every frame period. Add CSI DMA, debayer and grayscale conversion (~8 ms at
+12.2 MP) and **capture alone is ~30–35 ms before the detector starts** — comparable to the
+entire inference. §1's illustration **[ASSUMES] 60 ms** of non-detection pipeline; at 12 MP
+that is optimistic and should be read as **~80–90 ms**.
+
+#### 4.2.4 What 12 MP does to GLAD — the crux
+
+**Every number in [experiments.md](experiments.md), and every projection elsewhere in this
+document, assumes 1920×1080.** 4024×3032 is **5.88× the pixels**. Decomposed against the
+branch distribution from [§2.3](#23-inside-glad--why-the-state-machine-is-not-the-problem):
+
+| Branch | Share | Scales with sensor resolution? | Why |
+| --- | --- | --- | --- |
+| **`local yolo` (LAD only)** | **88.4%** | **Mostly not** | The search region is a fixed **320×320 window in sensor pixels**, upscaled to 640. Its inference cost is `O(crop)` — independent of frame size. |
+| — but its per-frame overhead | | **Yes, 5.88×** | Every frame must still be captured, debayered, converted to grayscale and **stored as the previous frame** for possible differencing. That is full-frame work on every frame, whether or not the motion branch fires. |
+| **Motion path** (`local mod`, `local miss`, `global miss`, `global mod`) | **11.6%** | **Yes, ~5.88× — and this was already the bottleneck** | KLT grid, pyramidal LK, RANSAC homography, full-frame warp, absdiff, median blur, 3× morphological open/close. All `O(pixels)`. |
+| **`global yolo` (GAD)** | 0.1% | Constant cost, **worse result** | A 640 letterbox of a 4024-px frame is a **6.3× reduction**, against 3× at 1080p. |
+
+> **The founding trap, doubled.** [CLAUDE.md](../CLAUDE.md)'s rule is that a 640 letterbox
+> of a 4K frame shrinks a 20 px drone to ~3 px. At 1080p GAD already reduces 3×; at 12 MP
+> it reduces **6.3×**, so a target arriving at 21 px reaches the global detector at
+> **3.3 px** — below the stride-8 P3 cell, which is the structural reason GAD's published
+> recall is 0.17 ([glad-model.md §2](glad-model.md)). **GAD gets strictly worse at 12 MP,
+> and GAD is the acquisition branch** — the one EXP-004 already identified as the real
+> ceiling. That is not a cost you pay; it is a capability you lose.
+
+**And the pixel constants break.** [glad-model.md §6](glad-model.md) item 4 already records
+that `area 30–3000`, `a = 160`, `dist_ref = 200`, blur kernel 11 and `local_num == 30` are
+**absolute pixels tuned for 1920×1080**, and that anything at another resolution *silently
+mis-filters*. It is flagged there as a threat to M4b. **At 12 MP every one of them is wrong
+by 2.1× linear / 5.9× in area, and normalising by frame diagonal stops being advisable and
+becomes mandatory.**
+
+##### Projected frame rate **[EXTRAPOLATED — no board and no camera has been benchmarked]**
+
+Model: take §4.1's Orin NX 16 GB rows, hold the LAD inference constant (crop-sized, hence
+resolution-independent), and scale the full-frame terms by 5.88×. Same conditions as §4.1 —
+**TensorRT FP16, batch 1, MAX power, pre/post-processing excluded from the vendor anchor.**
+
+| Row | Orin NX @ 1080p (§4.1) | **@ 12 MP, naive full-frame** | **@ 12 MP, hybrid (§4.2.6)** |
+| --- | --- | --- | --- |
+| **Modal frame** (88.4%, LAD only) | ~65 fps | **~29 fps** | ~34 fps |
+| **Motion path firing** (11.6%) | **14–19 fps** | ⚠️ **2.4–3.2 fps** | ~7–9 fps |
+| **Sustained mean over content** | ~50–55 fps | ⚠️ **~13–14 fps** | **~25 fps** |
+
+> ### ⚠️ The hard-scene row fails.
+>
+> **2.4–3.2 fps in the scenes where the motion path fires.** Against §1's illustration
+> (40 m/s closing, N = 3 persistence, and now ~85 ms of capture-and-pipeline overhead),
+> hard-scene detection latency becomes `3/3 + 0.085 ≈ 1.09 s`, during which the target
+> closes **~44 m**. §4.2.7 puts the whole engagement at 12 MP at ~2.9 s, so **the hard
+> scene spends 38% of the entire engagement in latency alone** — at exactly the moment
+> detection mattered.
+>
+> Naive full-resolution 12 MP into GLAD is **not viable**. Not because 13 fps mean is slow,
+> but because the mean is not the number: the pipeline degrades ~4.5× precisely when the
+> scene is hard, and 5.88× more pixels multiplies the degradation rather than the average.
+
+#### 4.2.5 Rolling vs global shutter — the point that outranks frame rate
+
+**This probably matters more than any figure above, and it is not a speed argument.**
+
+The IMX226 variants (**U/C-1240**) are **rolling shutter**; the IMX304 variants
+(**U/C-1236**) are **global shutter**. The camera is going on a *flying* drone.
+
+**Rolling shutter breaks the motion module's core assumption.** GLAD compensates ego-motion
+by fitting a **RANSAC homography** between consecutive frames and warping the previous frame
+onto the current one. A homography is a *global* 2D projective transform — it assumes every
+pixel in the frame was captured at the same instant. Under rolling shutter with fast camera
+rotation, rows are captured at different times and the true warp is **not** a homography.
+**The residual after warping is exactly what GLAD thresholds as "motion"**, so rolling
+shutter injects structured false motion directly into the branch that produces the
+detections — most strongly during rapid attitude change, which is precisely when an
+interceptor manoeuvres.
+
+The "Global Reset Shutter" mode the 1240 advertises does **not** rescue this: it starts all
+rows together but ends them sequentially, so it needs strobed illumination and is useless
+in daylight.
+
+**The honest counter-argument, from our own data.** ARD-MAV and ARD100 were shot on DJI
+Mavic 2 / M300 gimbal cameras, which are **rolling shutter** — so EXP-004's 0.81 F1 was
+achieved on rolling-shutter footage from a moving platform. Rolling shutter is demonstrably
+workable here. **But a gimbal-stabilised Mavic is a far gentler platform than a hard-mounted
+camera on an interceptor**, and nothing in this project measures the hard-mounted case.
+Read it as: *proven on a gimbal, unproven hard-mounted.*
+
+| | C-1240 (rolling) | C-1236 (global) |
+| --- | --- | --- |
+| Max fps @ 12 MP | **41** | 22 |
+| Homography assumption | ⚠️ violated under rotation | ✅ holds |
+| Sensor format | 1/1.7" | **1.1"** — far larger pixels, better low light |
+| Relevance to M2b's finding | — | ✅ M2b measured **19 points of small-target recall lost** at <5 grey levels of target/background separation; a 1.1" sensor attacks that directly |
+
+**If the airframe is hard-mounted or manoeuvres hard, take the C-1236 and its 22 fps.** The
+pipeline's sustained projection is ~13–25 fps anyway
+([§4.2.4](#projected-frame-rate-extrapolated--no-board-and-no-camera-has-been-benchmarked)),
+so the sensor's 41 fps was never going to be reached — **the C-1240 is buying frame rate the
+compute cannot consume, at the cost of an assumption the algorithm depends on.**
+
+#### 4.2.6 What to actually do with the pixels
+
+Three ways to spend a 12 MP sensor, and only one of them is good:
+
+**(a) Feed GLAD the full 12 MP.** ❌ Fails — see §4.2.4. It also degrades GAD, the
+acquisition branch, by widening its letterbox reduction to 6.3×.
+
+**(b) 2×2 bin to 2012×1516.** ⚠️ Throws away the entire resolution benefit — binned angular
+resolution is 0.0298°/px against 1080p's 0.0313°/px, i.e. **the camera you already
+assumed**. Not pointless, but the benefit is a different one from the one being bought:
+binning sums four photosites for ~4× signal and ~2× SNR, which attacks **M2b's measured
+19-point small-target recall loss under low target/background contrast**. Buy binning for
+SNR, never for resolution.
+
+**(c) Full readout; native-resolution crop for LAD, downsampled copy for the motion module.**
+✅ **This is the recommendation.** It exploits the structure §2.3 already established:
+
+- **88.4% of frames** run LAD on a **320×320 native-resolution crop** — the target arrives
+  at full 12 MP angular resolution, **2.1× more pixels on target than 1080p can ever give**,
+  at zero extra inference cost, because the crop is a fixed pixel size.
+- **11.6% of frames** run the motion module on a **2×2 binned / downsampled copy**, so the
+  `O(pixels)` branch never pays the 5.88×.
+- **GAD** runs on that same downsampled copy, restoring its letterbox reduction to the 3× it
+  was tuned at instead of 6.3×.
+
+Projected **~25 fps sustained, ~7–9 fps hard scene** — the third column of §4.2.4's table.
+Still degraded, still to be checked against a real requirement, but no longer failing.
+
+> ### ⚠️ Option (c) is a protocol change, not a configuration.
+>
+> `yolov5s_GLAD-crop.pt` was trained on **320×320 crops taken from 1080p frames**. A native
+> 320×320 crop of a 12 MP frame holds a target ~2.1× larger in pixels. **That is an
+> input-scale change, and by this project's own rule ([CLAUDE.md](../CLAUDE.md), and §7
+> here) it means the detector is no longer the detector that was measured.** Expect it to
+> need a **retrain**, not merely a re-score — and even the re-score verdict is
+> `algo-agent`'s, not this document's. The same applies to every absolute-pixel constant in
+> `MOD2.py`.
+>
+> **No accuracy number in this repository may be read as applying to a 12 MP build.**
+
+**A fourth option exists and should not be dismissed: sensor-side ROI readout.** Alvium
+supports windowed readout, and a smaller ROI reads out *faster*. Running the local regime as
+a sensor-side 320×320 ROI would cut transfer and capture latency to almost nothing. It is
+blocked on one unmeasured quantity — **ROI mode-switch latency**, typically several frames,
+paid on every regime transition. EXP-004 is encouraging here: acquisition happened only
+**42 times in 28,337 frames**, so the regime is stable in practice. Harder content could
+thrash it. Filed as a todo.
+
+#### 4.2.7 The upside, stated fairly — this is a real win
+
+12 MP is not only cost. At the **same FOV**, 4024 px against 1920 px is **2.096× finer
+linearly**, and that lands squarely on the project's hardest failure mode.
+
+**[ASSUMED]** 0.3 m airframe, ~60° horizontal FOV. 1080p: 0.03125°/px. C-1240:
+**0.014911°/px**.
+
+| Apparent size | Range @ 1080p | **Range @ 12 MP** | What EXP-004 measures at that size |
+| --- | --- | --- | --- |
+| 10 px | 55.0 m | **115.3 m** | `tiny` — recall 0.849 (centre@1×) |
+| 16 px | 34.4 m | **72.0 m** | boundary of the 0.984 band |
+| 20 px | 27.5 m | **57.6 m** | `small` — recall **0.984** |
+| 30 px | 18.3 m | **38.4 m** | `small` — recall 0.984 |
+
+> **The headline: 12 MP moves the 0.98-recall boundary from ~34 m out to ~72 m**, and
+> first-detectable from 55 m to 115 m. A target at 55 m is a marginal 10 px at 1080p and a
+> comfortable 21 px at 12 MP. **18,265 of ARD-MAV's 28,160 targets are under 16 px** — this
+> sensor moves a large part of that population out of the band where the detector is
+> weakest, which is a more direct attack on the project's central problem than any
+> architecture change currently on the table.
+
+Time-to-contact at the **[ASSUMED]** 40 m/s closing speed: **1.4 s at 1080p, 2.9 s at
+12 MP.** The sensor roughly **doubles the reaction time available**, which is what partly
+pays for the latency it costs.
+
+**The trade, honestly:**
+
+| | 1080p | 12 MP naive | **12 MP hybrid (c)** |
+| --- | --- | --- | --- |
+| Sustained fps (Orin NX) | ~50–55 | ~13–14 | ~25 |
+| Hard-scene fps | 14–19 | ⚠️ 2.4–3.2 | ~7–9 |
+| First-detectable range | 55 m | **115 m** | **115 m** |
+| Engagement window | 1.4 s | **2.9 s** | **2.9 s** |
+| Hard-scene latency ÷ window | 19% | ⚠️ **38%** | **~15%** ✅ |
+
+**Option (c) is the only column that improves both the range and the latency ratio.**
+
+**Whether the trade is worth taking is `algo-agent`'s call, not this document's** — it hinges
+on accuracy at a changed input scale, which is unmeasured. The pixel arithmetic above is the
+part that belongs here.
+
+#### 4.2.8 The lens is a competing answer, and it is cheaper
+
+The same angular resolution as 12 MP @ 60° is obtainable from **1080p with a 28.6° lens**
+(60 ÷ 2.096): identical °/px, **5.88× less compute**, no protocol change, no new sensor.
+What it costs is **field of view — 2.1× narrower, so 4.4× less solid angle searched.**
+
+**Which is right depends on a question nobody has answered:**
+
+> ### ⚠️ Third unknown, alongside closing speed and persistence frames
+>
+> **Is the sensor cued or searching?**
+>
+> - **Cued** (radar / RF / GCS handoff supplies a bearing) → **a narrow lens on 1080p is
+>   strictly better**: same pixels on target, a fraction of the compute, no retrain, no new
+>   camera. 12 MP would be buying FOV that is not being used.
+> - **Searching blind** → the FOV *is* the requirement, and 12 MP is the way to have both
+>   FOV and pixels on target. The compute cost is then unavoidable, and option (c) is how to
+>   pay it.
+>
+> **This is the user's call.** It changes the recommendation completely and it is cheap to
+> answer.
+
+#### 4.2.9 Camera recommendation
+
+1. **Answer the cued-vs-searching question first** (§4.2.8). If cued, buy a narrower lens
+   and keep 1080p — cheaper on every axis, and no retrain.
+2. **If searching: take a CSI-2 variant, not USB3.** 41 vs 29 fps, DMA instead of a 15–30%
+   CPU tax on the branch that is CPU-bound, lower capture latency, less cabling on an
+   airframe. Requires a carrier exposing a **4-lane** CSI connector — the driver has no
+   2-lane mode.
+3. **Prefer the global-shutter C-1236 over the C-1240** unless the camera is gimballed. Its
+   22 fps sits above the ~13–25 fps the pipeline can sustain anyway, so the C-1240's extra
+   frame rate is unusable, while its rolling shutter violates the homography assumption
+   GLAD's motion compensation is built on. The 1.1" sensor is a second, independent win
+   against M2b's contrast finding.
+4. **Never feed GLAD the full 12 MP.** Use option (c): native crop for LAD, downsampled copy
+   for the motion module and GAD.
+5. **Budget a retrain, not a re-score.** Option (c) changes LAD's input scale by 2.1× and
+   invalidates every absolute-pixel constant in `MOD2.py`. That is M7 work, and the accuracy
+   verdict is `algo-agent`'s.
+6. **Measure capture latency before anything else.** It is ~30–35 ms at 12 MP — comparable
+   to the whole inference — and §1's 60 ms pipeline assumption understates it.
+
+**What would change this:** a measured ROI mode-switch latency under ~2 frames would make
+sensor-side windowing beat option (c); a gimballed mount removes the global-shutter argument
+and makes the C-1240 the pick; and a cued sensor removes the case for 12 MP altogether.
+
+---
+
 **What would change the board recommendation** — see [§6](#6-recommendation).
 
 ---
@@ -434,6 +756,9 @@ non-transferable** and is marked so.
 | Sustained power budget **below ~10 W** | RK3588 / A2A-YOLO class becomes relevant, at a large and currently unquantified small-target cost |
 | FP16 re-score shows loss in the smallest size band | Drop to **TensorRT FP32** — still ~2× over on-board PyTorch — rather than chasing INT8 |
 | Commercial use case | Flag licensing: GLAD is **MIT** (fine); **YOLOMG is GPL-3.0**; Drone-vs-Bird data is DUA-gated and non-commercial |
+| **Sensor is cued rather than searching** | **Drop 12 MP.** A 28.6° lens on 1080p gives identical pixels-on-target for 5.88× less compute and no retrain ([§4.2.8](#428-the-lens-is-a-competing-answer-and-it-is-cheaper)) |
+| **Camera is hard-mounted / manoeuvres hard** | **Global-shutter C-1236 over C-1240**, accepting 22 fps — rolling shutter violates the homography assumption GLAD's ego-motion compensation depends on ([§4.2.5](#425-rolling-vs-global-shutter--the-point-that-outranks-frame-rate)) |
+| **12 MP is fixed by procurement** | Never feed it whole. Option (c) — native crop for LAD, downsampled copy for motion and GAD — and **budget a retrain, not a re-score** ([§4.2.6](#426-what-to-actually-do-with-the-pixels)) |
 
 ---
 
@@ -501,6 +826,12 @@ an incomplete entry.
 | Orin Nano Super $249, 67 TOPS, 102 GB/s | vendor spec | ✅ spec, not performance |
 | Orin NX 16 GB ~$600–900, 100 TOPS, 102.4 GB/s, 1024 CUDA / 8× A78AE | vendor spec | ✅ spec, not performance |
 | TRT 7.2 engines do not load on JetPack 6 / TRT 10 | NVIDIA forums, ProventusNova | ✅ well established |
+| **Alvium 1800 U-1240: 4024×3036, IMX226 rolling, USB3, 29 fps, 8/10-bit** | vendor datasheet, full res; the 29 fps is the **USB3 payload cap at 8-bit**, ~23 fps at RAW10 | ✅ spec |
+| **Alvium 1800 C-1240: 4024×3032, IMX226 rolling, CSI-2 4-lane, 41 fps, 10-bit, 2.9 W** | vendor datasheet, full res; 5.00 Gbit/s = **50% of a 4-lane link** | ✅ spec |
+| **Alvium 1800 U-1236 / C-1236: 4112×3008, IMX304 global shutter, 22–23 fps, 12-bit, 2.6 W** | vendor datasheet; sensor-limited, so identical on both interfaces | ✅ spec |
+| Orin NX CSI-2: two 4-lane or four 2-lane D-PHY, 2.5 Gbit/s per lane, 20 Gbit/s aggregate | NVIDIA datasheet | ✅ spec |
+| Orin NX ISP 1.75 GPixel/s; raw Bayer sensors to 24 MP | NVIDIA datasheet | ✅ spec |
+| Alvium Jetson driver: JetPack 6.2, `.deb`, all Orin modules, V4L2 + Vimba X, **4 lanes only** | `alliedvision/alvium-jetson-driver-release` | ✅ supported path |
 
 ### ⚠️ Assumed — invented for illustration, must be replaced
 
@@ -514,6 +845,15 @@ an incomplete entry.
 | Power mode | 15 W | thermal test on the airframe |
 | Orin Nano ÷ Xavier NX throughput | 2× (bandwidth) rather than 3.2× (TOPS) | on-device benchmark |
 | Orin NX 16 GB ÷ Orin Nano Super, GLAD end to end | ~1.15× overall — 1.11× GPU path, ~1.3–1.5× CPU motion path | on-device benchmark of both |
+| **Which Alvium variant** | **C-1240 budgeted** (fastest ⇒ worst case for compute); §4.2.5 argues for C-1236 | **the user** |
+| **Is the sensor cued or searching?** | ⚠️ **UNKNOWN — third unresolved input.** Decides 12 MP vs a narrow lens on 1080p outright (§4.2.8) | **the user** |
+| Camera mount | hard-mounted assumed; a gimbal removes the rolling-shutter objection | the airframe design |
+| USB3 Vision sustained payload | 350–400 MB/s | measurement on the board |
+| USB3 ingest CPU cost | 15–30% of a core | measurement on the board |
+| Capture + debayer + grayscale at 12.2 MP | ~30–35 ms | measurement on the board |
+| Full-frame terms scale linearly with pixel count | 5.88× (12.20 MP ÷ 2.07 MP) | the per-stage profile, item 1 below |
+| 12 MP GLAD projections (29 / 2.4–3.2 / 13–14 fps naive; 34 / 7–9 / 25 hybrid) | arithmetic on §4.1, itself arithmetic on a vendor benchmark | **[EXTRAPOLATED] — board + camera in hand** |
+| ROI mode-switch latency on Alvium | unknown; assumed "several frames" | vendor test |
 
 ### Not measured, and worth measuring — in priority order
 
@@ -523,7 +863,12 @@ an incomplete entry.
 2. **p50 / p95 / p99 and worst-sequence fps** for EXP-004, re-derived per video from the
    existing run rather than as an aggregate mean.
 3. **ONNX/OpenVINO CPU export** — actual speedup on this host, with the re-score.
-4. **Everything on the board.** All of §4–§6 is arithmetic until hardware exists.
+4. **The 5.88× pixel-scaling assumption**, which the whole of §4.2.4 rests on. Item 1's
+   profile answers it for free if it is run at two resolutions instead of one — downscale
+   ARD-MAV to 960×540 and confirm the motion path falls ~4×. **No camera required.**
+5. **ROI mode-switch latency** on the Alvium — decides whether sensor-side windowing beats
+   §4.2.6's option (c).
+6. **Everything on the board.** All of §4–§6 is arithmetic until hardware exists.
 
 ---
 
@@ -534,5 +879,9 @@ an incomplete entry.
 - **Cheap wins (§3)** are actionable now; items 8 and 9 are already banked.
 - **Board (§4), alternatives (§5), recommendation (§6)** are a reasoned projection from
   published figures. **No edge hardware has been benchmarked.**
+- **Camera (§4.2)** is vendor datasheet specification plus arithmetic on §4.1. The sensor,
+  link, ISP and driver facts are solid; **every frame-rate projection through GLAD at 12 MP
+  is [EXTRAPOLATED]** and rests on the untested assumption that full-frame stages scale
+  linearly with pixel count. **No camera has been benchmarked either.**
 - Update this file whenever a stage is measured, and move the line from §8's assumed table
   into its measured table when it is.

@@ -162,6 +162,10 @@ dates, not priorities.
 
 - [ ] 2026-08-23 — [deploy] **Profile `GladPipeline.step` per stage on idle hardware.** `time.perf_counter()` around GAD, LAD, `MOD2_global`, `MOD2_local` and the classifier gate in `src/algo/glad/pipeline.py`, over ~2,000 contiguous frames. [edge-budget.md §2.3](edge-budget.md) currently *estimates* the split by solving `0.884*T_LAD + 0.116*(T_LAD + T_MOD) = 374 ms` and infers `T_MOD ~ 1.5 s`; that is arithmetic, not a profile, and it is the one number the whole edge budget rests on. **Could not be taken on 2026-08-23** — `exp005_glad_ard100` was occupying the CPU and a contended timing run violates the benchmarking rules in `deploy-agent`'s own charter. Cheap: minutes, no GPU. Also worth emitting p50/p95/p99 and the worst video rather than a run mean.
 - [ ] 2026-08-23 — [deploy] **Export the two GLAD `yolov5s` checkpoints to ONNX and re-run through ONNX Runtime / OpenVINO on this host.** [edge-budget.md §3](edge-budget.md) item 1: expected 1.5-3x on the stage that dominates 88.4% of frames, and the ONNX artifact is the same one a Jetson TensorRT build would start from, so the work is not throwaway. **Not free of accuracy risk despite being fp32->fp32** — the NMS implementation changes — so it needs an `src.evaluate` re-score at the same criterion before the number is carried anywhere. Blocked on nothing.
+- [ ] 2026-08-23 — [deploy] **Measure the pixel-scaling exponent of GLAD's motion path — no camera needed.** [edge-budget.md §4.2.4](edge-budget.md) prices a 12 MP Alvium by assuming every full-frame stage scales **linearly with pixel count (5.88x)**, and the entire "naive 12 MP is not viable" verdict rests on that one untested assumption. It is free to check: run `src.glad_detect` over a downscaled copy of two ARD-MAV test videos (960x540, i.e. 0.25x the pixels) and compare per-branch timings against 1080p. If the motion path does **not** fall ~4x, the 12 MP projection is wrong and must be redone. **Fold this into the per-stage profile above rather than running it separately** — same instrumentation, one extra resolution. Timings only: GLAD's constants are absolute pixels tuned for 1920x1080 ([glad-model.md §6](glad-model.md) item 4), so **the accuracy of a downscaled run is meaningless** and must not be recorded as a result.
+- [ ] 2026-08-23 — [deploy] **Get the Alvium ROI mode-switch latency from Allied Vision.** [edge-budget.md §4.2.6](edge-budget.md) identifies sensor-side ROI readout as potentially better than the recommended hybrid — GLAD's local regime already *is* a 320x320 window, so reading only that window off the sensor would cut capture latency to near zero. Blocked on one number: how many frames a mode switch costs. EXP-004 says the regime is stable (acquisition fires 42 times in 28,337 frames), so even a several-frame switch may be affordable. A vendor email, not an experiment.
+- [ ] 2026-08-23 — [deploy] [algo] **Decide 12 MP vs a narrow lens — needs one answer from the user: is the sensor cued or searching?** [edge-budget.md §4.2.8](edge-budget.md). A 28.6-degree lens on 1080p gives **identical pixels-on-target** to 12 MP at 60 degrees for **5.88x less compute, no retrain and no new camera** — it only costs field of view. If a bearing is handed over by radar/RF/GCS, 12 MP is buying FOV nobody uses. **Blocked on the user, and it is the cheapest open question in the project.** Now recorded as the third unresolved input alongside closing speed and persistence frames.
+
 
 ### Backlog — no mission, revisit when the trigger fires
 
@@ -169,6 +173,74 @@ dates, not priorities.
 - [ ] 2026-08-13 — [data] Store labels per-video (one file, one row per frame) instead of one `.txt` per frame, and expand to the per-image tree only on the training instance. 28,337 tiny files cost minutes per full read — measured: two `find` calls and the MANIFEST regeneration all blew a 120 s timeout — and the per-image layout is only actually required by the ultralytics dataloader at M7, which runs on the rented GPU, not here. Space is not the issue (NTFS keeps sub-700-byte files resident in the MFT); per-file syscall latency is. **Trigger:** label reading starts dominating the M5 re-scoring loop, or the 45 training videos push the tree past ~100k files.
 
 ## Done
+
+- [x] 2026-08-23 — [M6] [deploy] **Added §4.2 to `docs/edge-budget.md`: the camera and the
+  capture stage.** Answers "what FPS with a 12 MP Allied Vision 1800?" — and the honest
+  answer is **it depends which of four cameras that is, and feeding GLAD the full 12 MP
+  does not work.** The doc previously had **no camera model at all**, a genuine gap:
+  capture is the first term in the end-to-end chain `deploy-agent`'s charter defines, and
+  at 12 MP it stops being a rounding error (~30-35 ms, comparable to the whole inference —
+  so §1's assumed 60 ms of pipeline overhead is now flagged as too low).
+
+  **"12 MP Alvium 1800" is four products.** U-1240 (IMX226 rolling, USB3, **29 fps**),
+  C-1240 (IMX226 rolling, CSI-2 4-lane, **41 fps**), U-1236 / C-1236 (IMX304 **global
+  shutter**, **22-23 fps**). Budgeted the C-1240 as the compute worst case. **The U-1240's
+  29 fps is a USB3 payload cap at 8-bit, not a sensor figure** — ask for RAW10 and it falls
+  to ~23. On CSI-2 the same sensor needs 5.00 Gbit/s against a 10 Gbit/s 4-lane link, so
+  there the sensor binds and the link does not.
+
+  **Ingest is fine, and is the least risky part of the whole deployment:** Orin NX offers
+  two 4-lane D-PHY groups at 2.5 Gbit/s per lane, its ISP runs 1.75 GPixel/s against the
+  500 MPixel/s needed (29%), and Allied Vision ship a **JetPack 6.2 `.deb` driver covering
+  all Orin modules** — the exact opposite of the dead TensorRT 7.2 path in §4. Caveat: the
+  driver is **4-lane only**, no 2-lane fallback. USB3 would additionally tax 15-30% of a
+  core on the branch that is **CPU-bound OpenCV**, so CSI-2 wins on two counts.
+
+  **The crux, decomposed against EXP-004's branch split.** 12.20 MP is **5.88x** 1080p.
+  The modal frame (88.4%, LAD on a fixed 320x320 crop) is **inference-cost-invariant to
+  sensor resolution** — but its per-frame full-frame overhead is not, and the motion path
+  (11.6%, all `O(pixels)`) takes the full 5.88x on the branch that was **already** the
+  bottleneck. Projected Orin NX: **~13-14 fps sustained but 2.4-3.2 fps when the motion
+  path fires**, which spends 38% of the whole engagement in latency. **That row fails.**
+  Worse, GAD's 640 letterbox goes from a 3x reduction to **6.3x**, so a 21 px target
+  reaches the acquisition detector at 3.3 px — the founding trap, doubled, on the branch
+  EXP-004 already named as the real ceiling.
+
+  **The upside is real and was stated fairly.** At the same FOV, 4024 px is **2.096x finer
+  linearly**: first-detectable range moves **55 m -> 115 m**, the engagement window
+  **1.4 s -> 2.9 s**, and — the number that matters — **the 0.98-recall boundary moves from
+  ~34 m out to ~72 m.** 18,265 of ARD-MAV's 28,160 targets are under 16 px, so this attacks
+  the project's central failure mode more directly than any architecture on the table.
+
+  **Recommendation: never feed GLAD the full frame.** Option (c) — native-resolution 320
+  crop for LAD, downsampled copy for the motion module *and* GAD — projects **~25 fps
+  sustained / 7-9 fps hard scene** and is the only configuration that improves both range
+  and the latency ratio. **Flagged loudly that this is a protocol change, not a config:**
+  `yolov5s_GLAD-crop.pt` was trained on 320x320 crops from 1080p, so a native crop of a
+  12 MP frame is a 2.1x input-scale change needing a **retrain, not a re-score** — and
+  every absolute-pixel constant in `MOD2.py` breaks with it. No accuracy number in this
+  repo may be read as applying to a 12 MP build, and that verdict is `algo-agent`'s.
+
+  **Two findings that outrank the frame rate.** (1) **Rolling vs global shutter.** IMX226
+  is rolling; GLAD compensates ego-motion with a **RANSAC homography**, which assumes all
+  pixels were captured at one instant. Under rolling shutter with fast rotation that
+  assumption fails and the residual — *which is exactly what GLAD thresholds as motion* —
+  is corrupted, worst during hard manoeuvre. Counter-argument recorded honestly: ARD-MAV
+  was shot on rolling-shutter Mavics, so it demonstrably works **on a gimbal**; nothing
+  here measures hard-mounted. Since the pipeline sustains only ~13-25 fps anyway, **the
+  C-1240's extra frame rate is unusable and the global-shutter C-1236 is probably the
+  better buy** — its 1.1-inch sensor also attacks M2b's measured 19-point contrast loss.
+  (2) **The lens is a competing answer and it is cheaper**: a 28.6-degree lens on 1080p
+  gives identical pixels-on-target for 5.88x less compute. Which wins turns entirely on a
+  question nobody has answered — **is the sensor cued or searching?** — now recorded as the
+  **third unresolved user input** alongside closing speed and persistence frames.
+
+  §8's three tables updated (camera/ingest specs as published, the 12 MP projections as
+  [EXTRAPOLATED], six new assumptions including the untested linear-pixel-scaling
+  exponent), §1 and §6 cross-linked. **No tests: docs-only, no behaviour or parameters
+  under `src/`.** Three follow-ups filed — the pixel-scaling check (free, no camera), the
+  ROI mode-switch latency (a vendor email), and the cued-vs-searching decision (blocked on
+  the user, and the cheapest open question in the project).
 
 - [x] 2026-08-23 — [M6] [deploy] **Wrote `docs/edge-budget.md`**, answering "this model is
   very slow, is there a faster one I can deploy?" — and the answer is **no, and you do not
