@@ -15,7 +15,6 @@ dates, not priorities.
 
 ## Open
 
-- [ ] 2026-08-18 — [data] Derive the **lighting** condition axis for the ARD-MAV test split: `py -3.13 -m src.data.scene_stats --processed data/processed/ARD-MAV --split test`. It merges `lighting` and `relative_range` into `conditions.json`, after which `src.evaluate --conditions` breaks every run down along them with no further work. **Budget ~1 h wall-clock and run it alone** — it decodes all 28,337 JPEGs and measured ~100 frames/min while competing with a scoring pass, which is why it was abandoned twice on 2026-08-18. `relative_range` is already available indirectly from `gt_size` in a `--dump` CSV; `lighting` is the part that needs the pixels.
 ### M4b — generalisation: does GLAD hold up on video it has never seen?
 
 - [ ] 2026-08-18 — [M4b] [algo] **Stretch, only after ARD100 lands: FL-Drones** (14
@@ -55,6 +54,29 @@ dates, not priorities.
 - [ ] 2026-08-13 — [data] Store labels per-video (one file, one row per frame) instead of one `.txt` per frame, and expand to the per-image tree only on the training instance. 28,337 tiny files cost minutes per full read — measured: two `find` calls and the MANIFEST regeneration all blew a 120 s timeout — and the per-image layout is only actually required by the ultralytics dataloader at M7, which runs on the rented GPU, not here. Space is not the issue (NTFS keeps sub-700-byte files resident in the MFT); per-file syscall latency is. **Trigger:** label reading starts dominating the M5 re-scoring loop, or the 45 training videos push the tree past ~100k files.
 
 ## Done
+
+- [x] 2026-08-23 — [data] **Derived the `lighting` and `relative_range` axes for the
+  ARD-MAV test split** — `py -3.13 -m src.data.scene_stats --processed
+  data/processed/ARD-MAV --split test`, 28,337 frames, ~55 min. Open since 2026-08-18 and
+  abandoned twice for competing with a scoring pass; run alone this time. `conditions.json`
+  now carries all three axes (`scene_category` preserved), so `src.evaluate --conditions`
+  breaks any ARD-MAV run down along them.
+
+  **Done because M4b's backlit control needed it to be symmetric**, and it immediately
+  corrected two things now fixed in [experiments.md](experiments.md) and
+  [prepare_ardmav.md](prepare_ardmav.md):
+
+  1. **ARD-MAV test is 18.6% `backlit`, not the "~0%" EXP-005 first assumed.** The
+     0.0–0.2% figure was a per-video mean `pct_blown`; `backlit` is a per-frame test at 2%.
+     Different quantities. Real gap against ARD100 is 18.6% vs 29.7%.
+  2. **`backlit` is the *easiest* bucket on ARD-MAV** (R 0.9165, above its 0.8946 aggregate)
+     and the second-hardest on ARD100 (0.6277), so the label does not carry an intrinsic
+     difficulty.
+
+  EXP-005's conclusion is unchanged: the symmetric non-backlit comparison is 0.8896 →
+  0.7126, **17.7 points**, against 20.7 aggregate. Also settled that `relative_range` is
+  **not** cross-dataset comparable — ARD-MAV has a `very far (>5x)` bucket (2,758 frames)
+  that ARD100 lacks entirely, and 36.5% `far` against ARD100's 3.0%.
 
 - [x] 2026-08-23 — [M4b] [algo] **Scored GLAD on ARD100's 15 unseen videos — M4b is
   answered. Recorded as EXP-005 in [experiments.md](experiments.md).** 34,287 frames /

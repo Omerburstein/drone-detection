@@ -191,7 +191,16 @@ The 13 targets over 96 px are the only ones outside GLAD's motion-branch area ca
 3,000 px², which at 0.04% is nothing like the structural problem FL-Drones poses.
 
 **The finding that matters for M4b: 29.7% of ARD100 frames are `backlit`** — over 2% of
-pixels blown — where ARD-MAV's cleanly exposed videos sit at 0.0–0.2%.
+pixels blown.
+
+> **Corrected 2026-08-23.** This paragraph previously ended "where ARD-MAV's cleanly exposed
+> videos sit at 0.0–0.2%", inviting the reading that ARD-MAV is *not* backlit at all. That
+> compares two different quantities: 0.0–0.2% is a **per-video mean** `pct_blown`, while
+> `backlit` is a **per-frame** test at the 2% threshold. ARD-MAV's own axis has since been
+> measured (`src.data.scene_stats`, 28,337 frames) and its test split is **18.6% backlit**.
+> The exposure gap between the two datasets is real — 29.7% against 18.6% — but far narrower
+> than "29.7% against nothing". EXP-005's control was re-run symmetrically on that basis and
+> its conclusion held; see [experiments.md](experiments.md) § EXP-005.
 
 | `lighting` | frames | share |
 | --- | --- | --- |

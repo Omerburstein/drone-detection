@@ -913,21 +913,40 @@ both are available — but the relative one is what a criterion argument should 
   Precision holds up well (0.993 → 0.946); the loss is overwhelmingly missed detections,
   not spurious ones.
 
-- **The backlit control, and it does not explain the gap.** 29.7% of these frames are
-  backlit against ARD-MAV's ~0%, so this was the confound that had to be cleared before
-  reading anything as generalisation. Cut from `matches_center.csv`:
+- **The backlit control, and it does not explain the gap.** Exposure was the confound that
+  had to be cleared before reading anything as generalisation. **Corrected and made
+  symmetric 2026-08-23** by deriving ARD-MAV's own `lighting` axis (`src.data.scene_stats`,
+  28,337 frames, ~1 h) and re-scoring EXP-004 through it —
+  `runs/exp004_glad/metrics_center_lit.json`:
 
-  | subset | frames | TP / FP / FN | P | R | F1 |
-  | --- | --- | --- | --- | --- | --- |
-  | all | 34,287 | 23,059 / 1,316 / 10,458 | 0.9460 | 0.6880 | 0.7966 |
-  | backlit | 10,195 | 6,107 / 362 / 3,622 | 0.9440 | 0.6277 | 0.7540 |
-  | **non-backlit** | 23,785 | 16,952 / 951 / 6,836 | 0.9469 | **0.7126** | 0.8132 |
+  | subset | EXP-004 R | EXP-005 R | Δ |
+  | --- | --- | --- | --- |
+  | all frames | 0.8946 | 0.6880 | −0.207 |
+  | backlit only | 0.9165 | 0.6277 | −0.289 |
+  | **non-backlit only** | **0.8896** | **0.7126** | **−0.177** |
 
-  Removing every backlit frame lifts recall by **2.5 points, from 0.688 to 0.713**, against
-  EXP-004's 0.895. **An 18.2-point gap survives the control**, so backlighting accounts for
-  roughly one-eighth of the drop and the remaining seven-eighths is the video content
-  itself. This is the entry's load-bearing number: without it the 20.7-point headline could
-  have been dismissed as an exposure artefact, and it cannot be.
+  **A 17.7-point gap survives a like-for-like non-backlit comparison**, so backlighting
+  accounts for 3.0 of the 20.7 points and the rest is the video content itself. This is the
+  entry's load-bearing number: without it the headline could have been dismissed as an
+  exposure artefact, and it cannot be.
+
+  **Two corrections to what this entry first claimed**, both from that measurement:
+
+  1. **ARD-MAV test is 18.6% backlit, not "~0%".** The 0.0–0.2% figure quoted from
+     [prepare_ardmav.md](prepare_ardmav.md) is a **per-video mean** `pct_blown`; the
+     `backlit` bucket is a **per-frame** test at 2% blown, and the two are different
+     quantities. Measured per frame the split is ARD-MAV 18.6% against ARD100 29.7% — a
+     real exposure gap, but nothing like the total absence first assumed. The original
+     asymmetric control (ARD100 non-backlit against EXP-004 aggregate) happened to land
+     within half a point of the symmetric one, so the conclusion never moved; the reasoning
+     behind it was wrong all the same.
+  2. **`backlit` does not predict difficulty — it is the easiest bucket on ARD-MAV and the
+     second-hardest on ARD100.** EXP-004 scores **0.9165** backlit, *above* its own 0.8946
+     aggregate and second only to `strong`; EXP-005 scores 0.6277, below everything but
+     `invisible`. So the label is not measuring an intrinsic difficulty of blown highlights.
+     Whatever makes ARD100's backlit frames hard is specific to those frames, and the
+     backlit gap (−28.9) being *wider* than the aggregate gap (−20.7) is the one place
+     exposure and content plausibly interact.
 
 - **Nor is it size composition.** The obvious second explanation — ARD100's targets are
   smaller — fails on its own evidence: recall falls in the **medium (32–96 px)** bucket
@@ -1017,6 +1036,10 @@ both are available — but the relative one is what a criterion argument should 
 - **Worth running, free:** `--group video` on this dump. EXP-004's alarms concentrated in
   two videos out of fifteen; if EXP-005's 1,316 do the same, the per-video variance already
   flagged in the cross-cut work is the thing to model, not the aggregate.
-- **The backlit slice is not the follow-up it looks like.** It is controlled for above and
-  costs 2.5 points. Deriving ARD-MAV's own `lighting` axis (still open in `todo.md`) would
-  make the control symmetric, but it cannot change this entry's conclusion.
+- **The backlit slice is closed, not open.** ARD-MAV's `lighting` axis was derived on
+  2026-08-23 and the control is now symmetric: it costs 3.0 points of 20.7 and does not
+  change this entry's conclusion. `relative_range` is the opposite case and is now
+  *demonstrably* not comparable — ARD-MAV carries a `very far (>5x)` bucket of 2,758 frames
+  that ARD100 has no counterpart for, and 36.5% of ARD-MAV's frames are `far` against
+  ARD100's 3.0%. The axis is scaled to each split's own closest approach, exactly as
+  warned. Compare `gt_size` in pixels, never range labels.
