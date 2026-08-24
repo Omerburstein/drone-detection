@@ -267,14 +267,49 @@ before its number may be carried forward** — see [§7](#7-export-and-quantisat
 | 4 | **TensorRT INT8** *(on-board only)* | **1.20×** further (4.57 → 3.80 ms) | ⚠️ **Poor value here.** Same table: mAP50-95 **0.480 → 0.449**, and the literature reports 3–7 points absolute mAP50-95 loss with *smaller models worse*. 1.2× for the project's most fragile property. **Do not take this until FP16 has been proven on the size cut.** |
 | 5 | **PyTorch → TensorRT** *(on-board only)* | **2.07×** at equal FP32 precision (15.60 → 7.53 ms, same table) | Pure runtime change at equal precision. Re-score anyway; the port is new code. |
 | 6 | **Tile-grid / resolution choices** | **None available.** | GLAD has no tile or resize switch. Lowering input re-creates the founding trap. The only resolution lever points *upward* (GAD tiled, or a P2 head — [glad-model.md §6](glad-model.md) item 7), costing speed to buy acquisition. |
-| 7 | **Frame striding** | **Not available.** | Incoherent for GLAD: both motion branches difference consecutive frames. `src.glad_detect` has no `--stride` on purpose. A strided sample measures a different algorithm. |
+| 7 | **Frame striding** | **Not available.** | Incoherent for GLAD: both motion branches difference consecutive frames. `src.glad_detect` has no `--stride` on purpose. A strided sample measures a different algorithm. **See item 11 — the objection is to the *gap*, not to processing fewer frames.** |
 | 8 | **Tracking between detections** | **Already banked.** | This *is* the local regime. 88.4% of frames already run a crop-sized pass instead of a full-frame one. |
 | 9 | **Cache the classifier** | **Already banked.** | Upstream reloaded `Net_best.pth` from disk per candidate per frame, inside a loop running up to 50× per frame. Our port hoists it (`src/algo/glad/classifier.py`, `load_gate`). [glad-model.md §6](glad-model.md) item 1 attributes much of the GMD/LMD cost gap to this. |
 | 10 | **Run LAD at native 320 instead of upscaling to 640** | **~4× FLOPs on the modal frame** — the largest single win identified | ⚠️ **This is a retrain, not a config change.** `yolov5s_GLAD-crop.pt` was trained on 320×320 crops fed at 640. Changing the input scale changes the detector. **`algo-agent`'s call**, candidate for M7. |
+| 11 | **Duty-cycled inference** (`--sample nth` / `--sample burst`) | **1.55–2.71× at half rate; 10.5–20× as burst pairs.** Measured, EXP-006 to EXP-009 | ✅ **Available, and it is not item 7.** Striding is rejected for the *gap* it opens between differenced frames, not for processing fewer of them. Half rate keeps every processed frame adjacent to its predecessor; a burst differences *inside* a 33 ms pair and sleeps between pairs. Costs are measured against a full-rate control over identical frames — see below. |
 
 **Realistic stack on the target board: (5) × (3) ≈ 3.4× over on-board PyTorch FP32**,
 before any architectural change, at a re-scoring cost of two `src.evaluate` runs over a
 persisted JSONL.
+
+### Item 11 in detail — what a duty cycle actually costs
+
+Measured 2026-08-24, EXP-006 to EXP-009. Each policy is scored against a **full-rate
+control over the identical frames** (`src.evaluate --keys-from`), so the duty cycle is
+the only variable — same weights, same `--pad released`, same criterion.
+
+| Policy | ARD-MAV retained | ARD100 retained | Compute saved |
+| --- | --- | --- | --- |
+| **Half rate** (`--sample nth --sample-n 2`) | **91.5%** | **91.5%** | 2.71× / 1.55× |
+| **Burst pairs** (`--sample burst`, K=2) | 48.2% | **36.0%** | 20× / 10.5× |
+
+Three findings that change how this lever should be used:
+
+- **Half rate's cost is a property of the policy, not the content.** 91.5% on both
+  splits, to three significant figures. It can be quoted as one number and does **not**
+  compound with the generalisation gap. Burst pairs does compound — 48.2% where GLAD is
+  strong, 36.0% on video it never trained on — because cold acquisition leans on GAD,
+  which is exactly what fails to generalise (EXP-009: motion carries 77% of burst
+  detections on ARD100 against 50% on ARD-MAV).
+- **The compute saving is content-dependent and is not the frame saving.** Half the
+  frames bought 2.71× on ARD-MAV but only 1.55× on ARD100, because losing lock more often
+  means paying the motion path more often. **Never quote a duty cycle's saving as its
+  duty-cycle ratio.**
+- **Burst pairs is disqualified by latency, not by recall.** At 25.0% per burst the
+  expected wait for a first detection is four bursts. At the 30-second period the scheme
+  was proposed with, that is **120 s — 4,806 m of closing at 40 m/s.** A scheme costing
+  0.6% of the compute is still unusable if the target crosses the whole engagement
+  envelope before it is seen.
+
+**Where this leaves the lever.** Half rate is a genuine, cheap, measured win and is worth
+taking on the target board. Burst pairs is a *fallback for hardware that cannot sustain
+half rate*, never a power-saving choice — which is precisely how `src.live_detect
+--policy auto` applies it ([live_detect.md](live_detect.md)).
 
 ---
 

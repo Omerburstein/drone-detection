@@ -4,7 +4,18 @@
 ultralytics>=8.3.235
 torch>=2.9.1
 torchvision>=0.24.1
-opencv-python>=4.12
+# Upper bound is load-bearing, not caution. OpenCV 5.0 changes `resize`
+# sampling, and that call sits inside the detector's letterbox
+# (src/algo/glad/yolo.py), so it silently shifts every detection away from what
+# EXP-004..009 measured. Caught by tests/unit/test_overlay.py.
+#
+# **Never install `opencv-python-headless`.** It shares the `cv2` namespace, and
+# whichever wins the import decides whether a window can open at all --
+# `src.live_detect` needs one. The headless build still exposes `imshow` and
+# raises when called, so the failure reads as a bug in this code and is not one.
+# Uninstalling it also removes files this package needs, so repair is:
+#   py -3.13 -m pip install --force-reinstall --no-deps "opencv-python==4.12.0.88"
+opencv-python>=4.12,<5
 numpy>=2.2
 scipy>=1.16
 pandas>=3.0

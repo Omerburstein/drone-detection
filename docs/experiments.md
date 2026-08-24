@@ -1100,3 +1100,238 @@ both are available — but the relative one is what a criterion argument should 
   that ARD100 has no counterpart for, and 36.5% of ARD-MAV's frames are `far` against
   ARD100's 3.0%. The axis is scaled to each split's own closest approach, exactly as
   warned. Compare `gt_size` in pixels, never range labels.
+
+---
+
+## EXP-006 — half rate on ARD-MAV: does GLAD survive 15 fps?
+- **Date:** 2026-08-24
+- **Question:** A camera delivers 30 fps and GLAD sustains 2.67. If half the frames
+  are dropped, what does it cost? **Frame *striding* is ruled out** for GLAD
+  ([edge-budget.md](edge-budget.md) §3 item 7) because both motion branches difference
+  against the previous frame — but that objection is about the *gap*, not about
+  processing fewer frames. Halving the rate keeps every processed frame adjacent to
+  the one before it; only the interval doubles, from 33 ms to 66 ms.
+- **Model / weights:** identical to EXP-004 — released GLAD checkpoints, CPU port at
+  `src/algo/glad/`. Nothing retrained.
+- **Data:** ARD-MAV official 15-video test split. **14,172 of 28,337 frames processed
+  (50.01%)**; every frame still decoded, because decode cost is not what a duty cycle
+  saves.
+- **Hyperparameters:** all released values, `--pad released`, byte-identical to
+  EXP-004. The one variable is the schedule.
+- **Hardware:** i7-1255U CPU, 3,911 s (1.09 h), **3.62 fps**.
+- **Command:**
+  `py -3.13 -m src.glad_detect --pad released --sample nth --sample-n 2 --out runs/exp006_half_ardmav`
+  then `py -3.13 -m src.evaluate --pred runs/exp006_half_ardmav/detections.jsonl --labels
+  data/processed/ARD-MAV/labels/test --conditions data/processed/ARD-MAV/conditions.json
+  --frame-size 1920 1080 --match center --match-tol 1.0 --dump
+  runs/exp006_half_ardmav/matches_center.csv --json-out
+  runs/exp006_half_ardmav/metrics_center.json`
+- **The control, and why it is the only legal comparison:** a duty-cycled run records
+  only the frames it processed, and `src.eval.labels` reads prediction rows rather than
+  the label directory, so it is scored on exactly those frames. Comparing that to a
+  full-rate run over *all* frames would compare two frame populations. `--keys-from`
+  restricts EXP-004's persisted JSONL to this run's 14,172 keys — no inference, same
+  weights, same criterion:
+  `py -3.13 -m src.evaluate --pred runs/exp004_glad/detections.jsonl --keys-from
+  runs/exp006_half_ardmav/detections.jsonl --labels data/processed/ARD-MAV/labels/test
+  --frame-size 1920 1080 --match center --match-tol 1.0 --json-out
+  runs/exp006_half_ardmav/control_metrics_center.json`
+- **Metrics:** `runs/exp006_half_ardmav/metrics_center.json` against
+  `control_metrics_center.json`, both centre@1× over the same 14,172 frames.
+
+  | | EXP-004 full rate | EXP-006 half rate | Δ |
+  | --- | --- | --- | --- |
+  | **recall** | 0.8943 | **0.8182** | −0.076 |
+  | precision | 0.9927 | 0.9777 | −0.015 |
+  | F1 | 0.9409 | 0.8908 | −0.050 |
+  | false alarms / frame | 0.0066 | 0.0186 | 2.8× |
+  | mean IoU (matched) | 0.6826 | 0.6875 | +0.005 |
+  | TP / FP | 12,596 / 93 | 11,523 / 263 | |
+
+  **Recall retained: 91.5%.**
+
+- **Result: half the frames costs 7.6 points of recall, and the tracking lock survives.**
+  The predicted failure — the local regime losing lock once target displacement doubled
+  against `TrackingDetector.MAX_DISTANCE = 50` px — **did not happen**. The branch mix
+  barely moves: `local yolo` 88.4% → 81.3%, `global miss` 2.9% → 2.3%. What rises is
+  `local miss`, 7.4% → 14.4%: the tracker keeps its search region and more often finds
+  nothing inside it. The 50 px gate bites, but gently at n=2, so GLAD's local regime has
+  margin at 15 fps.
+- **The compute saving is larger than the frame saving here**, which is the opposite of
+  the ARD100 result and worth stating: 30 fps ÷ 2.67 = 11.24 s of compute per second of
+  video at full rate, against 15 ÷ 3.62 = 4.14 at half — **2.71×**. Per *processed* frame
+  this run is 36% faster than EXP-004, because the expensive global regime fires less
+  (`global miss` + `global mod` 2.5% against 3.0%). Compare EXP-008, where the same
+  policy on different content was 23% *slower* per frame. **Duty-cycle compute savings
+  are content-dependent and must not be quoted as a fixed ratio.**
+
+---
+
+## EXP-007 — two-frame bursts on ARD-MAV
+- **Date:** 2026-08-24
+- **Question:** If the pipeline is far slower than the feed, can it process two
+  *adjacent* frames and then sleep? The pair keeps differencing coherent — the frames
+  are a true 33 ms apart — while the duty cycle collapses. What does a cold start cost?
+- **Model / weights / hyperparameters:** identical to EXP-004, `--pad released`.
+- **Data:** ARD-MAV test 15. **949 of 28,337 frames processed (3.35%)**, as 2-frame
+  bursts every 60 frames.
+- **Hardware:** i7-1255U CPU, 531 s, **1.79 fps**.
+- **Command:**
+  `py -3.13 -m src.glad_detect --pad released --sample burst --burst-length 2 --burst-period 60 --out runs/exp007_burst_ardmav`
+- **Why period 60 and not 900 (the 30-second scheme actually proposed):** the period sets
+  detection *latency*, not per-burst detection probability — each burst is an independent
+  acquisition attempt on an arbitrary frame. A 900-frame period yields ~63 bursts across
+  the split, too thin to measure. 60 yields ~474 attempts at the identical quantity, and
+  **the measured per-burst probability applies to any period.** Measure dense, deploy
+  sparse.
+- **Metrics:** `runs/exp007_burst_ardmav/metrics_center.json`. **Read the
+  second-of-burst row, not the aggregate.** The first frame of every burst follows a
+  pipeline reset and has nothing to difference against, so it is a guaranteed miss by
+  construction — confirmed empirically: **0 TP from 471 targets**. Over the 474 usable
+  frames, against EXP-004 on those same frames:
+
+  | | EXP-004 full rate | EXP-007 burst | Δ |
+  | --- | --- | --- | --- |
+  | **recall** | 0.8702 | **0.4191** | −0.451 |
+  | precision | 0.9903 | 0.9517 | −0.039 |
+  | TP / FP | 409 / 4 | 197 / 10 | |
+
+  **Recall retained: 48.2%.**
+
+- **Result: a burst keeps under half the recall, and every burst runs in the global
+  regime.** Branch mix is 50.1% `first frame`, 28.1% `global miss`, 11.4% `global yolo`,
+  10.4% `global mod` — and **zero `local yolo`**, because a lock cannot survive the
+  sleep. That zero is also the harness's correctness check: a non-zero `local yolo`, or a
+  `first frame` share away from 1/K, would mean the per-burst reset had misfired and the
+  motion branches were differencing across the sleep.
+- **Appearance and motion contribute equally here**: of 197 detections, 98 came from
+  `global yolo` and 99 from `global mod`. Contrast EXP-009, where on unseen video
+  appearance collapses and motion carries 77%.
+- **Cost:** 1 frame per second of video ÷ 1.79 fps = 0.56 s of compute per second of
+  video, against 11.24 at full rate — **20× cheaper**. Per *processed* frame it is 33%
+  more expensive than EXP-004 (1.79 against 2.67 fps), because the expensive global path
+  runs every time it runs at all. **The saving is duty cycle alone, never per-frame cost.**
+
+---
+
+## EXP-008 — half rate on ARD100, video GLAD has never seen
+- **Date:** 2026-08-24
+- **Question:** EXP-006 measured the half-rate penalty where GLAD is strong. Does the
+  penalty grow where the model is already weak? EXP-005 established that ARD100 costs
+  20.7 points of recall on content alone; if a duty cycle compounds that, the deployment
+  answer changes.
+- **Model / weights / hyperparameters:** identical to EXP-005, `--pad released`.
+- **Data:** ARD100 test 15 (the same split as EXP-005). **17,148 of 34,287 frames
+  processed (50.01%)**.
+- **Hardware:** i7-1255U CPU, 6,154 s (1.71 h), **2.79 fps**.
+- **Command:**
+  `py -3.13 -m src.glad_detect --dataset ARD100 --pad released --sample nth --sample-n 2 --out runs/exp008_half_ard100`
+  with the control `--keys-from runs/exp008_half_ard100/detections.jsonl` against
+  `runs/exp005_glad_ard100/detections.jsonl`.
+- **Metrics:** centre@1× over the same 17,148 frames.
+
+  | | EXP-005 full rate | EXP-008 half rate | Δ |
+  | --- | --- | --- | --- |
+  | **recall** | 0.6876 | **0.6290** | −0.059 |
+  | precision | 0.9459 | 0.9321 | −0.014 |
+  | F1 | 0.7963 | 0.7511 | −0.045 |
+  | false alarms / frame | 0.0385 | 0.0448 | +16% |
+  | mean IoU (matched) | 0.6805 | 0.6867 | +0.006 |
+
+  **Recall retained: 91.5%** — identical to EXP-006's 91.5% to three significant figures.
+
+  Recall by size, against the control on the same frames:
+
+  | bucket | n | full rate | half rate | Δ |
+  | --- | --- | --- | --- | --- |
+  | tiny (<16 px) | 10,315 | 0.5987 | 0.5344 | −0.064 |
+  | small (16–32) | 6,079 | 0.8411 | 0.7954 | −0.046 |
+  | medium (32–96) | 366 | 0.6557 | 0.5410 | **−0.115** |
+
+- **Result: the half-rate penalty is a property of the policy, not of the content.**
+  91.5% retention on both ARD-MAV and ARD100 is the entry's load-bearing number: it means
+  the cost of running at 15 fps can be quoted as a single figure and does **not** compound
+  with the generalisation gap. Contrast the burst policy, which does compound (EXP-007
+  48.2% → EXP-009 36.0%).
+- **The loss is worst on medium targets**, which is counter-intuitive and thinly
+  sampled (n=366, so do not lean hard on it). Medium targets are nearer and traverse more
+  pixels per frame, so doubling the interval hurts them most — consistent with the 50 px
+  gate being the mechanism.
+- **Cost: 1.55×, not 2×.** 30 ÷ 3.60 = 8.33 s of compute per second of video at full
+  rate, against 15 ÷ 2.79 = 5.38 at half. Per processed frame this run is **23% slower**
+  than EXP-005, because losing lock more often means paying the motion path more often
+  (`local miss` 16.6% → 21.6%, `global miss` unchanged at 12.3%). Halving the frames does
+  not halve the work.
+
+---
+
+## EXP-009 — two-frame bursts on ARD100
+- **Date:** 2026-08-24
+- **Question:** The burst policy where the model is weakest. This is the run that decides
+  whether a 30-second duty cycle is deployable at all.
+- **Model / weights / hyperparameters:** identical to EXP-005, `--pad released`.
+- **Data:** ARD100 test 15. **1,146 of 34,287 frames processed (3.34%)**, 2-frame bursts
+  every 60 frames.
+- **Hardware:** i7-1255U CPU, 908 s, **1.26 fps**.
+- **Command:**
+  `py -3.13 -m src.glad_detect --dataset ARD100 --pad released --sample burst --burst-length 2 --burst-period 60 --out runs/exp009_burst_ard100`
+- **The sampling is representative, and this was checked rather than assumed.** EXP-005
+  restricted to these 1,146 frames scores **recall 0.6878** against its full-run 0.6880 —
+  1,146 frames out of 34,287 reproduce the whole run to within 0.0002. Nothing below is a
+  sampling artefact.
+- **Metrics:** over the 561 second-of-burst frames (the first of each pair yielded
+  **0 TP from 560 targets**, as designed):
+
+  | | EXP-005 full rate | EXP-009 burst | Δ |
+  | --- | --- | --- | --- |
+  | **recall** | 0.6934 | **0.2496** | −0.444 |
+  | precision | 0.9534 | 0.9150 | −0.038 |
+  | TP / FP | 389 / 19 | 140 / 13 | |
+
+  **Recall retained: 36.0%.**
+
+- **Result: burst pairs keeps about a third of the recall on unseen video, and the
+  penalty compounds where half rate's does not.**
+
+  | policy | ARD-MAV | ARD100 | compounds? |
+  | --- | --- | --- | --- |
+  | half rate | 91.5% | 91.5% | **no** |
+  | burst pairs | 48.2% | 36.0% | **yes** |
+
+- **The mechanism is visible in which branch found each target.** On ARD-MAV appearance
+  and motion split the work 98/99; here it is **32 `global yolo` against 108 `global
+  mod`** — GAD collapses on unseen video and motion carries 77% of what remains. That is
+  independently consistent with EXP-005's finding that the deficit is acquisition rather
+  than localisation, and it means burst mode on unseen video rides almost entirely on a
+  single frame-pair difference.
+- **Latency is what disqualifies the scheme, not recall.** Each burst is an independent
+  attempt at 25.0%, so the expected number of attempts before a first detection is 4.0:
+
+  | period | mean delay to first detection | closing at 40 m/s |
+  | --- | --- | --- |
+  | 2 s (measured) | 8.0 s | **320 m** |
+  | **30 s (as proposed)** | **120 s** | **4,806 m** |
+  | full rate | ~0.05 s | ~2 m |
+
+  At a 30-second period a target closes nearly 5 km before it is expected to be seen.
+  **No recall figure rescues that**, and it is the reason the live path
+  ([live_detect.md](live_detect.md)) treats burst pairs as a fallback for hardware that
+  cannot sustain half rate, never as a power-saving choice.
+- **Cost:** 0.79 s of compute per second of video against 8.33 at full rate — **10.5×
+  cheaper**, and ~157× at a 30-second period. The saving is real; the latency is what
+  cannot be paid for.
+
+#### Next
+
+- **Half rate is the deployable policy and burst pairs is the fallback.** Both are wired
+  into `src.live_detect --policy auto`, which measures sustained throughput against the
+  feed's own rate and takes the most accurate policy the machine can actually hold.
+- **Open: 10 fps (`--sample-n 3`).** Half rate cost 8.5% of recall with the lock intact
+  and `global miss` unmoved, so the gate has margin left. One run, same code, and it
+  would establish whether the penalty is linear in interval or has a knee.
+- **Open: `--burst-length 3`.** Every burst currently spends half its frames on a
+  guaranteed miss. A 3-frame burst gives two usable frames for 1.5× the cost and might
+  let the local regime engage once, which no 2-frame burst can.
+- **Not open: the per-stage profile** ([todo.md](todo.md)) still gates the edge budget,
+  and these runs do not substitute for it — they measure whole-pipeline throughput, not
+  where the time goes.
