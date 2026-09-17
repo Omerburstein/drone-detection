@@ -158,7 +158,7 @@ the one part of this that survives in git. Runs point at the processed tree.
 | --- | --- |
 | Transform | `frame[0:1080, 540:1980]` — crop only, **no rescale** |
 | Codec | **FFV1** (lossless) in `.avi`, ~5.7 GB for 7,386 frames |
-| Verified | `catch_5.avi` decoded against the raw crop: **932/932 frames bit-identical** |
+| Verified | every clip decoded against its raw crop: **7,386/7,386 frames bit-identical**, zero mismatches |
 
 **Why lossless.** Targets are 10–30 px, and a lossy generation between `data/raw/` and
 every number taken from it smears exactly what is being measured. Measured on the same

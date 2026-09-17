@@ -51,8 +51,26 @@ is being measured — for a saving of disk, which this machine has.
 stem in any known container and still prefers `.mp4`, so ARD-MAV and ARD100 resolve
 exactly as they did for EXP-004.
 
-**Verified bit-exact:** `catch_5.avi` was decoded frame by frame against
-`raw/catch_5.mp4[0:1080, 540:1980]` — 932 of 932 frames identical, zero mismatches.
+**Verified bit-exact, all six.** Every processed file was decoded frame by frame against
+`raw/<stem>.mp4[0:1080, 540:1980]`, and both streams were checked to end together:
+
+| File | Frames | Mismatched | Size |
+| --- | ---: | ---: | ---: |
+| `catch_5.avi` | 932 | **0** | 0.73 GB |
+| `first_catch.avi` | 964 | **0** | 0.69 GB |
+| `forth_catch.avi` | 1,060 | **0** | 0.68 GB |
+| `miss_1.avi` | 1,724 | **0** | 1.19 GB |
+| `second_catch.avi` | 1,551 | **0** | 1.12 GB |
+| `third_catch.avi` | 1,155 | **0** | 0.86 GB |
+| **total** | **7,386** | **0** | **5.28 GB** |
+
+Decoded frame counts match the headers exactly, unlike ARD-MAV and ARD100 where the header
+overstates.
+
+**FFV1 decode is not free.** GLAD sustains ~1.9 fps reading these against ~2.5 fps on the
+raw mp4 with a decode-time crop — the lossless files are 5–8× the bytes. That is a cost
+paid at read time, not a property of the detector, and it must not be quoted as a
+throughput number for the pipeline.
 
 ## What is *not* removed
 
