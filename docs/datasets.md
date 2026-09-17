@@ -142,12 +142,33 @@ clip carries an outcome. Full provenance, with per-file MD5s, in
 The video is a **1440×1080 window at x=540**; the rest is pillarbox carrying HUD glyphs.
 Verified identical across all six clips. A dashed pitch ladder and a telemetry strip
 (`ALT`, `24.3V`, `19 Mbps`) are burned **into** the picture as well — there is no clean
-feed to fall back on.
+feed to fall back on, and nothing removes it.
 
-Runs pass `--crop 540,0,1440,1080`, applied at decode so nothing is re-encoded. This is
-not cosmetic: the global detector letterboxes the longest side to 640, so the uncropped
-2520-wide frame scales by 0.254 and a 20 px target arrives as **5 px**; cropped, it scales
-by 0.444 and arrives as **9 px**. See [glad_detect.md](glad_detect.md).
+Cropping is not cosmetic: the global detector letterboxes the longest side to 640, so the
+uncropped 2520-wide frame scales by 0.254 and a 20 px target arrives as **5 px**; cropped,
+it scales by 0.444 and arrives as **9 px**.
+
+## The crop is materialised, not applied on the fly
+
+`data/raw/` is immutable, so the transform lives in `data/processed/SOFA-O4/videos/` with
+[its manifest](../data/processed/SOFA-O4/MANIFEST.md) recording how it was made — which is
+the one part of this that survives in git. Runs point at the processed tree.
+
+| | |
+| --- | --- |
+| Transform | `frame[0:1080, 540:1980]` — crop only, **no rescale** |
+| Codec | **FFV1** (lossless) in `.avi`, ~5.7 GB for 7,386 frames |
+| Verified | `catch_5.avi` decoded against the raw crop: **932/932 frames bit-identical** |
+
+**Why lossless.** Targets are 10–30 px, and a lossy generation between `data/raw/` and
+every number taken from it smears exactly what is being measured. Measured on the same
+frames: `mp4v` 37.5 dB, `avc1` 37.8 dB, `MJPG` 41.2 dB, FFV1 lossless. Disk is cheaper
+than the measurement.
+
+**Why no rescale.** The crop is already **1080 lines** — the dimension GLAD's absolute-pixel
+motion constants are tuned against, and the same height as ARD-MAV and ARD100. Widening
+1440→1920 to "match 1080p" would stretch 4:3 into 16:9 and turn a round drone into an
+ellipse, which costs more than the 0.817× diagonal it would fix.
 
 ## "catch" and "miss" are trial outcomes, not labels
 
@@ -165,6 +186,7 @@ JSONL with no second inference pass.
 
 Frame diagonal after the crop is 1800 against 1080p's 2203 — **0.817× linear**, closer to
 the tuning of GLAD's absolute-pixel motion constants than FIELD's 0.579×, but not 1.0.
+Left as-is rather than upscaled, for the reason above.
 
 ---
 

@@ -345,23 +345,50 @@ so the bars are paid for in target resolution:
 | Whole 2520x1080 frame | 0.254 | **5 px** |
 | Cropped 1440x1080 | 0.444 | **9 px** |
 
+There are two ways to deal with it, and **the first is the project's normal path.**
+
+### Materialise it into `data/processed/` (what SOFA-O4 does)
+
+`data/raw/` is immutable and transforms write to `data/processed/`, so the crop is a
+derived video with a manifest recording how it was made:
+
+```
+data/raw/SOFA-O4/videos/first_catch.mp4        2520x1080, untouched
+data/processed/SOFA-O4/videos/first_catch.avi  1440x1080, FFV1, bit-exact
+data/processed/SOFA-O4/MANIFEST.md             the crop, the codec, the evidence
+```
+
+Runs then point at `data/processed/SOFA-O4/videos` and need no `--crop` at all. The
+transform is re-derivable, auditable, and paid for once rather than on every pass.
+
+**Encode it losslessly.** The targets are 10–30 px and a lossy generation between
+`data/raw/` and every number taken from it smears exactly what is being measured. Measured
+on the same cropped frames: `mp4v` 37.5 dB, `avc1` 37.8 dB, `MJPG` 41.2 dB, **`FFV1`
+lossless** at 5.7 GB for 7,386 frames. MP4 cannot carry FFV1, so these are `.avi` —
+`src.data.sources.resolve_video` finds a stem in any known container and still prefers
+`.mp4`, so ARD-MAV and ARD100 resolve exactly as they did for EXP-004.
+
+### Or crop at decode with `--crop`
+
 ```
 --crop 540,0,1440,1080
 ```
 
-- **The crop is applied at decode**, so nothing is re-encoded. Writing cropped copies
-  through `cv2.VideoWriter`'s mp4v would put a lossy generation between `data/raw/` and
-  every number taken from it, and it would smear 10–30 px targets — exactly what is being
-  measured.
+No intermediate file, nothing re-encoded. Use it for a quick look, or when the disk cost
+of a derived copy is not worth paying. What it gives up is the audit trail: the run's
+geometry lives in a flag in the shell history rather than in a manifest beside the data.
+
 - **Boxes are recorded in cropped coordinates**, because that is the frame the detector
   saw. Pass the **same** `--crop` to `src.render_video`, or every box lands offset by the
   crop origin — plausible-looking and all wrong.
-- **A crop that runs off the source is refused before the decode starts**, not after a few
-  thousand frames.
-- **The HUD inside the picture is not removed.** The ladder marks, arrows and the bottom
-  telemetry strip are burned into the video region and the detector sees them. They are
-  mostly static, so the motion branches difference them away, but the appearance branch
-  has no such protection — check where detections land before trusting a count.
+- **A crop that runs off the source is refused before the decode starts.**
+
+### What neither fixes: the HUD inside the picture
+
+The ladder marks, arrows and the bottom telemetry strip are burned into the video region
+and the detector sees them. They are mostly static, so the motion branches difference them
+away, but the appearance branch has no such protection — check where detections land
+before trusting a count.
 
 ## Running it on footage nobody has labelled
 

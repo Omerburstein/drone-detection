@@ -82,3 +82,37 @@ class TestLabel:
 
     def test_reads_back_as_geometry_and_origin(self):
         assert Crop.parse(O4).label == "1440x1080 at (540, 0)"
+
+
+class TestResolveVideo:
+    """`resolve_video` finds a stem's video whatever container it is in.
+
+    `.mp4` was hardcoded while every dataset was an mp4 release. Our processed
+    footage is FFV1 in `.avi`, because MP4 cannot carry a lossless codec — so
+    the resolver has to look wider while still preferring `.mp4`, or ARD-MAV
+    and ARD100 would start resolving differently than they did for EXP-004.
+    """
+
+    def test_prefers_mp4(self, tmp_path):
+        from src.data.sources import resolve_video
+        (tmp_path / "phantom19.mp4").write_bytes(b"")
+        (tmp_path / "phantom19.avi").write_bytes(b"")
+        assert resolve_video(tmp_path, "phantom19").name == "phantom19.mp4"
+
+    def test_finds_avi_when_there_is_no_mp4(self, tmp_path):
+        from src.data.sources import resolve_video
+        (tmp_path / "first_catch.avi").write_bytes(b"")
+        assert resolve_video(tmp_path, "first_catch").name == "first_catch.avi"
+
+    def test_a_missing_stem_exits_with_what_is_there(self, tmp_path):
+        from src.data.sources import resolve_video
+        (tmp_path / "first_catch.avi").write_bytes(b"")
+        with pytest.raises(SystemExit) as excinfo:
+            resolve_video(tmp_path, "second_catch")
+        assert "second_catch" in str(excinfo.value)
+
+    def test_does_not_match_a_non_video_suffix(self, tmp_path):
+        from src.data.sources import resolve_video
+        (tmp_path / "clip.txt").write_bytes(b"")
+        with pytest.raises(SystemExit):
+            resolve_video(tmp_path, "clip")

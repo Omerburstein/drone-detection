@@ -76,6 +76,7 @@ from .algo.glad.vendor import GLAD_DIR
 from .algo.glad.yolo import PAD_STYLES
 from .data.crop import Crop
 from .data.datasets import SPECS, spec_for
+from .data.sources import resolve_video
 from .data.sampling import BURST, EVERY, NTH, Schedule, build_schedule
 from .output.recording import RunRecorder
 
@@ -295,7 +296,7 @@ def main() -> None:
         for n, stem in enumerate(names, 1):
             print(f"[{n}/{len(names)}] {stem}", flush=True)
             video_decoded, video_processed = run_video(
-                pipeline, args.videos / f"{stem}.mp4", stem, args, recorder,
+                pipeline, resolve_video(args.videos, stem), stem, args, recorder,
                 branches, schedule)
             decoded += video_decoded
             processed += video_processed

@@ -12,6 +12,27 @@ VIDEO = "video"
 IMAGES = "images"
 
 
+def resolve_video(directory: Path, stem: str) -> Path:
+    """Find `stem`'s video in `directory`, whatever container it is in.
+
+    `.mp4` was hardcoded while every dataset was a `.mp4` release. Our own
+    processed footage is not: a lossless crop has to be FFV1, which MP4 cannot
+    carry, so `data/processed/SOFA-O4/videos/` holds `.avi`. Preferring `.mp4`
+    keeps ARD-MAV and ARD100 resolving exactly as before.
+
+    Exits with the directory listing rather than raising -- a missing video is
+    a typo in `--video-names`, not an exceptional condition.
+    """
+    preferred = [".mp4", *sorted(VIDEO_SUFFIXES - {".mp4"})]
+    for suffix in preferred:
+        candidate = directory / f"{stem}{suffix}"
+        if candidate.exists():
+            return candidate
+    known = sorted(p.name for p in directory.glob(f"{stem}.*")) if directory.is_dir() else []
+    sys.exit(f"No video named {stem!r} in {directory} "
+             f"({'found: ' + ', '.join(known) if known else 'directory empty or missing'})")
+
+
 def resolve_sources(source: Path) -> tuple[str, list[Path]]:
     """Classify `source` as VIDEO or IMAGES and list the files to process.
 
