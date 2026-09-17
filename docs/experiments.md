@@ -1674,3 +1674,67 @@ predicts:
   `zoom_drone_over_terrain.png`, `zoom_ambiguous_1540_1700.png`, `new_regions24.png`.
   The sheets are reproducible with [`src.crops`](crops.md), which the throwaway scripts that
   first made them have since become; see the `/inspect` skill for how to read one.
+
+---
+
+## EXP-012a — the O4 fixes on one clip: the mask works, the motion fix does not
+
+- **Date:** 2026-09-17
+- **Question:** EXP-011 measured the overlay instead of the detector. With the HUD vetoed and the motion branches no longer discarding their candidates, does GLAD find the drone?
+- **Model / weights:** identical to EXP-004/005/010/011. `--pad released`.
+- **Data:** `data/processed/SOFA-O4/videos/first_catch.avi` — 964 frames, 1440×1080. **No labels**, but one target passage confirmed by eye and by tracker: frames ~955–964, 80×34 px against clean sky at frame 962.
+- **Hyperparameters:** `--hud-mask` (1.80% of frame) and `--motion-profile clutter` (ranked candidates, blob ceiling 3,000 → 12,000 px²).
+- **Hardware:** i7-1255U CPU, 701.2 s, **1.37 fps**.
+- **Command:** `py -3.13 -m src.glad_detect --videos data/processed/SOFA-O4/videos --video-names first_catch --record-all --pad released --hud-mask data/processed/SOFA-O4/hud_mask.png --motion-profile clutter --out runs/exp012a_first_catch`
+
+### Result
+
+| | EXP-011 | EXP-012a |
+| --- | ---: | ---: |
+| Detections | 166 | **9** |
+| `global miss` | 40.4% | **93.6%** |
+| `local yolo` | 95 | **0** |
+| Throughput | 3.11 fps | **1.37 fps** |
+| Drone found at frame 962 | no | **no** |
+
+**The HUD veto works.** 166 detections fall to 9, and every `local yolo` lock on a glyph is
+gone. **The motion fix does not buy recall.** Frames 950–964 are `global miss` without
+exception: the unmistakable 80×34 px quadcopter at 962 is still missed, and all 9 survivors
+were inspected as crops — **HUD ladder dashes and ground, not one drone.**
+
+Five of the nine sit on the **pitch ladder**, the one HUD element the mask does not cover
+because it sweeps vertically with pitch. That gap is now a measured consequence rather than
+a caveat.
+
+### Why the motion branches cannot see this target
+
+Measured over frames 954–964, target displacement against background displacement:
+
+| | px per frame |
+| --- | ---: |
+| **Target** | **4.1 – 9.5** (4.5 at the moment of the catch) |
+| Background, median | 18.9 – 24.3 |
+| Background, p90 | 27.2 – 34.3 |
+
+The background's own **spread is ~10 px between median and p90** — that is parallax, and a
+single homography cannot represent it. The residual it leaves behind is **larger than the
+target's entire differential motion of 4.5 px**. The drone is buried in compensation error,
+and no threshold, blob ceiling or candidate ranking recovers something that is quieter than
+the noise it sits in.
+
+This is intercept geometry doing it. Closing on a target puts it near the focus of
+expansion, where image motion is *least*, while the near ground streams past at 20+ px. The
+premise GLAD's motion branches rest on — that the target moves differently from a
+compensable background — is inverted here.
+
+- **Correction to the EXP-011 write-up.** That entry blamed `motion_compensate`'s 50 px
+  flow-rejection cap. **Measured, it is not binding on this segment**: background flow is
+  18.9–24.3 px median, p90 34.3, all under 50. The cap would bite lower and faster; what
+  bites *here* is parallax spread, which is a different problem and not fixed by moving
+  that constant.
+- **Caveats:** one clip, one passage, still no labels — so "missed" is established by eye
+  on a target that is unmistakable, but precision and recall remain unquantified. The
+  `clutter` profile also costs **2.3× the compute** for no recovered target.
+- **Next:** the appearance branch has to carry this, which means **fine-tuning on our own
+  labels** — Stage E of the plan and the existing M7. Before that, `--motion-profile
+  clutter` should not be adopted: it is slower and, on this evidence, buys nothing.

@@ -33,22 +33,25 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
   `global miss` falls from 46.8% and `global mod` rises, the motion fix worked; if
   HUD-overlapping detections fall from 83.1% to ~0, the mask worked.
 
-  **Watch precision, not only recall.** On `first_catch` frames 901-907 the candidates
-  `clutter` recovers sit at y ~820-870 — near-field **ground**, not the drone. Removing
-  the guard may trade "nothing" for "false alarms", and only labels can say which.
+  **`--motion-profile clutter` should not be adopted on this evidence.** EXP-012a ran it
+  over `first_catch`: recall on the confirmed passage stayed at **zero**, all 9 detections
+  were HUD or ground, and it cost **2.3x the compute** (3.11 -> 1.37 fps). Run EXP-012
+  with the mask alone unless a labelled measurement says otherwise.
 
-- [ ] 2026-09-17 — [algo] **Port `motion_compensate` so `flow_reject_px` can move.** It
-  discards any grid point moving more than **50 px between frames** and then fits a single
-  homography. At our altitude and speed that throws away the near-field points that
-  dominate the flow, and a homography cannot describe close 3D terrain through a fisheye.
-  **Generating fewer blobs would beat handling many.** Pair it with fisheye undistortion,
-  which would make the homography model valid again. Only `MOD2` is ported so far; this
-  constant still lives in the vendored `Functions`.
+- [ ] 2026-09-17 — [algo] **Fisheye undistortion before differencing.** EXP-012a measured
+  the real problem: background flow is 18.9–24.3 px median with a **p90 of 34.3 — a ~10 px
+  spread that is parallax**, and a single homography cannot represent it. The residual it
+  leaves is larger than the target's entire 4.5 px differential motion. Undistorting would
+  at least make the homography model valid; it would not make the target louder.
+  **Superseded within this item:** `motion_compensate`'s 50 px flow-rejection cap is *not*
+  binding on this footage — measured flow is under 50 everywhere — so porting it is no
+  longer a priority.
 
-- [ ] 2026-09-17 — [algo] **The centre horizon bar is not masked.** It sweeps vertically
-  with pitch, so its pixels are rarely white at any one position and survive the frequency
-  threshold. It was not among EXP-011's sampled offenders. Lower `--min-fraction` if it
-  starts producing detections, at the cost of masking more of the frame.
+- [ ] 2026-09-17 — [algo] **Mask the pitch ladder, which sweeps with pitch.** No longer a
+  caveat: in EXP-012a **five of the nine surviving detections sit on it**. It is rarely
+  white at any one position so the frequency threshold misses it. Either lower
+  `--min-fraction`, or mask the union of white pixels over the swept band, which is
+  cheaper than masking more of the frame everywhere.
 
 ### M4b — generalisation: does GLAD hold up on video it has never seen?
 
@@ -97,6 +100,8 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-17 — [data] **Annotate the FIELD capture's three target episodes** — *now the critical path: EXP-011 exhausted what unlabelled footage can answer, and both surviving questions (the ground-clutter false-alarm rate, and recall on our own camera) are measurements.* — frames ~2–180, ~1101–1553 and ~3140–3600 of `captured_raw_20260616_040253_004.mp4`, roughly 1,100 frames. This is the cheapest real score available to the project: EXP-010 is already keyed at `data/processed/FIELD/images/test/`, so labels there turn **an existing JSONL into AP, precision and recall with no second inference pass**. It is also the only way to measure **recall** on our own camera, which EXP-010 leaves unmeasured and which is the number the edge budget actually needs. Two warnings: the episodes' bounds come from where the *detector* fired, so annotating only those frames would score a set chosen by the thing being scored — extend each episode outward until the target is genuinely absent. And **do not eyeball full frames**: a 14×11 px drone at frame 1350 was missed by eye and caught by the detector.
 
 ## Done
+
+- [x] 2026-09-17 — [algo] **Measured the two O4 fixes on `first_catch` — EXP-012a.** **The HUD veto works:** 166 detections fall to 9 and every glyph lock is gone. **The motion fix does not buy recall:** frames 950-964 are `global miss` without exception, the unmistakable 80x34 px quadcopter at 962 is still missed, and all 9 survivors are HUD ladder dashes or ground. The reason is measured rather than guessed — the target moves **4.5 px/frame** while the background moves 21 px with a **~10 px spread between median and p90**, so the parallax a single homography cannot model leaves a residual *larger than the target's entire differential motion*. Intercept geometry does this: closing on a target puts it near the focus of expansion where image motion is least, while the near ground streams past. GLAD's motion premise is inverted here, and no threshold recovers a signal quieter than the noise around it. **This corrects the EXP-011 write-up**, which blamed the 50 px flow-rejection cap; measured flow is 18.9-24.3 px median, under the cap everywhere.
 
 - [x] 2026-09-17 — [data] [algo] **Built the three fixes EXP-011's diagnosis called for.** (1) `src.data.seed_track` — labels our own footage from a hand-placed box, since nothing on it is measurable otherwise. Two measured defaults: template blending is **off** (with it on, a track that slipped onto terrain adopted the terrain and matched it at 0.99 — the highest-confidence proposals were the worst ones), and `--min-score` stays at 0.45 (0.35 bought 118 frames sitting on trees). Reads sequentially: a seek costs 1,109 ms against 26 ms. (2) `src.data.hud_mask` + `src.glad_detect --hud-mask` — finds the burned-in overlay (28,002 px, **1.80% of the frame**) and vetoes boxes lying mostly on it, at every point one can be emitted *or locked onto*. On EXP-011's detections it vetoes **83.1%**, while the one confirmed drone scores **0.000** overlap. Nothing is inpainted. (3) `src.algo.glad.motion` — `MOD2` ported so its absolute-pixel constants can move, with `--motion-profile clutter` keeping ranked candidates instead of discarding all of them. Measured cause: `first_catch` frames 901-907 produce **105-170 candidates against a cap of 50**, so upstream discarded everything on every frame. Equivalence against the vendored module is pinned on **both** paths — the saturation path on O4 and the accept path on ARD-MAV — plus a test asserting the two fixtures really are different regimes, so it cannot pass vacuously. The default still loads the vendored `MOD2`, not the port.
 
