@@ -1400,7 +1400,11 @@ both are available — but the relative one is what a criterion argument should 
   unlabelled footage it would paint all 866 detections red and caption each a false alarm
   — a precision claim of zero against a run that sampled 23/24 correct. The unscored mode
   draws one neutral colour and says on the strip that nothing here is known to be right.
-- **Next:** EXP-011 (the appearance-only reference on the same video), and **labels** —
-  see [todo.md](todo.md). The run is keyed at `data/processed/FIELD/images/test/`, so
-  annotating even the three target episodes turns this JSONL into a real score with **no
-  second inference pass**.
+- **Next: labels** — see [todo.md](todo.md). The run is keyed at
+  `data/processed/FIELD/images/test/`, so annotating even the three target episodes turns
+  this JSONL into a real score with **no second inference pass**.
+- **No appearance-only reference exists for this footage.** A tiled `yolov8s_eo_drone`
+  run (the EXP-001–003 model, conf 0.15) was started on 2026-09-17 and **cancelled at
+  1,786 of 3,600 frames**; its partial output was deleted rather than kept, because a
+  half-finished run that looks like a run is worse than none. It sustained ~0.5 fps — a
+  full pass is ~2 h — so if the comparison is ever wanted, budget for that or stride it.
