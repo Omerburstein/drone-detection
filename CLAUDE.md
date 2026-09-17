@@ -49,7 +49,9 @@ so dataset work and model work do not collide:
 
 ```
 src/data/     frames.py     FrameSource -> Frame; video decode, striding, budgets
-              sources.py    classify --source as video or images
+              sources.py    classify --source as video or images; resolve_video by stem
+              crop.py       Crop; the picture region of a frame that is not all picture
+              seed_track.py CLI: one hand-placed box -> a labelled segment
 src/algo/     config.py     InferenceConfig
               detector.py   load_model, detect_frame, detect_tiled
               tiling.py     tile_origins, crop_grid, merge_boxes
