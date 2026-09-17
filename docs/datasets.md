@@ -69,6 +69,47 @@ set. *(Exact container unverified — it is only visible post-DUA.)*
 | MMFW-UAV | ❌ fixed-wing | ✅ | ✅ | Excluded |
 | DUT / VisioDECT / Drone-vs-Bird / Anti-UAV* / LRDDv2-3 / MMAUD / MM-UAV / USC-Drone | ✅ | mixed | ❌ ground | Auxiliary only |
 | SynDroneVision / SimD3 | ✅ | ✅ | ✅ | Synthetic |
+| **FIELD** (ours) | ✅ | ✅ | ✅ | **Our own capture — no labels, so no score** |
+
+---
+
+# Our own capture — `data/raw/FIELD/`
+
+The only footage here that is **ours**. Not a dataset: one video, no annotations, no split.
+It is documented in this file because `data/` is gitignored, so the repo's only durable
+record of it is this section and `docs/experiments.md` EXP-010.
+
+| | |
+| --- | --- |
+| File | `data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4` |
+| Size / MD5 | 384,276,521 bytes / `3eb902615105c70435481e83f58f39e5` |
+| Geometry | **1032×752**, 30 fps, **3,600 frames = 120.0 s** |
+| Captured | 2026-06-16 04:02:53 per the filename; filed 2026-09-17 |
+| Scene | Arid hillside — olive terraces, scrub, rock, buildings, hard sky/ridge horizon |
+| Target | A multirotor, against sky across roughly **the last 15 s** (frames ~3000–3600), shrinking as it recedes: ~25×20 px at frame 3150, ~20×18 at 3300, ~12×8 at 3450, ~8 px at 3599. Eight sampled frames before 3000 show none. Twelve frames checked by eye out of 3,600 — not an annotation |
+| Labels | **None.** |
+
+**Header and decoder agree at 3,600 frames**, unlike ARD-MAV and ARD100 where the header
+overstates. Still trust the decoder.
+
+## What the missing labels cost
+
+No ground truth means **no precision, recall, AP or mAP** — `src.evaluate` has nothing to
+match against. Runs over this video are records of what fired, not scores, and must not be
+tabulated beside EXP-001–009. `src.glad_detect --record-all` exists for exactly this case;
+see [glad_detect.md](glad_detect.md).
+
+Runs are keyed at `data/processed/FIELD/images/test/<stem>_<frame>.jpg`, the path labels
+would land at. Annotating the video later therefore costs **no second inference pass** —
+`src.evaluate` scores the JSONL that already exists.
+
+## The resolution caveat, which governs everything run on it
+
+GLAD's motion constants are absolute pixels tuned for 1920×1080: blob area 30–3000,
+search region `a=160`, `dist_ref=200`, blur 11, `MAX_DISTANCE=50`. This capture's frame
+diagonal is 1276 against 1080p's 2203 — **0.579× linear, 0.335× in area**. A GLAD run on
+it unchanged measures our failure to rescale alongside the detector, the same confound
+[todo.md](todo.md)'s M4b entry raises for FL-Drones.
 
 ---
 

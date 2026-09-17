@@ -81,10 +81,10 @@ def labelled(tmp_path, monkeypatch):
     return labels
 
 
-def drive(tmp_path, labels: Path, schedule: Schedule):
+def drive(tmp_path, labels: Path, schedule: Schedule, record_all: bool = False):
     """Run one stubbed video under `schedule`; return the stub and the rows."""
     args = argparse.Namespace(labels=labels, images=tmp_path / "images",
-                              max_frames_per_video=None)
+                              max_frames_per_video=None, record_all=record_all)
     pipeline = StubPipeline()
     out = tmp_path / "detections.jsonl"
     with RunRecorder(out) as recorder:
@@ -175,3 +175,45 @@ class TestBursts:
         assert processed == 6
         assert pipeline.stepped == [1, 2, 6, 7, 11, 12]
         assert keys(rows) == ["vid_0002"]
+
+
+class TestRecordAll:
+    """Unlabelled footage: `--record-all` decides recording, the schedule still
+    decides processing.
+
+    This is the field-capture path (EXP-010). The gate it lifts is the one that
+    keeps a *labelled* run honest, so the pair of tests here is really one
+    assertion in two directions: with the flag every processed frame is kept
+    even though no label file exists anywhere, and without it the same footage
+    records nothing at all.
+    """
+
+    @pytest.fixture
+    def unlabelled(self, tmp_path, monkeypatch):
+        """An empty label directory -- footage nobody has annotated."""
+        monkeypatch.setattr(glad_detect.cv2, "VideoCapture", StubCapture)
+        labels = tmp_path / "labels"
+        labels.mkdir()
+        return labels
+
+    def test_records_every_processed_frame(self, tmp_path, unlabelled):
+        _, rows, decoded, processed = drive(tmp_path, unlabelled, Schedule(),
+                                            record_all=True)
+        assert decoded == processed == TOTAL_FRAMES
+        assert keys(rows) == [f"vid_{i:04d}" for i in range(1, TOTAL_FRAMES + 1)]
+
+    def test_records_nothing_without_the_flag(self, tmp_path, unlabelled):
+        """The default gate, which is what stops an unannotated frame being
+        scored as if it were a labelled negative."""
+        _, rows, _, processed = drive(tmp_path, unlabelled, Schedule())
+        assert processed == TOTAL_FRAMES
+        assert rows == []
+
+    def test_still_records_only_scheduled_frames(self, tmp_path, unlabelled):
+        """`--record-all` lifts the label gate, not the duty cycle."""
+        pipeline, rows, _, processed = drive(tmp_path, unlabelled, EveryNth(2),
+                                             record_all=True)
+        assert pipeline.stepped == [1, 3, 5, 7, 9, 11]
+        assert processed == 6
+        assert keys(rows) == ["vid_0001", "vid_0003", "vid_0005",
+                             "vid_0007", "vid_0009", "vid_0011"]

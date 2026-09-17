@@ -48,6 +48,9 @@ Example
         --out runs/exp006_half_rate
     py -3.13 -m src.glad_detect --sample burst --burst-length 2 \
         --burst-period 60 --out runs/exp007_burst_pairs
+    py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos \
+        --video-names captured_raw_20260616_040253_004 --record-all \
+        --images data/processed/FIELD/images/test --out runs/exp010_field
     py -3.13 -m src.evaluate --pred runs/exp004_glad/detections.jsonl \
         --labels data/processed/ARD-MAV/labels/test \
         --conditions data/processed/ARD-MAV/conditions.json \
@@ -100,6 +103,15 @@ def build_parser() -> argparse.ArgumentParser:
                          "labels-only tree (prepare --no-images) runs fine.")
     ap.add_argument("--video-names", nargs="*", default=None,
                     help="Videos to run. Defaults to the dataset's 15-video test split.")
+    ap.add_argument("--record-all", action="store_true",
+                    help="Record every processed frame, including ones with no label "
+                         "file. For **unlabelled footage only** -- field capture that "
+                         "nobody has annotated yet. On a labelled split this would "
+                         "silently add unannotated frames to the scored set and "
+                         "understate precision, which is the whole reason recording "
+                         "is gated on a label by default. A run made this way cannot "
+                         "be scored until labels exist, so key it (--images) at the "
+                         "tree those labels will land in.")
     ap.add_argument("--out", type=Path, default=Path("runs/glad"),
                     help="Output directory (default: runs/glad).")
     ap.add_argument("--max-frames-per-video", type=int, default=None,
@@ -152,6 +164,8 @@ def run_video(pipeline: GladPipeline, video: Path, stem: str, args: argparse.Nam
     Unannotated frames are still *processed* -- skipping them would break the
     frame-to-frame differencing -- but are not recorded, because a detection
     scored against a frame nobody labelled would understate precision.
+    `--record-all` lifts that gate for footage where *nothing* is labelled, so
+    the run is a record of what the detector fired on rather than a score.
     """
     capture = cv2.VideoCapture(str(video))
     if not capture.isOpened():
@@ -179,7 +193,7 @@ def run_video(pipeline: GladPipeline, video: Path, stem: str, args: argparse.Nam
                 branches[result.branch] += 1
 
                 name = f"{stem}_{frame_index:04d}"
-                if (args.labels / f"{name}.txt").exists():
+                if args.record_all or (args.labels / f"{name}.txt").exists():
                     recorder.record({"image": str(args.images / f"{name}.jpg"),
                                      "branch": result.branch,
                                      **schedule.position(frame_index)},
@@ -225,6 +239,9 @@ def main() -> None:
     args.labels = args.labels or spec.out / "labels" / args.split
     args.images = args.images or spec.out / "images" / args.split
     names = list(args.video_names or spec.videos)
+    if args.record_all:
+        print("Recording every processed frame (--record-all): the output is a "
+              "record of what fired, not a score, until labels exist.")
     args.out.mkdir(parents=True, exist_ok=True)
 
     schedule = build_schedule(args.sample, args.sample_n,

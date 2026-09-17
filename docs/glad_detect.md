@@ -28,6 +28,7 @@ py -3.13 -m src.glad_detect [--dataset ARD-MAV|ARD100] [options]
 | `--labels` | the dataset's `labels/<split>` | Label directory for the split. Frames with no label file are **processed but not recorded** — see "Which frames are scored" below. |
 | `--images` | the dataset's `images/<split>` | Directory the JSONL rows are keyed by. Nothing is read from it and **it need not exist** — a labels-only tree (`prepare_ardmav --no-images`) runs fine. It is what lets `src.evaluate` resolve labels exactly as for a stills run. |
 | `--video-names` | the dataset's test 15 | Videos to run, without the `.mp4`. |
+| `--record-all` | off | Record **every** processed frame, not only ones with a label file. For unlabelled footage — our own field capture. See "Running it on footage nobody has labelled" below. |
 | `--out` | `runs/glad` | Output directory. Give every experiment its own. |
 | `--max-frames-per-video` | none | Stop each video after N frames. A **contiguous prefix**, so the motion branches still work — for smoke tests, not for results. Counts **decoded** frames, so it covers the same span of video under every `--sample` mode. |
 | `--sample` | `every` | Duty-cycle policy: `every` (what EXP-004 ran), `nth`, or `burst`. See "Duty cycling" below. **Not a stride.** |
@@ -280,6 +281,33 @@ fires: every decodable frame is annotated.
 The first frame of every video is recorded with no detection. Upstream skips it outright
 (there is no previous frame to difference against), but it carries ground truth, so
 omitting it would quietly inflate recall by 15 frames.
+
+## Running it on footage nobody has labelled
+
+`--record-all` records every processed frame regardless of whether a label file exists.
+It is for **our own capture** — `data/raw/FIELD/` — where there is no ground truth at all
+and the default gate above would write an empty JSONL.
+
+```
+py -3.13 -m src.glad_detect     --videos data/raw/FIELD/videos     --video-names captured_raw_20260616_040253_004     --record-all --pad released     --images data/processed/FIELD/images/test     --out runs/exp010_field_glad
+```
+
+Three things to hold onto when reading such a run:
+
+- **It is not a score.** No labels means no precision, recall or AP — `src.evaluate`
+  has nothing to match against. What the run gives you is how many boxes fired, where,
+  and via which branch. Never put those counts in a table beside EXP-004–009.
+- **Key it where the labels will land.** `--images` sets the JSONL row key and nothing
+  reads it, so pointing it at `data/processed/FIELD/images/test` costs nothing now and
+  means that if the footage is ever annotated, `src.evaluate` scores **this** JSONL
+  with no second inference run.
+- **Never pass it on a labelled split.** It would add unannotated frames to the scored
+  set and understate precision — exactly the failure the default gate exists to prevent.
+
+Resolution is the other caveat, and it is not specific to this flag: GLAD's motion
+constants are absolute pixels tuned for 1920×1080, so any source of another size is
+measuring our failure to rescale alongside the detector. `data/raw/FIELD/PROVENANCE.md`
+carries the arithmetic for the 1032×752 capture (0.579× linear).
 
 ## The `branch` field
 
