@@ -39,6 +39,7 @@ py -3.13 -m src.glad_detect [--dataset ARD-MAV|ARD100] [options]
 | `--glad-repo` | `third_party/GLAD` | Clone of the GLAD release. Its `weights/` must hold `yolov5s_GLAD.pt`, `yolov5s_GLAD-crop.pt` and `Net_best.pth`. |
 | `--pad` | `trained` | Letterbox fill for the global detector. `trained` (114) is the value yolov5 v6.0 trained these weights against. `released` (black) reproduces upstream including its padding bug. `tensorrtx` (128) is what upstream intended. See "The letterbox fill" below. |
 | `--scale` | `1.0` | Resize each frame by this factor before the detector, mapping boxes back so they are recorded in **original** pixels. `auto` picks the factor that puts the frame at 1920×1080's diagonal. `1.0` is a no-op. See "Footage that is not 1080p" below. |
+| `--invert` | off | Feed the detector `255 - pixel`. A **diagnostic**, not a fix — it tests GLAD's appearance prior. Geometry is untouched. See "Testing the appearance prior" below. |
 
 **There is no `--stride`, `--conf`, `--imgsz` or `--tile`, deliberately.** Every threshold
 is fixed at the value in the released source, because the point is to reproduce it. And
@@ -97,6 +98,37 @@ The better fix is to make the constants themselves scale-relative, which
 are function-local literals inside the vendored, gitignored `third_party/GLAD/MOD2.py`, with
 no parameter and nothing `import_motion` can rebind. Scaling the frame buys the same
 relationship between target and threshold without touching the vendored tree.
+
+## Testing the appearance prior
+
+`--invert` exists for one experiment and should not be used for anything else.
+
+GLAD's weights were fitted on ARD-MAV: **white DJI Phantoms shot against ground** — roads,
+concrete, grass, buildings. Measured on the test split, **84.4% of its targets are brighter
+than their background**. Our own field capture is the opposite on both axes at once — a dark
+airframe silhouetted against bright sky, **98.5% darker than background** — while the ground
+clutter it false-alarms on is **99.1% brighter**, which is to say the false alarms sit in the
+training distribution more comfortably than the real target does.
+[glad-model.md §5b](glad-model.md) has the measurement.
+
+Inverting swaps both polarities at once: the target moves onto the training side of the
+distribution and the pale clutter moves off it. If the prior is what drives the behaviour,
+cold acquisition (`global yolo`) should rise and the clutter locks should not form.
+
+```
+py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos     --video-names captured_raw_20260616_040253_004 --record-all     --images data/processed/FIELD/images/test --pad released --invert     --out runs/exp012_field_glad_inverted
+```
+
+- **Geometry is untouched.** Inversion is pointwise, so boxes are recorded exactly as they
+  would be otherwise and `src.render_video` needs no matching flag — unlike `--crop`, and
+  unlike `--scale`, which has to map back.
+- **It composes with `--crop` and `--scale`.** Applied after the crop; pointwise, so it
+  commutes with the letterbox and with `--scale`'s interpolation.
+- **A run made this way is not comparable to any un-inverted run**, including EXP-004–011.
+  It is a probe of the model, not a measurement of the detector.
+- **It is not a deployment fix.** Even if it works it would only say the prior is real. The
+  actual remedy for an appearance mismatch is fine-tuning on our own footage, which needs
+  labels.
 
 ## Duty cycling — running on fewer frames
 

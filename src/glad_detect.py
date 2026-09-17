@@ -153,6 +153,15 @@ def build_parser() -> argparse.ArgumentParser:
                          "a=160). Default 1.0, which is a no-op and the faithful path. "
                          "**A run with --scale != 1 is not directly comparable to "
                          "EXP-004-010.** Applied after --crop, so the two compose.")
+    ap.add_argument("--invert", action="store_true",
+                    help="Invert each frame (255 - pixel) before the detector. A test of "
+                         "the appearance prior, not a fix: ARD-MAV's targets are 84%% "
+                         "brighter than their background (white DJI Phantoms over ground), "
+                         "while our field target is a dark airframe against bright sky and "
+                         "our false alarms are pale ground clutter. Inverting swaps both "
+                         "polarities, putting the target on the training side of the "
+                         "distribution and the clutter off it. **Not comparable to any "
+                         "un-inverted run.** See docs/glad-model.md section 5b.")
     ap.add_argument("--sample", choices=(EVERY, NTH, BURST), default=EVERY,
                     help="Duty-cycle policy (default: every frame, which is what "
                          "EXP-004 ran). 'nth' runs the whole pipeline at 1/N of the "
@@ -212,6 +221,12 @@ def run_video(pipeline: GladPipeline | ScaledPipeline, video: Path, stem: str,
             decoded += 1
             if args.crop is not None:
                 frame = args.crop.apply(frame)
+            if args.invert:
+                # Pointwise, so it commutes with the letterbox and with --scale's
+                # interpolation; order against them does not matter. Boxes are
+                # unaffected, which is why this needs no mapping back the way
+                # --scale does.
+                frame = cv2.bitwise_not(frame)
 
             if schedule.wants(frame_index):
                 # Clearing state is what keeps a burst honest: without it the
@@ -284,6 +299,9 @@ def main() -> None:
     print(f"Sampling: {schedule.label}")
     if args.crop is not None:
         print(f"Crop: {args.crop.label} -- boxes are recorded in cropped coordinates")
+    if args.invert:
+        print("Inverted: 255 - pixel, before the detector. This is a test of the "
+              "appearance prior; the run is not comparable to an un-inverted one.")
     pipeline = GladPipeline.from_release(args.glad_repo, PAD_STYLES[args.pad])
     if args.scale != NATIVE:
         # The resolved factor and resized dimensions depend on the frame, so the

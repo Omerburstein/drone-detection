@@ -94,7 +94,7 @@ def labelled(tmp_path, monkeypatch):
 
 
 def drive(tmp_path, labels: Path, schedule: Schedule, record_all: bool = False,
-          crop=None, pipeline=None):
+          crop=None, pipeline=None, invert=False):
     """Run one stubbed video under `schedule`; return the stub and the rows.
 
     `pipeline` overrides the bare stub, which is what lets a wrapped pipeline --
@@ -102,7 +102,7 @@ def drive(tmp_path, labels: Path, schedule: Schedule, record_all: bool = False,
     """
     args = argparse.Namespace(labels=labels, images=tmp_path / "images",
                               max_frames_per_video=None, record_all=record_all,
-                              crop=crop)
+                              crop=crop, invert=invert)
     pipeline = pipeline if pipeline is not None else StubPipeline()
     out = tmp_path / "detections.jsonl"
     with RunRecorder(out) as recorder:
@@ -330,3 +330,55 @@ class TestScaledPipeline:
         drive(tmp_path, labelled, Bursts(2, 5), pipeline=scaled)
 
         assert inner.resets == [0, 0, 2, 4]
+
+
+class TestInvert:
+    """`--invert` feeds the detector `255 - pixel`.
+
+    The flag exists to test GLAD's appearance prior, not to improve anything:
+    ARD-MAV's targets are overwhelmingly brighter than their background and our
+    field target is darker, so inverting swaps which side of that distribution
+    each sits on. What the wiring has to get right is narrow -- the transform
+    reaches the detector, it reaches it *after* any crop, and it leaves the
+    recorded geometry alone, since inversion is pointwise and moves nothing.
+    """
+
+    def test_the_detector_sees_the_inverted_frame(self, tmp_path, labelled):
+        """The stub reports its corner marker, so an inverted frame reports
+        `255 - marker` -- frame 1 arrives as 254."""
+        pipeline, _, _, _ = drive(tmp_path, labelled, Schedule(), invert=True)
+
+        assert pipeline.stepped == [255 - i for i in range(1, TOTAL_FRAMES + 1)]
+
+    def test_off_by_default(self, tmp_path, labelled):
+        pipeline, _, _, _ = drive(tmp_path, labelled, Schedule())
+
+        assert pipeline.stepped == list(range(1, TOTAL_FRAMES + 1))
+
+    def test_geometry_is_untouched(self, tmp_path, labelled):
+        """Inversion moves no pixel, so the boxes must match an un-inverted run
+        exactly -- unlike --scale, this needs no mapping back."""
+        _, plain, _, _ = drive(tmp_path, labelled, Schedule())
+        _, inverted, _, _ = drive(tmp_path, labelled, Schedule(), invert=True)
+
+        assert ([r["detections"][0]["bbox"] for r in inverted]
+                == [r["detections"][0]["bbox"] for r in plain])
+
+    def test_applied_after_the_crop(self, tmp_path, labelled):
+        """Cropping an inverted frame and inverting a cropped one agree on
+        content, but only this order leaves --crop validating raw geometry."""
+        crop = Crop(0, 0, STUB_SIZE // 2, STUB_SIZE // 2)
+        pipeline, _, _, _ = drive(tmp_path, labelled, Schedule(), crop=crop,
+                                  invert=True)
+
+        assert pipeline.stepped == [255 - i for i in range(1, TOTAL_FRAMES + 1)]
+
+    def test_composes_with_scale(self, tmp_path, labelled):
+        """Both transforms at once: inversion is pointwise and scaling is linear
+        in pixel value, so neither disturbs the other."""
+        inner = StubPipeline()
+
+        _, rows, _, _ = drive(tmp_path, labelled, Schedule(), invert=True,
+                              pipeline=ScaledPipeline(inner, 2.0, announce=False))
+
+        assert rows[0]["detections"][0]["bbox"] == pytest.approx([5, 10, 7.5, 12.5])
