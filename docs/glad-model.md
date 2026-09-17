@@ -192,6 +192,55 @@ future."* That is still true as of this survey.
 
 ---
 
+## 5b. The appearance prior it actually learned — measured, 2026-09-17
+
+Prompted by an observation on our own footage: GLAD detects our drone against sky, and
+everything it finds against ground is a pale object that is not a drone. Measured with
+`scene_stats`'s own box-minus-ring annulus, but keeping the **sign** that `measure_frame`
+discards:
+
+| Population | n | brighter than background | darker | box mean | ring mean |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ARD-MAV test ground truth | 891 | **84.4%** | 15.6% | 138 | 115 |
+| FIELD true detections (sky episodes) | 823 | 1.5% | **98.5%** | 171 | 210 |
+| FIELD false alarms (EXP-011 clutter block) | 110 | **99.1%** | 0.9% | 114 | 84 |
+
+**ARD-MAV is white DJI Phantoms shot against ground**, largely urban — roads, concrete,
+grass, buildings. That is what the weights were fitted to. Our capture is the opposite on
+both axes at once: a **dark airframe silhouetted against bright sky**. And our false alarms
+— pale rocks and bush crowns on dark hillside — sit in the *training* distribution far more
+comfortably than our actual target does. `appearance_bias.png` in
+`runs/exp011_field_glad_scaled/` puts the three side by side and the resemblance between
+rows 1 and 3 is immediate.
+
+This reframes several things already in this document:
+
+- **Why `global yolo` is the weakest branch** (§6 item 1, and 0.1–0.3% of frames in every
+  run we have made). On our footage it is being asked to acquire, at conf 0.5, a target of
+  the opposite polarity to almost everything it was trained on. It essentially never does.
+- **Why the clutter locks sustain.** `TrackingDetector.CONF_THRESH` is **0.1**. Once locked,
+  anything within 50 px clearing 0.1 keeps the track alive — and a pale blob on dark ground
+  is exactly what the weights find easy. Note also that on the `local yolo` branch, which
+  produced ~96% of every false alarm we have inspected, **the LeNet motion gate never runs**:
+  `_local_step` consults LAD first and only falls through to `MOD2_local` when LAD returns
+  nothing. The stage the authors built to reject clutter is bypassed on the branch that
+  generates it.
+- **Why upscaling made EXP-011 worse.** More pixels on a pale ground blob makes it resemble
+  a training-set Phantom more closely, not less.
+
+**Caveats.** The 891 targets are sampled from the *test* 15; the weights were fitted on the
+other 45 videos, so this characterises the dataset rather than the training set directly —
+fair, since it is one dataset and one airframe, but not the same statement. Polarity is
+measured, the causal claim is inferred. `phantom43` is 0% brighter, so the dataset does
+contain sky-background sequences; the prior is a lean, not an absolute.
+
+**The decisive test is cheap.** Run the same pipeline over a **polarity-inverted** copy of
+our footage (`255 - pixel`). If the prior is what is driving this, cold acquisition should
+improve sharply and the ground clutter should stop being attractive, because inversion puts
+our drone on the training side of the distribution and the clutter on the wrong side.
+Roughly 20 minutes on this host, no labels required, and the branch mix alone would answer
+it. Filed in [todo.md](todo.md).
+
 ## 6. How to improve it
 
 Ordered by (our expected gain) ÷ (effort). Items 1–4 are cheap and low-risk.
