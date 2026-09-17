@@ -8,6 +8,7 @@ annotated-run sink and the ground-truth overlay share one implementation of it.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Self
 
@@ -15,6 +16,22 @@ import cv2
 import numpy as np
 
 FOURCC = "mp4v"  # available in every opencv-python wheel, unlike H.264
+
+
+def open_video(path: Path) -> tuple[cv2.VideoCapture, int, int, float]:
+    """Open a video and read back the geometry the labels must be scaled by.
+
+    Here rather than in a CLI because every consumer of a recorded run needs
+    the same three numbers to make sense of it: `src.render_video` to scale
+    ground truth onto the frame, `src.crops` to size the boxes it crops.
+    """
+    capture = cv2.VideoCapture(str(path))
+    if not capture.isOpened():
+        sys.exit(f"Could not open {path}")
+    width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = capture.get(cv2.CAP_PROP_FPS)
+    return capture, width, height, fps
 
 
 class LazyVideoWriter:

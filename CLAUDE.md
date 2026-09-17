@@ -58,6 +58,7 @@ src/output/   recording.py  RunRecorder (JSONL + counters)
               annotate.py   AnnotationSink -> VideoSink / ImageDirSink / NullSink
               video.py      LazyVideoWriter: an mp4 sized by its first frame
               overlay.py    ground truth + prediction on one frame, coloured by outcome
+              contact.py    many detections cropped onto one sheet, grouped by branch
 src/eval/     labels.py     EvalFrame; ground truth paired with recorded preds
               metrics.py    matching, AP, the Metrics record
               conditions.py Axis; grouping frames by capture conditions
@@ -73,6 +74,7 @@ src/plot_eval.py            CLI: precision-against-size figure from a dump
 src/cross_eval.py           CLI: Pd and false alarms per (size x condition) cell
 src/alarm_eval.py           CLI: false alarms by distance from the nearest drone
 src/render_video.py         CLI: a scored run drawn back onto its source video
+src/crops.py                CLI: every detection cropped onto one contact sheet
 ```
 
 **`src/data/` is source code, not a dataset.** The gitignore rules for `data/`,
@@ -222,7 +224,9 @@ runs on. Data / model / does-it-run-in-the-field are the three boundaries. Accur
 stay `algo-agent`'s property even when `deploy-agent` produced the run that moved them.
 
 `.claude/skills/` — `/clean-up` (quality only, not a bug hunt), `/test-creation`,
-`/eval`, `/todo` (captures a task in `docs/todo.md`; capture only, does not do the work).
+`/eval`, `/inspect` (looking at what a run fired on when there are no labels: the
+overlay video and the contact sheet, plus how to judge a crop and how not to),
+`/todo` (captures a task in `docs/todo.md`; capture only, does not do the work).
 
 `.claude/hooks/` — `definition_of_done.py`, wired in `.claude/settings.json` as two
 hooks sharing one script: `record` (`PostToolUse` on `Write|Edit`, async) notes which

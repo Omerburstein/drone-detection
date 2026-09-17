@@ -39,13 +39,12 @@ import argparse
 import sys
 from pathlib import Path
 
-import cv2
 
 from .data.crop import Crop
 from .eval.labels import load_frames
 from .eval.metrics import CENTER, IOU, MatchCriterion
 from .output.overlay import Style, render_frame
-from .output.video import LazyVideoWriter
+from .output.video import LazyVideoWriter, open_video
 
 PROGRESS_EVERY = 200
 
@@ -101,17 +100,6 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Stop after N rendered frames — a contiguous prefix, for "
                          "checking the overlay without decoding the whole video.")
     return ap
-
-
-def open_video(path: Path) -> tuple[cv2.VideoCapture, int, int, float]:
-    """Open a video and read back the geometry the labels must be scaled by."""
-    capture = cv2.VideoCapture(str(path))
-    if not capture.isOpened():
-        sys.exit(f"Could not open {path}")
-    width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = capture.get(cv2.CAP_PROP_FPS)
-    return capture, width, height, fps
 
 
 def criterion_from_args(args: argparse.Namespace) -> MatchCriterion | None:
