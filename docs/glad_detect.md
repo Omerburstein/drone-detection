@@ -28,6 +28,7 @@ py -3.13 -m src.glad_detect [--dataset ARD-MAV|ARD100] [options]
 | `--labels` | the dataset's `labels/<split>` | Label directory for the split. Frames with no label file are **processed but not recorded** — see "Which frames are scored" below. |
 | `--images` | the dataset's `images/<split>` | Directory the JSONL rows are keyed by. Nothing is read from it and **it need not exist** — a labels-only tree (`prepare_ardmav --no-images`) runs fine. It is what lets `src.evaluate` resolve labels exactly as for a stills run. |
 | `--video-names` | the dataset's test 15 | Videos to run, without the `.mp4`. |
+| `--crop` | none | `X,Y,W,H` — detect on this rectangle of each frame instead of the whole one, for sources that are not all picture. Boxes are recorded in **cropped** coordinates. See "Sources that are not all picture" below. |
 | `--record-all` | off | Record **every** processed frame, not only ones with a label file. For unlabelled footage — our own field capture. See "Running it on footage nobody has labelled" below. |
 | `--out` | `runs/glad` | Output directory. Give every experiment its own. |
 | `--max-frames-per-video` | none | Stop each video after N frames. A **contiguous prefix**, so the motion branches still work — for smoke tests, not for results. Counts **decoded** frames, so it covers the same span of video under every `--sample` mode. |
@@ -281,6 +282,36 @@ fires: every decodable frame is annotated.
 The first frame of every video is recorded with no detection. Upstream skips it outright
 (there is no previous frame to difference against), but it carries ground truth, so
 omitting it would quietly inflate recall by 15 frames.
+
+## Sources that are not all picture
+
+A DJI goggles screen recording is **2520x1080 with a 1440x1080 picture in the middle**;
+the rest is pillarbox with HUD glyphs drawn on it. Handing that to the detector whole is
+not merely wasteful — the global detector letterboxes the frame's **longest side** to 640,
+so the bars are paid for in target resolution:
+
+| | Scale to 640 | A 20 px drone arrives as |
+| --- | --- | --- |
+| Whole 2520x1080 frame | 0.254 | **5 px** |
+| Cropped 1440x1080 | 0.444 | **9 px** |
+
+```
+--crop 540,0,1440,1080
+```
+
+- **The crop is applied at decode**, so nothing is re-encoded. Writing cropped copies
+  through `cv2.VideoWriter`'s mp4v would put a lossy generation between `data/raw/` and
+  every number taken from it, and it would smear 10–30 px targets — exactly what is being
+  measured.
+- **Boxes are recorded in cropped coordinates**, because that is the frame the detector
+  saw. Pass the **same** `--crop` to `src.render_video`, or every box lands offset by the
+  crop origin — plausible-looking and all wrong.
+- **A crop that runs off the source is refused before the decode starts**, not after a few
+  thousand frames.
+- **The HUD inside the picture is not removed.** The ladder marks, arrows and the bottom
+  telemetry strip are burned into the video region and the detector sees them. They are
+  mostly static, so the motion branches difference them away, but the appearance branch
+  has no such protection — check where detections land before trusting a count.
 
 ## Running it on footage nobody has labelled
 

@@ -70,6 +70,7 @@ set. *(Exact container unverified — it is only visible post-DUA.)*
 | DUT / VisioDECT / Drone-vs-Bird / Anti-UAV* / LRDDv2-3 / MMAUD / MM-UAV / USC-Drone | ✅ | mixed | ❌ ground | Auxiliary only |
 | SynDroneVision / SimD3 | ✅ | ✅ | ✅ | Synthetic |
 | **FIELD** (ours) | ✅ | ✅ | ✅ | **Our own capture — no labels, so no score** |
+| **SOFA-O4** (ours) | ✅ | ✅ | ✅ | **Our own intercept trials — no labels, so no score** |
 
 ---
 
@@ -115,6 +116,55 @@ search region `a=160`, `dist_ref=200`, blur 11, `MAX_DISTANCE=50`. This capture'
 diagonal is 1276 against 1080p's 2203 — **0.579× linear, 0.335× in area**. A GLAD run on
 it unchanged measures our failure to rescale alongside the detector, the same confound
 [todo.md](todo.md)'s M4b entry raises for FL-Drones.
+
+---
+
+# Our own intercept trials — `data/raw/SOFA-O4/`
+
+Six clips from the **EXP Sofa Base** trials of **2026-08-24**, off the **DJI O4** digital
+FPV link — the second body of own-airframe footage after FIELD, and the first where each
+clip carries an outcome. Full provenance, with per-file MD5s, in
+`data/raw/SOFA-O4/PROVENANCE.md` (gitignored, like `data/`).
+
+| File | Frames | Seconds |
+| --- | ---: | ---: |
+| `first_catch.mp4` | 964 | 32.1 |
+| `second_catch.mp4` | 1,551 | 51.7 |
+| `third_catch.mp4` | 1,155 | 38.5 |
+| `forth_catch.mp4` | 1,060 | 35.3 |
+| `catch_5.mp4` | 932 | 31.1 |
+| `miss_1.mp4` | 1,724 | 57.5 |
+
+**7,386 frames, 4.1 minutes, all 2520×1080 @ 30 fps.**
+
+## They are goggles screen recordings, and only 57% of the frame is picture
+
+The video is a **1440×1080 window at x=540**; the rest is pillarbox carrying HUD glyphs.
+Verified identical across all six clips. A dashed pitch ladder and a telemetry strip
+(`ALT`, `24.3V`, `19 Mbps`) are burned **into** the picture as well — there is no clean
+feed to fall back on.
+
+Runs pass `--crop 540,0,1440,1080`, applied at decode so nothing is re-encoded. This is
+not cosmetic: the global detector letterboxes the longest side to 640, so the uncropped
+2520-wide frame scales by 0.254 and a 20 px target arrives as **5 px**; cropped, it scales
+by 0.444 and arrives as **9 px**. See [glad_detect.md](glad_detect.md).
+
+## "catch" and "miss" are trial outcomes, not labels
+
+Five clips are named `catch` and one `miss` — whether the interceptor reached the target,
+recorded by whoever flew it. **Nothing here says which frames contain a target, or where.**
+Do not read the filename as ground truth for a detector: a clip named `catch` still
+contains long stretches with no target in view, and a detection in one is not validated by
+the name of the file it came from.
+
+## No labels
+
+As with FIELD: **no precision, recall, AP or mAP is computable.** Runs are keyed at
+`data/processed/SOFA-O4/images/test/`, so labels dropped there later score the existing
+JSONL with no second inference pass.
+
+Frame diagonal after the crop is 1800 against 1080p's 2203 — **0.817× linear**, closer to
+the tuning of GLAD's absolute-pixel motion constants than FIELD's 0.579×, but not 1.0.
 
 ---
 

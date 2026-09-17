@@ -211,3 +211,44 @@ class TestUnlabelledFootage:
                          "--out", str(tmp_path / "overlay.mp4"))
         assert result.returncode != 0
         assert "mutually exclusive" in result.stderr
+
+
+class TestCroppedRun:
+    """`--crop` on the renderer must match the crop the run was made with.
+
+    A cropped run records boxes in cropped coordinates. Rendering the full frame
+    would draw every one of them offset by the crop origin — boxes that look
+    plausible and are all wrong, which is the failure worth a test.
+    """
+
+    def test_renders_the_cropped_region(self, clip, tmp_path):
+        video, pred, _ = clip
+        out = tmp_path / "overlay.mp4"
+        result = run_cli("--video", str(video), "--pred", str(pred), "--no-labels",
+                         "--crop", f"20,10,{WIDTH - 40},{HEIGHT - 20}",
+                         "--out", str(out))
+
+        assert result.returncode == 0, result.stderr
+        assert f"{WIDTH - 40}x{HEIGHT - 20} (cropped" in result.stdout
+
+        capture = cv2.VideoCapture(str(out))
+        try:
+            ok, frame = capture.read()
+        finally:
+            capture.release()
+        assert ok and frame.shape[:2] == (HEIGHT - 20, WIDTH - 40)
+
+    def test_a_crop_that_does_not_fit_is_refused(self, clip, tmp_path):
+        """Caught before the decode, not after a few thousand frames."""
+        video, pred, _ = clip
+        result = run_cli("--video", str(video), "--pred", str(pred), "--no-labels",
+                         "--crop", f"0,0,{WIDTH + 10},{HEIGHT}",
+                         "--out", str(tmp_path / "overlay.mp4"))
+        assert result.returncode != 0
+        assert "does not fit" in result.stderr
+
+    def test_a_malformed_crop_is_refused_by_the_parser(self, clip, tmp_path):
+        video, pred, _ = clip
+        result = run_cli("--video", str(video), "--pred", str(pred), "--no-labels",
+                         "--crop", "0,0,100", "--out", str(tmp_path / "overlay.mp4"))
+        assert result.returncode != 0

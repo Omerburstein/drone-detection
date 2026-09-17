@@ -18,11 +18,13 @@ import json
 from collections import Counter
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pytest
 
 from src import glad_detect
 from src.algo.glad.pipeline import GLOBAL_YOLO, StepResult
+from src.data.crop import Crop
 from src.data.sampling import Bursts, EveryNth, Schedule
 from src.output.recording import RunRecorder
 
@@ -49,6 +51,9 @@ class StubPipeline:
         return StepResult(np.array([10.0, 20.0, 5.0, 5.0]), GLOBAL_YOLO)
 
 
+STUB_SIZE = 8
+
+
 class StubCapture:
     """A `cv2.VideoCapture` that yields `TOTAL_FRAMES` numbered frames."""
 
@@ -58,11 +63,17 @@ class StubCapture:
     def isOpened(self) -> bool:  # noqa: N802 -- mirrors cv2
         return True
 
+    def get(self, prop: int) -> float:
+        """Frame geometry, which is what --crop is validated against."""
+        if prop in (cv2.CAP_PROP_FRAME_WIDTH, cv2.CAP_PROP_FRAME_HEIGHT):
+            return float(STUB_SIZE)
+        return 0.0
+
     def read(self):
         if self._index >= TOTAL_FRAMES:
             return False, None
         self._index += 1
-        image = np.zeros((8, 8, 3), dtype=np.uint8)
+        image = np.zeros((STUB_SIZE, STUB_SIZE, 3), dtype=np.uint8)
         image[0, 0, 0] = self._index
         return True, image
 
@@ -81,10 +92,12 @@ def labelled(tmp_path, monkeypatch):
     return labels
 
 
-def drive(tmp_path, labels: Path, schedule: Schedule, record_all: bool = False):
+def drive(tmp_path, labels: Path, schedule: Schedule, record_all: bool = False,
+          crop=None):
     """Run one stubbed video under `schedule`; return the stub and the rows."""
     args = argparse.Namespace(labels=labels, images=tmp_path / "images",
-                              max_frames_per_video=None, record_all=record_all)
+                              max_frames_per_video=None, record_all=record_all,
+                              crop=crop)
     pipeline = StubPipeline()
     out = tmp_path / "detections.jsonl"
     with RunRecorder(out) as recorder:
@@ -217,3 +230,29 @@ class TestRecordAll:
         assert processed == 6
         assert keys(rows) == ["vid_0001", "vid_0003", "vid_0005",
                              "vid_0007", "vid_0009", "vid_0011"]
+
+
+class TestCrop:
+    """`--crop` reaches the detector, and only the detector.
+
+    The stub records the marker pixel at (0, 0) of whatever it is handed, so a
+    crop that took effect changes *which* pixel that is. The frame index must
+    not change with it: keys are the decode order, not the region.
+    """
+
+    def test_the_pipeline_sees_only_the_cropped_region(self, tmp_path, labelled):
+        """StubCapture marks (0, 0) with the frame number and leaves the rest 0,
+        so cropping past it must hand the pipeline zeros."""
+        pipeline, _, _, _ = drive(tmp_path, labelled, Schedule(),
+                                  crop=Crop(2, 2, 4, 4))
+        assert pipeline.stepped == [0] * TOTAL_FRAMES
+
+    def test_without_a_crop_the_marker_survives(self, tmp_path, labelled):
+        pipeline, _, _, _ = drive(tmp_path, labelled, Schedule())
+        assert pipeline.stepped == list(range(1, TOTAL_FRAMES + 1))
+
+    def test_frame_keys_are_unaffected(self, tmp_path, labelled):
+        _, rows, decoded, processed = drive(tmp_path, labelled, Schedule(),
+                                            crop=Crop(2, 2, 4, 4))
+        assert decoded == processed == TOTAL_FRAMES
+        assert keys(rows) == [f"vid_{i:04d}" for i in range(1, TOTAL_FRAMES + 1)]

@@ -24,6 +24,7 @@ a different rule, not at a different detector.
 | `--labels` | required *(unless `--no-labels`)* | Directory of YOLO-format `.txt` labels for the split. |
 | `--no-labels` | off | Render **unscored** — footage with no ground truth. Every prediction is drawn in one neutral colour and none is called a hit or a false alarm. Mutually exclusive with `--labels`. See "Footage nobody has labelled" below. |
 | `--out` | required | Output `.mp4`. Parent directories are created. |
+| `--crop` | none | `X,Y,W,H` — draw on this rectangle of the frame. Pass the **same** `--crop` the run used: a cropped run records its boxes in cropped coordinates, so rendering the full frame puts every box in the wrong place. |
 | `--key-prefix` | the video's stem | Which frames of `--pred` belong to this video, e.g. `phantom19`. |
 | `--match` | `center` | How a prediction claims a target, exactly as in `src.evaluate`. Decides only the **colour** of a box, never whether it is drawn. |
 | `--iou` | `0.5` | IoU threshold for `--match iou`. |

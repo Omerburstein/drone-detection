@@ -69,6 +69,7 @@ import cv2
 from .algo.glad.pipeline import GladPipeline
 from .algo.glad.vendor import GLAD_DIR
 from .algo.glad.yolo import PAD_STYLES
+from .data.crop import Crop
 from .data.datasets import SPECS, spec_for
 from .data.sampling import BURST, EVERY, NTH, Schedule, build_schedule
 from .output.recording import RunRecorder
@@ -103,6 +104,14 @@ def build_parser() -> argparse.ArgumentParser:
                          "labels-only tree (prepare --no-images) runs fine.")
     ap.add_argument("--video-names", nargs="*", default=None,
                     help="Videos to run. Defaults to the dataset's 15-video test split.")
+    ap.add_argument("--crop", type=Crop.parse, default=None, metavar="X,Y,W,H",
+                    help="Detect on this rectangle of each frame instead of the whole "
+                         "one, for sources that are not all picture -- a goggles "
+                         "screen recording is pillarboxed, and the bars cost the target "
+                         "resolution because the global detector letterboxes the "
+                         "longest side. Recorded boxes are in **cropped** coordinates; "
+                         "pass the same --crop to src.render_video. Applied at decode, "
+                         "so nothing is re-encoded.")
     ap.add_argument("--record-all", action="store_true",
                     help="Record every processed frame, including ones with no label "
                          "file. For **unlabelled footage only** -- field capture that "
@@ -170,6 +179,12 @@ def run_video(pipeline: GladPipeline, video: Path, stem: str, args: argparse.Nam
     capture = cv2.VideoCapture(str(video))
     if not capture.isOpened():
         sys.exit(f"Could not open {video}")
+    if args.crop is not None:
+        shape = (int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+                 int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)))
+        if not args.crop.fits(shape):
+            sys.exit(f"--crop {args.crop.label} does not fit {video.name} "
+                     f"({shape[1]}x{shape[0]})")
 
     pipeline.reset()
     frame_index = decoded = processed = 0
@@ -180,6 +195,8 @@ def run_video(pipeline: GladPipeline, video: Path, stem: str, args: argparse.Nam
                 break
             frame_index += 1  # label numbering is one-based
             decoded += 1
+            if args.crop is not None:
+                frame = args.crop.apply(frame)
 
             if schedule.wants(frame_index):
                 # Clearing state is what keeps a burst honest: without it the
@@ -250,6 +267,8 @@ def main() -> None:
     print(f"Loading GLAD from {args.glad_repo} ...")
     print(f"Letterbox fill: {args.pad} ({PAD_STYLES[args.pad]})")
     print(f"Sampling: {schedule.label}")
+    if args.crop is not None:
+        print(f"Crop: {args.crop.label} -- boxes are recorded in cropped coordinates")
     pipeline = GladPipeline.from_release(args.glad_repo, PAD_STYLES[args.pad])
 
     branches: Counter = Counter()

@@ -41,6 +41,7 @@ from pathlib import Path
 
 import cv2
 
+from .data.crop import Crop
 from .eval.labels import load_frames
 from .eval.metrics import CENTER, IOU, MatchCriterion
 from .output.overlay import Style, render_frame
@@ -69,6 +70,11 @@ def build_parser() -> argparse.ArgumentParser:
                          "detection red -- a false-alarm claim nobody measured.")
     ap.add_argument("--out", required=True, type=Path,
                     help="Output .mp4. Parent directories are created.")
+    ap.add_argument("--crop", type=Crop.parse, default=None, metavar="X,Y,W,H",
+                    help="Draw on this rectangle of each frame. Pass the **same** "
+                         "--crop the run used: a cropped run records its boxes in "
+                         "cropped coordinates, so rendering the full frame would put "
+                         "every box in the wrong place.")
     ap.add_argument("--key-prefix", default=None,
                     help="Frame-key prefix to select from --pred. Defaults to the "
                          "video's stem, e.g. 'phantom19'.")
@@ -123,6 +129,13 @@ def criterion_from_args(args: argparse.Namespace) -> MatchCriterion | None:
 def render(args: argparse.Namespace) -> tuple[int, int]:
     """Write the overlay video; return (frames rendered, frames skipped)."""
     capture, width, height, source_fps = open_video(args.video)
+    if args.crop is not None:
+        if not args.crop.fits((height, width)):
+            sys.exit(f"--crop {args.crop.label} does not fit {args.video.name} "
+                     f"({width}x{height})")
+        # The labels and the frame size must describe the frame the detector
+        # saw, not the one on disk.
+        width, height = args.crop.width, args.crop.height
     prefix = args.key_prefix or args.video.stem
 
     # With no labels every lookup misses and `load_label_file` returns an empty
@@ -134,7 +147,8 @@ def render(args: argparse.Namespace) -> tuple[int, int]:
     if not frames:
         sys.exit(f"No frames keyed '{prefix}_*' in {args.pred}")
     kind = "unscored" if args.no_labels else "scored"
-    print(f"{len(frames)} {kind} frames for {prefix}; {width}x{height} "
+    cropped = f" (cropped {args.crop.label})" if args.crop is not None else ""
+    print(f"{len(frames)} {kind} frames for {prefix}; {width}x{height}{cropped} "
           f"@ {source_fps:.2f} fps")
 
     style = Style(zoom=args.zoom, span=args.zoom_span, caption=not args.no_caption)
@@ -147,6 +161,8 @@ def render(args: argparse.Namespace) -> tuple[int, int]:
                 ok, image = capture.read()
                 if not ok:
                     break
+                if args.crop is not None:
+                    image = args.crop.apply(image)
                 index += 1  # frame keys are one-based, as prepare_ardmav wrote them
                 frame = frames.get(f"{prefix}_{index:04d}")
                 if frame is None:
