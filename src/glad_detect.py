@@ -70,6 +70,7 @@ from pathlib import Path
 
 import cv2
 
+from .algo.glad.motion import PROFILES
 from .algo.glad.pipeline import GladPipeline
 from .algo.glad.scaling import NATIVE, ScaledPipeline, parse_scale
 from .algo.glad.vendor import GLAD_DIR
@@ -119,6 +120,16 @@ def build_parser() -> argparse.ArgumentParser:
                          "longest side. Recorded boxes are in **cropped** coordinates; "
                          "pass the same --crop to src.render_video. Applied at decode, "
                          "so nothing is re-encoded.")
+    ap.add_argument("--motion-profile", choices=sorted(PROFILES), default=None,
+                    help="Tuning for the motion branches. Omit it (the default) "
+                         "to run the **vendored** MOD2 itself. 'upstream' runs "
+                         "the port at upstream's constants, which is equivalent "
+                         "and is how the equivalence is checked. 'clutter' keeps "
+                         "ranked candidates instead of discarding all of them "
+                         "when the difference image is crowded, and raises the "
+                         "blob-area ceiling -- for low-altitude flight over "
+                         "ground. **A run using this is a variant of GLAD and "
+                         "must not be reported as GLAD.**")
     ap.add_argument("--hud-mask", type=Path, default=None,
                     help="PNG mask of an overlay burned into the video, from "
                          "src.data.hud_mask. A box lying mostly on it is neither "
@@ -315,8 +326,12 @@ def main() -> None:
         hud_mask = load_mask(args.hud_mask)
         print(f"HUD mask: {args.hud_mask} -- {100 * hud_mask.mean():.2f}% of the "
               f"frame is overlay")
+    motion_config = PROFILES[args.motion_profile] if args.motion_profile else None
+    if motion_config is not None:
+        print(f"Motion: {motion_config.label}")
     pipeline = GladPipeline.from_release(args.glad_repo, PAD_STYLES[args.pad],
-                                         hud_mask=hud_mask)
+                                         hud_mask=hud_mask,
+                                         motion_config=motion_config)
     if args.scale != NATIVE:
         # The resolved factor and resized dimensions depend on the frame, so the
         # wrapper prints them itself on the first frame of each distinct shape.

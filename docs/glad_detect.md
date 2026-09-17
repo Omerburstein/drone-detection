@@ -29,6 +29,7 @@ py -3.13 -m src.glad_detect [--dataset ARD-MAV|ARD100] [options]
 | `--images` | the dataset's `images/<split>` | Directory the JSONL rows are keyed by. Nothing is read from it and **it need not exist** — a labels-only tree (`prepare_ardmav --no-images`) runs fine. It is what lets `src.evaluate` resolve labels exactly as for a stills run. |
 | `--video-names` | the dataset's test 15 | Videos to run, without the `.mp4`. |
 | `--crop` | none | `X,Y,W,H` — detect on this rectangle of each frame instead of the whole one, for sources that are not all picture. Boxes are recorded in **cropped** coordinates. See "Sources that are not all picture" below. |
+| `--motion-profile` | none | Tuning for the motion branches: `upstream` (the port at upstream's constants) or `clutter` (keeps ranked candidates instead of discarding all of them). Omitting it runs the **vendored** `MOD2` itself. See "When the motion branches switch themselves off" below. |
 | `--hud-mask` | none | PNG from [`src.data.hud_mask`](hud_mask.md). A box lying mostly on a burned-in overlay is neither emitted nor locked onto. Goggles recordings only. |
 | `--record-all` | off | Record **every** processed frame, not only ones with a label file. For unlabelled footage — our own field capture. See "Running it on footage nobody has labelled" below. |
 | `--out` | `runs/glad` | Output directory. Give every experiment its own. |
@@ -422,6 +423,65 @@ The ladder marks, arrows and the bottom telemetry strip are burned into the vide
 and the detector sees them. They are mostly static, so the motion branches difference them
 away, but the appearance branch has no such protection — check where detections land
 before trusting a count.
+
+## When the motion branches switch themselves off
+
+`MOD2` discards **every** candidate when too many survive its blob filter:
+
+```python
+if len(rect_merge) > 50:      # 30 in the local variant
+    print('too much bboxes')
+    return []
+```
+
+| Run | Frames | `too much bboxes` |
+| --- | ---: | ---: |
+| EXP-010 FIELD | 3,600 | 23 |
+| EXP-011 SOFA-O4 | 7,386 | **3,595** |
+
+Low-altitude flight over close, textured ground through a wide lens leaves a large residual
+after a single-homography compensation, so the difference image fills with blobs. Measured
+on `first_catch` frames 901-907: **105-170 candidates against a cap of 50** — every frame
+discarded everything.
+
+That matters more than it sounds. GLAD's published ablation puts recall at 0.51 without the
+motion branches and 0.81 with them, and **acquisition runs through `MOD2_global`** — the
+full-frame appearance detector fired 15 times in 7,386 frames. Half our run was a pipeline
+with its acquisition path switched off.
+
+### The profiles
+
+| Profile | What it is |
+| --- | --- |
+| *(omitted)* | The **vendored** `MOD2`, unmodified. The default, and what EXP-004, EXP-005 and EXP-010 ran. |
+| `upstream` | `src.algo.glad.motion` at upstream's constants. Equivalent to the above — that is exactly what `tests/integration/test_motion_equivalence.py` pins. |
+| `clutter` | Keeps ranked candidates when crowded, and raises the blob-area ceiling from 3,000 px² to 12,000. |
+
+**A run using `clutter` is a variant of GLAD and must not be reported as GLAD.**
+
+### Why ranking rather than simply raising the cap
+
+The guard exists for a real reason: the per-candidate loop runs corner detection, optical
+flow and a CNN gate, so hundreds of candidates are genuinely unaffordable. Ranking keeps
+that budget — score every candidate by how target-like its *shape* is (how much of its
+bounding box the contour fills, times how close to square it is), keep the best 50, and
+spend exactly what upstream was willing to spend. The score decides **order only**; every
+kept candidate still faces the same optical-flow and CNN tests.
+
+### Why the area ceiling moves
+
+`MOD2` accepts blobs of 30-3,000 px², about 55x55. A target at the moment of a catch is
+larger than that and becomes **invisible to the motion branches at any threshold** — the
+confirmed drone in EXP-011 is 80x34 = 2,720 px², already within a few percent of the old
+ceiling. This is the same structural handicap [todo.md](todo.md) raises for FL-Drones.
+
+### What it does not fix
+
+`Functions.motion_compensate` discards any grid point moving **more than 50 px between
+frames** and then fits a single homography. At our altitude and speed that throws away the
+near-field points that dominate the flow, and a homography cannot describe close 3D terrain
+through a fisheye anyway. Fewer blobs would be better than better handling of many. That
+constant lives in the vendored `Functions` and is not ported yet.
 
 ## Running it on footage nobody has labelled
 

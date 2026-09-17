@@ -55,6 +55,7 @@ src/data/     frames.py     FrameSource -> Frame; video decode, striding, budget
               hud_mask.py   CLI: where a burned-in overlay lives, as a mask
 src/algo/     config.py     InferenceConfig
               masking.py    rejecting boxes that landed on a burned-in overlay
+              glad/motion.py  MOD2 ported so its absolute-pixel constants can move
               detector.py   load_model, detect_frame, detect_tiled
               tiling.py     tile_origins, crop_grid, merge_boxes
               detections.py Detections

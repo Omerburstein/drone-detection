@@ -112,6 +112,30 @@ def import_motion(gate: Callable[[Any], int] | None = None,
     return MOD2
 
 
+def import_motion_port(gate: Callable[[Any], int], config: Any,
+                       hud_mask: Any = None, glad_dir: Path = GLAD_DIR,
+                       yolov5_dir: Path = YOLOV5_DIR) -> Any:
+    """Build `src.algo.glad.motion.MotionPort` over the vendored helpers.
+
+    The port replaces `MOD2` only. `motion_compensate`, `motion_compensate_local`
+    and `enlargebox` come from upstream `Functions` untouched, which keeps the
+    surface that could silently diverge as small as it can be -- and is what
+    lets the equivalence test mean something.
+    """
+    add_import_roots(glad_dir, yolov5_dir)
+
+    import Functions  # noqa: PLC0415 -- only importable once sys.path is set up
+
+    from .motion import MotionPort  # noqa: PLC0415 -- avoids an import cycle
+
+    return MotionPort(gate=gate,
+                      compensate=Functions.motion_compensate,
+                      compensate_local=Functions.motion_compensate_local,
+                      enlargebox=Functions.enlargebox,
+                      config=config,
+                      hud_mask=hud_mask)
+
+
 def import_enlarge_region() -> Callable[..., tuple[int, int, int, int]]:
     """Upstream's `enlarge_region2`, used verbatim to place the search region.
 

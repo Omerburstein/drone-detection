@@ -37,8 +37,9 @@ import numpy as np
 from ..detections import Detections
 from ..masking import is_masked
 from .classifier import load_gate
+from .motion import UPSTREAM, MotionConfig
 from .vendor import (GLAD_DIR, GLOBAL_WEIGHTS, LOCAL_WEIGHTS, add_import_roots,
-                     import_motion, weights_dir)
+                     import_motion, import_motion_port, weights_dir)
 from .yolo import (TRAINED_PAD, AcquireDetector, GlobalDetector, TrackingDetector,
                    Yolov5Backend)
 
@@ -126,6 +127,22 @@ class StepResult:
         )
 
 
+def _build_motion(weights: Path, glad_dir: Path,
+                  config: MotionConfig | None,
+                  hud_mask: np.ndarray | None) -> MotionModule:
+    """The vendored `MOD2`, or the port when a tuning is asked for.
+
+    Upstream is loaded unless a config is given, so the default run executes
+    GLAD's own code. The port at `UPSTREAM` is equivalent -- pinned by
+    `tests/integration/test_motion_equivalence.py` -- but "equivalent" and "the
+    same code" are different claims and the ledger rests on the second.
+    """
+    gate = load_gate(weights)
+    if config is None and hud_mask is None:
+        return import_motion(gate, glad_dir)
+    return import_motion_port(gate, config or UPSTREAM, hud_mask, glad_dir)
+
+
 class GladPipeline:
     """The global/local state machine over a contiguous frame sequence.
 
@@ -159,7 +176,8 @@ class GladPipeline:
     @classmethod
     def from_release(cls, glad_dir: Path = GLAD_DIR,
                      pad_value: int = TRAINED_PAD,
-                     hud_mask: np.ndarray | None = None) -> GladPipeline:
+                     hud_mask: np.ndarray | None = None,
+                     motion_config: MotionConfig | None = None) -> GladPipeline:
         """Build the pipeline from the checkpoints in a GLAD clone.
 
         `pad_value` reaches only the global detector — the local ones take square
@@ -169,6 +187,10 @@ class GladPipeline:
         `hud_mask` rejects boxes that land on an overlay burned into the video.
         It defaults to None, so a run that does not ask for it behaves exactly
         as EXP-004 did.
+
+        `motion_config` selects a tuning of the motion branches. `None` loads
+        the **vendored** `MOD2` rather than the port, so the default path is
+        upstream's own code and not a reimplementation of it.
         """
         add_import_roots(glad_dir)  # first call wins, so this fixes the clone in use
         weights = weights_dir(glad_dir)
@@ -179,7 +201,7 @@ class GladPipeline:
             global_detector=GlobalDetector(global_backend),
             tracking_detector=TrackingDetector(local_backend),
             acquire_detector=AcquireDetector(local_backend),
-            motion=import_motion(load_gate(weights), glad_dir),
+            motion=_build_motion(weights, glad_dir, motion_config, hud_mask),
             hud_mask=hud_mask,
         )
 

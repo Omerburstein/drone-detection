@@ -15,26 +15,40 @@ dates, not priorities.
 
 ## Open
 
-### Blocking EXP-011: the O4 footage has a HUD burned into the picture
+### EXP-012: measure whether the O4 fixes actually work
 
-- [ ] 2026-09-17 — [data] [algo] **Remove the OSD from the SOFA-O4 clips and re-run.**
-  EXP-011 found that **21 of 24 sampled detections were HUD glyphs and 0 were drones**;
-  49.7% of all 1,347 detections land in the bottom telemetry strip, and both sustained
-  lock-ons are the tracker holding the battery voltage digit. Two halves, and the second
-  needs a decision:
+The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
-  - **The telemetry strip: crop it.** Zero risk — a crop invents no pixels, and it costs
-    ~165 lines of near-field ground where an air target is least likely. Removes the
-    single worst offender outright.
-  - **The centre reticle: undecided.** It sits in the middle of the frame, exactly where
-    targets appear, so it cannot be cropped. Removing it means **inpainting synthetic
-    pixels** over the glyphs, which changes what any resulting number means. **Open
-    question to the user (asked 2026-09-17):** inpaint, or accept the reticle as a
-    documented confound?
+- [ ] 2026-09-17 — [data] **Seed labels for the O4 target passages.** Nothing about
+  EXP-012 can be stated as recall until this exists. `src.data.seed_track` is built and
+  documented; the work is placing seeds. Budget **several seeds per passage** — one seed
+  held 10 frames on `first_catch`, because an intercept target grows and rotates fast.
+  Write to `data/processed/SOFA-O4/labels/test/` and `verified.jsonl`, declare
+  `--negatives` for confirmed target-free stretches, and **review the proposal sheet**
+  before scoring. Confirmed passage so far: `first_catch` ~955-964, target 80x34 px.
 
-  Re-encode as FFV1 into a new processed variant, not over the current one — the existing
-  tree is verified bit-exact and EXP-011 cites it.
+- [ ] 2026-09-17 — [algo] **Run EXP-012 over all six clips** with
+  `--hud-mask data/processed/SOFA-O4/hud_mask.png --motion-profile clutter`, then score
+  against those labels and put it beside EXP-011. The branch mix is the diagnostic: if
+  `global miss` falls from 46.8% and `global mod` rises, the motion fix worked; if
+  HUD-overlapping detections fall from 83.1% to ~0, the mask worked.
 
+  **Watch precision, not only recall.** On `first_catch` frames 901-907 the candidates
+  `clutter` recovers sit at y ~820-870 — near-field **ground**, not the drone. Removing
+  the guard may trade "nothing" for "false alarms", and only labels can say which.
+
+- [ ] 2026-09-17 — [algo] **Port `motion_compensate` so `flow_reject_px` can move.** It
+  discards any grid point moving more than **50 px between frames** and then fits a single
+  homography. At our altitude and speed that throws away the near-field points that
+  dominate the flow, and a homography cannot describe close 3D terrain through a fisheye.
+  **Generating fewer blobs would beat handling many.** Pair it with fisheye undistortion,
+  which would make the homography model valid again. Only `MOD2` is ported so far; this
+  constant still lives in the vendored `Functions`.
+
+- [ ] 2026-09-17 — [algo] **The centre horizon bar is not masked.** It sweeps vertically
+  with pitch, so its pixels are rarely white at any one position and survive the frequency
+  threshold. It was not among EXP-011's sampled offenders. Lower `--min-fraction` if it
+  starts producing detections, at the cost of masking more of the frame.
 
 ### M4b — generalisation: does GLAD hold up on video it has never seen?
 
@@ -83,6 +97,8 @@ dates, not priorities.
 - [ ] 2026-09-17 — [data] **Annotate the FIELD capture's three target episodes** — *now the critical path: EXP-011 exhausted what unlabelled footage can answer, and both surviving questions (the ground-clutter false-alarm rate, and recall on our own camera) are measurements.* — frames ~2–180, ~1101–1553 and ~3140–3600 of `captured_raw_20260616_040253_004.mp4`, roughly 1,100 frames. This is the cheapest real score available to the project: EXP-010 is already keyed at `data/processed/FIELD/images/test/`, so labels there turn **an existing JSONL into AP, precision and recall with no second inference pass**. It is also the only way to measure **recall** on our own camera, which EXP-010 leaves unmeasured and which is the number the edge budget actually needs. Two warnings: the episodes' bounds come from where the *detector* fired, so annotating only those frames would score a set chosen by the thing being scored — extend each episode outward until the target is genuinely absent. And **do not eyeball full frames**: a 14×11 px drone at frame 1350 was missed by eye and caught by the detector.
 
 ## Done
+
+- [x] 2026-09-17 — [data] [algo] **Built the three fixes EXP-011's diagnosis called for.** (1) `src.data.seed_track` — labels our own footage from a hand-placed box, since nothing on it is measurable otherwise. Two measured defaults: template blending is **off** (with it on, a track that slipped onto terrain adopted the terrain and matched it at 0.99 — the highest-confidence proposals were the worst ones), and `--min-score` stays at 0.45 (0.35 bought 118 frames sitting on trees). Reads sequentially: a seek costs 1,109 ms against 26 ms. (2) `src.data.hud_mask` + `src.glad_detect --hud-mask` — finds the burned-in overlay (28,002 px, **1.80% of the frame**) and vetoes boxes lying mostly on it, at every point one can be emitted *or locked onto*. On EXP-011's detections it vetoes **83.1%**, while the one confirmed drone scores **0.000** overlap. Nothing is inpainted. (3) `src.algo.glad.motion` — `MOD2` ported so its absolute-pixel constants can move, with `--motion-profile clutter` keeping ranked candidates instead of discarding all of them. Measured cause: `first_catch` frames 901-907 produce **105-170 candidates against a cap of 50**, so upstream discarded everything on every frame. Equivalence against the vendored module is pinned on **both** paths — the saturation path on O4 and the accept path on ARD-MAV — plus a test asserting the two fixtures really are different regimes, so it cannot pass vacuously. The default still loads the vendored `MOD2`, not the port.
 
 - [x] 2026-09-17 — [algo] **Made the run-inspection workflow real — `src.crops` and the `/inspect` skill.** The contact sheets that carried EXP-010's 23-of-24, EXP-011's white-structure verdict and EXP-012's drone-with-payload were all produced by throwaway scripts in gitignored run directories. EXP-010's sampling script was lost that way once already and recorded as a loss at the time; this is the second occurrence, so the tooling became code. [`src.crops`](crops.md) does the three things actually being done — every detection grouped and coloured by branch, a seeded sample for precision-conditional-on-firing, and one span rendered large enough to settle what an object is — over a **single forward decode**, since seeking to 800 scattered positions in a 388 MB mp4 costs minutes and a regression to per-detection seeking would still produce a correct sheet (`tests/integration/test_crops.py` pins it). `open_video` moved from `src.render_video` into `src/output/video.py` so both CLIs share one definition. The `/inspect` skill covers both tools and, more usefully, **how to read what they produce**: a sheet is a judgement and never a score, a 4–8 px blob supports no confident verdict either way, a second identical unboxed object means the detector is picking scene features, and a negative from eyeballing is not evidence. Also rendered EXP-012's `overlay.mp4`.
 
