@@ -1584,3 +1584,90 @@ quadcopter against clean sky, and GLAD fired on **nothing** in frames 950–964.
 - **Next:** crop the telemetry strip (zero risk, removes half the detections) and decide
   whether to inpaint the centre reticle, which cannot be cropped because it sits where
   targets appear. Then re-run. See [todo.md](todo.md).
+
+---
+
+## EXP-012 — inverting the image, which found a drone the other two runs never saw
+
+- **Date:** 2026-09-17
+- **Question:** [glad-model.md §5b](glad-model.md) measured that ARD-MAV's targets are 84.4%
+  **brighter** than their background (white DJI Phantoms over roads and concrete), while our
+  field target is 98.5% **darker** and our ground false alarms are 99.1% brighter — our
+  clutter sits in the training distribution more comfortably than our own drone does. That
+  is a correlation. Inverting the image (`255 - pixel`) swaps both polarities at once and
+  tests it directly.
+- **Model / weights / data:** identical to EXP-010 in every respect. `--pad released`, native
+  1032×752, no scaling. **The only change is `--invert`.** Still no labels.
+- **Hardware:** i7-1255U, 5,159.1 s, **0.70 fps** — against 3.05 fps for the same footage
+  un-inverted. The machine was **not idle**, but a 4.4× gap is too large for contention
+  alone; the likely cause is more motion candidates surviving the blob-area gate and each
+  paying a LeNet call. Not investigated.
+- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos --video-names captured_raw_20260616_040253_004 --record-all --images data/processed/FIELD/images/test --pad released --invert --out runs/exp012_field_glad_inverted`
+- **Metrics:** none possible, as with EXP-010 and EXP-011.
+
+**The prediction was wrong, and the hypothesis survived anyway.** The stated test was that
+cold appearance acquisition would rise sharply. `global yolo` went **6 → 11** frames out of
+3,600. That is noise, and GAD remains useless on this footage whichever way up it is. The
+branch mix barely moved either (`global miss` 66.3% → 62.2%).
+
+What changed is *what got detected*, and it changed exactly the way the polarity argument
+predicts:
+
+| Window | EXP-010 native | EXP-011 scaled | EXP-012 inverted |
+| --- | ---: | ---: | ---: |
+| 1101–1553 sky episode | 365 | 301 | 360 |
+| 3140–3600 sky episode | 458 | 347 | 394 |
+| 2–176 bush lock (false) | 41 | 2 | 14 |
+| 2350–2480 white structures (false) | 1 | **75** | **0** |
+| **1990–2120 drone over terrain** | **0** | **0** | **40** |
+| 1540–1700 undetermined | 0 | 0 | 13 |
+
+- **It found a real drone episode both other runs missed entirely.** Frames ~1990–2120, 40
+  boxes, **median 22 px**, and at that size the target is unambiguous in the crops:
+  a multirotor with visible arms and rotors, **carrying a bright payload slung beneath the
+  airframe** — and the box sits on the *payload* rather than the body.
+  `zoom_drone_over_terrain.png` in the run directory. EXP-010 and EXP-011 recorded **zero**
+  boxes anywhere in that window.
+- **Acquisition came from `global mod`, not `global yolo`** — a motion candidate confirmed by
+  LAD within 10 px at conf 0.5, at frame 2008. That branch fired **0 times in EXP-010** and
+  once in EXP-011. Everything after it is `local yolo` (24) and `local mod` (15) holding the
+  track. So inversion did not improve appearance acquisition; it made the **motion** path's
+  candidate survive confirmation.
+- **It eliminated EXP-011's clutter.** The 2350–2480 block that EXP-011 produced 75
+  detections in — small white man-made structures on the hillside, 4–8 px, confirmed at high
+  zoom in `runs/exp011_field_glad_scaled/zoom_white_structures.png`, with a second identical
+  unboxed structure visible below-left in most frames — drops to **zero**. The bush lock
+  falls 41 → 14.
+- **The polarity preference itself is confirmed and stable.** Measured on the **original**
+  frames, 98.6% of EXP-012's detections are *darker* than their background — which means
+  that in the inverted image the detector actually saw, they were **brighter**. EXP-010's
+  false alarms were 93.5% brighter as seen. So across both runs the detector consistently
+  picks what is **brighter than its local background in whatever image it is given**.
+  Inverting did not remove that preference; it changed which physical objects satisfy it.
+
+- **Reading:** GLAD acquires targets that are brighter than their local background, which is
+  the ARD-MAV white-Phantom signature. Against sky our drone is a dark silhouette — the wrong
+  polarity — but high-contrast enough that once locked, `local yolo` at conf 0.1 holds it, so
+  the sky episodes work in every run. **Against terrain the drone is darker than its
+  surroundings and never gets acquired at all** — until inversion supplies the training
+  polarity, at which point the motion branch's candidate passes confirmation and 40
+  detections follow. This is the first direct evidence that the appearance prior, not the
+  resolution (EXP-011) and not the payload as such, is what costs us recall on our own
+  footage.
+- **Caveats:**
+  - **Not a deployment fix, and must not be read as one.** It is a probe. Inverting would
+    invert the problem on any footage that does look like ARD-MAV, and the sky episodes did
+    lose ground (458 → 394 on the second). The remedy for an appearance mismatch is
+    fine-tuning on our own footage, which needs labels.
+  - **Still unscored.** 40 "true" detections is a visual judgement on crops, not a
+    measurement; 13 detections at 1540–1700 are genuinely ambiguous (`zoom_ambiguous_1540_1700.png`)
+    and are counted as neither.
+  - **0.70 fps** makes this the slowest configuration measured, on a machine that was not idle.
+  - One video, one flight, one target.
+- **An option this suggests, not yet tested:** running both polarities and taking the union
+  would have caught every episode in the video — the sky ones from the normal pass and the
+  terrain one from the inverted. It costs 2× compute, which the edge budget probably cannot
+  afford, but it brackets what a polarity-robust detector would be worth.
+- **Evidence** (`runs/exp012_field_glad_inverted/`, gitignored): `all_hits.png` (all 831 by
+  branch), `zoom_drone_over_terrain.png`, `zoom_ambiguous_1540_1700.png`, `new_regions24.png`,
+  plus `zoom.py` and `polarity.py`.

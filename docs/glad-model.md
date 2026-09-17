@@ -234,12 +234,24 @@ fair, since it is one dataset and one airframe, but not the same statement. Pola
 measured, the causal claim is inferred. `phantom43` is 0% brighter, so the dataset does
 contain sky-background sequences; the prior is a lean, not an absolute.
 
-**The decisive test is cheap.** Run the same pipeline over a **polarity-inverted** copy of
-our footage (`255 - pixel`). If the prior is what is driving this, cold acquisition should
-improve sharply and the ground clutter should stop being attractive, because inversion puts
-our drone on the training side of the distribution and the clutter on the wrong side.
-Roughly 20 minutes on this host, no labels required, and the branch mix alone would answer
-it. Filed in [todo.md](todo.md).
+**Tested, 2026-09-17 — EXP-012.** The prediction attached to this section was that cold
+appearance acquisition would rise sharply under inversion. **It did not**: `global yolo` went
+6 → 11 frames of 3,600, and the branch mix barely moved. GAD is useless on this footage
+whichever way up it is.
+
+The prior itself is nonetheless confirmed, and more sharply than this section claimed.
+Measured on the *original* frames, 98.6% of EXP-012's detections are darker than their
+background — meaning that in the **inverted image the detector actually saw**, they were
+brighter. EXP-010's false alarms were 93.5% brighter as seen. Across both runs the detector
+picks **whatever is brighter than its local background in the image it is given**; inversion
+did not remove the preference, it changed which physical objects satisfy it.
+
+And that changed the result substantially. Inversion **found a real drone episode both other
+runs missed entirely** (frames ~1990–2120, 40 boxes, median 22 px, payload visible) and
+**eliminated** the white-structure clutter EXP-011 generated (75 → 0). Acquisition came from
+`global mod` — a motion candidate confirmed by LAD — not from GAD. So the prior does not
+gate appearance acquisition so much as it gates **which motion candidates survive
+confirmation**. Full entry in [experiments.md](experiments.md).
 
 ## 6. How to improve it
 
