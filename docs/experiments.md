@@ -1408,3 +1408,105 @@ both are available — but the relative one is what a criterion argument should 
   1,786 of 3,600 frames**; its partial output was deleted rather than kept, because a
   half-finished run that looks like a run is worse than none. It sustained ~0.5 fps — a
   full pass is ~2 h — so if the comparison is ever wanted, budget for that or stride it.
+
+---
+
+## EXP-011 — the same footage at the right scale, which made it worse
+
+- **Date:** 2026-09-17
+- **Question:** EXP-010 looked far worse than the prepared-dataset runs, and three causes
+  were on the table: the background, the target's payload, and **resolution**. GLAD's motion
+  constants are absolute pixels tuned at 1920×1080 and this capture is 1032×752, so the
+  ledger ranked resolution first: EXP-010 measured our failure to rescale alongside the
+  detector. Remove that confound and see what is left.
+- **Model / weights:** identical to EXP-010 — GLAD released pipeline,
+  `third_party/GLAD/weights/`, `--pad released`. Nothing about the detector changed.
+- **Data:** identical to EXP-010 — `captured_raw_20260616_040253_004.mp4`, 1032×752, 3,600
+  frames. **Still no labels.**
+- **The one change:** `--scale auto` (new; `src.algo.glad.scaling`). Each frame is resized to
+  the 1920×1080 **diagonal** preserving aspect — **1032×752 → 1780×1297, 1.7248× linear,
+  2.975× in pixels** — and boxes are mapped back, so the record stays in original
+  coordinates and is directly comparable to EXP-010's.
+- **Hardware:** i7-1255U CPU, 1,351.7 s wall-clock, **2.66 fps**. The machine was **not
+  idle** — a second session ran against it throughout. Treat as approximate.
+- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos --video-names captured_raw_20260616_040253_004 --record-all --images data/processed/FIELD/images/test --pad released --scale auto --out runs/exp011_field_glad_scaled`
+- **Metrics:** **none, and none are possible** — same as EXP-010, and for the same reason.
+  What follows is what the detector *did*, not how well it did it.
+
+| | EXP-010 native | EXP-011 scaled |
+| --- | ---: | ---: |
+| detections | 866 (0.241/frame) | **763 (0.212/frame)** |
+| empty frames | 2,734 (75.9%) | **2,837 (78.8%)** |
+| `global miss` | 2,388 (66.3%) | **2,376 (66.0%)** |
+| `local yolo` | 850 (23.6%) | 736 (20.4%) |
+| `local miss` | 345 (9.6%) | 460 (12.8%) |
+| `local mod` | 10 (0.3%) | 16 (0.4%) |
+| `global yolo` | 6 (0.2%) | 10 (0.3%) |
+| median box, √area | 12.4 px | **9.6 px** |
+
+- **Result: scaling does not fix it, and on the balance of the evidence it makes it worse.**
+  The headline number the whole exercise targeted — `global miss`, 66.3% — moved to **66.0%**.
+  That is noise. But the *composition* changed a great deal, and inspecting it is what
+  settles the question:
+  - **The three known drift frames are fixed.** At frames 19, 101 and 176 EXP-010 held a box
+    on a bush while the drone was in clear sky. EXP-011 emits **no box** at any of them, and
+    the whole 2–176 episode collapses from 41 detections to 2.
+  - **But it invented two larger clutter locks.** 113 detections appear in regions EXP-010
+    never fired in at all — sustained runs at **frames ~1832–1885 and ~2374–2464**. A seeded
+    sample of 24 of those 113, inspected as zoomed crops, was **24 out of 24 ground
+    clutter**: the box on a pale rock or bush against dark hillside, every time, held by
+    `local yolo`. Not one contained a drone.
+  - **And it lost real targets.** Inside the two genuine episodes it fired 301 times against
+    365 (frames 1101–1553) and 347 against 458 (3140–3600). There are **186 in-episode
+    frames where EXP-010 fired and EXP-011 did not**; a seeded sample of 24 of those showed
+    **large, sharp, unmistakable multirotor silhouettes against blue sky** in all but two.
+    These were not marginal detections. They were the easiest ones in the video.
+  - The median box shrank from 12.4 px to 9.6 px √area, which is what a population shifting
+    from drones to clutter blobs looks like.
+- **Why upscaling would hurt — a mechanism, offered as hypothesis:** interpolation adds no
+  information, but it does move everything through the **blob-area gate**, which is
+  `30 < area < 3000` px² in both `MOD2_global` and `MOD2_local`. At 2.975× in area, clutter
+  that sat *below* the 30 px² floor at native resolution — small pale rocks, bush crowns —
+  is lifted into the admissible window, while the drone was already comfortably inside it
+  and gains nothing. **The gate's lower bound was doing real clutter rejection, and
+  upscaling defeated it.** Cubic interpolation also softens the target's edges, which is
+  consistent with `local yolo` falling 850 → 736. If that reading is right, the
+  constant-side fix — scaling the thresholds *down* rather than the frame *up* — is not
+  equivalent to this run and could still help; it is [glad-model.md](glad-model.md)
+  improvement #4's remaining half, and it is expensive for the reasons recorded there.
+- **What this settles about EXP-010's three candidate causes:**
+  - **Resolution: largely exonerated** as the explanation for how EXP-010 looked. The
+    confound is real and worth knowing about, but correcting it does not recover
+    performance — it trades one failure for a worse one.
+  - **Background: strongly implicated.** Every false alarm inspected in this run, and the
+    one in EXP-010's sample, is ground clutter on an arid hillside. The failure mode is the
+    tracker taking a lock on terrain and holding it for tens of seconds, which is exactly
+    what ARD-MAV's cleaner backgrounds never exercise.
+  - **Payload: still untestable and still unsupported.** There is no payload-free control
+    flight of this airframe. The indirect evidence continues to point away from it: payload
+    is an appearance-channel hypothesis, and `global yolo` fires 0.2–0.3% here against 0.1%
+    on ARD-MAV — GAD is near-useless from cold on *both*, so it cannot explain the gap.
+- **Caveats:** Three, and the first is structural.
+  - **"Inside an episode" is defined by where EXP-010 fired**, so the episode arithmetic is
+    circular and cannot on its own prove EXP-011 lost true positives. **The visual
+    inspection is not circular** — the crops show drones or they show hillside — and that is
+    what the claim rests on. Both sheets are in the run directory.
+  - **Recall is unmeasured in both runs.** EXP-011 is worse than EXP-010 by this evidence;
+    neither absolute number is known, and neither will be until the footage is labelled.
+  - **Sampling error.** Two samples of 24. The 24/24-clutter result is strong; the
+    "overwhelmingly real drones" result rests on eyeballing 24 crops.
+- **A throughput result worth keeping:** 2.66 fps at **2.975× the pixels**, against 3.05 fps
+  native — only **13% slower for triple the pixel count**. The motion branch is therefore
+  *not* what this pipeline spends its time on; the YOLO forward passes are, and GAD
+  letterboxes to 640 regardless of source resolution. That matters for the edge budget:
+  optimising MOD2 would buy almost nothing.
+- **Evidence in the run directory** (`runs/exp011_field_glad_scaled/`, gitignored):
+  `exp011_new24.png` (the 24 out-of-episode detections, all clutter), `exp010_lost24.png`
+  (24 of the 186 in-episode detections EXP-011 dropped, nearly all real drones),
+  `exp011_sample24.png` (a seeded 24 of all 763, comparable to EXP-010's 23/24), plus the
+  two throwaway scripts that produced them. **No overlay video was rendered.** EXP-010's is
+  388 MB and this is a negative result nothing will be built on; the contact sheets carry
+  the finding at a fraction of the size.
+- **Next:** this run exhausts what unlabelled footage can answer. Both surviving questions —
+  how bad the clutter false-alarm rate actually is, and what recall on our own camera is —
+  are measurements, and both need **labels**. See [todo.md](todo.md).
