@@ -1335,3 +1335,66 @@ both are available — but the relative one is what a criterion argument should 
 - **Not open: the per-stage profile** ([todo.md](todo.md)) still gates the edge budget,
   and these runs do not substitute for it — they measure whole-pipeline throughput, not
   where the time goes.
+
+---
+
+## EXP-010 — GLAD on our own footage, which nobody has labelled
+
+- **Date:** 2026-09-17
+- **Question:** The first video in this project that came off **our** airframe rather than
+  someone else's dataset. Does GLAD fire on it at all, does it fire on the right thing,
+  and what does it cost per frame at this resolution?
+- **Model / weights:** GLAD released pipeline, `third_party/GLAD/weights/` — `yolov5s_GLAD.pt`, `yolov5s_GLAD-crop.pt`, `Net_best.pth`. `--pad released`, matching EXP-004–009.
+- **Data:** `data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4` — 1032×752, 30 fps, **3,600 frames (120.0 s)**, arid hillside, hard sky/ridge horizon. **No labels.** Provenance in [datasets.md](datasets.md).
+- **Hyperparameters:** every fixed threshold of the released source; no stride, no duty cycle (`--sample every`, 100% duty)
+- **Hardware:** i7-1255U CPU, 1,179.4 s wall-clock, **3.05 fps**
+- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos --video-names captured_raw_20260616_040253_004 --record-all --images data/processed/FIELD/images/test --pad released --out runs/exp010_field_glad`
+- **Metrics:** **none, and none are possible.** No ground truth exists for this video, so
+  there is no AP, mAP, precision, recall or `far`. What the run has is 866 detections over
+  3,600 frames (0.24/frame), 2,734 frames empty (75.9%), and this branch split:
+
+| Branch | Frames | Share |
+| --- | ---: | ---: |
+| `global miss` | 2,388 | 66.3% |
+| `local yolo` | 850 | 23.6% |
+| `local miss` | 345 | 9.6% |
+| `local mod` | 10 | 0.3% |
+| `global yolo` | 6 | 0.2% |
+| `first frame` | 1 | 0.0% |
+
+- **Result:** GLAD works on our footage. Detections are not scattered — **96% of them fall
+  inside three sustained lock-ons** (frames 2–17 with a scattered tail to 176, 1101–1553,
+  and 3140–3600 essentially unbroken), which is the local regime holding a track, and the
+  gaps between them are `global miss`. A **seeded random sample of 24 of the 866
+  detections, inspected as zoomed crops, contained 23 drones and 1 patch of ground
+  clutter.** Read as precision conditional on firing that is **23/24 ≈ 0.96** (95% CI
+  roughly 0.79–0.999 on n=24) — far above anything this project has measured on a
+  prepared dataset, because almost every detection here comes from a held track against
+  clean sky rather than from per-frame acquisition.
+- **Caveats:** Four, and the first two are load-bearing.
+  - **This is not a score and cannot be compared to EXP-001–009.** The 0.96 is a sampled
+    estimate of one direction only. **Recall is unmeasured**, and it is demonstrably not
+    1: at frames 19, 101 and 176 the drone is plainly visible in the sky while the tracker
+    holds a box on a bush — a false alarm and a miss in the same frame.
+  - **Resolution.** GLAD's motion constants are absolute pixels tuned for 1920×1080 (blob
+    area 30–3000, `a=160`, `dist_ref=200`, blur 11, `MAX_DISTANCE=50`). This capture's
+    diagonal is 1276 against 2203 — **0.579× linear, 0.335× in area** — so the run
+    measures our failure to rescale alongside the detector. The same confound
+    [todo.md](todo.md) raises for FL-Drones.
+  - **One video, one flight, one target.** 120 s.
+  - **Throughput was measured on a machine that was not idle** — a few short commands ran
+    against it. Treat 3.05 fps as approximate.
+- **What it does establish, that no prepared dataset could:**
+  - **3.05 fps at 1032×752**, against 2.67 on 1080p ARD-MAV. Still 10× short of a 30 fps
+    feed, so `src.live_detect --policy auto` would pick **burst pairs** on this footage —
+    the 36% retention fallback, not half rate.
+  - **Two thirds of the run is `global miss`** — the expensive branch, GAD then GMD then
+    LAD, spent finding nothing. On ARD-MAV that branch is rare. Whatever the edge budget
+    ends up being, this is the regime it has to survive, and it is the *slowest* one.
+  - **Ground clutter takes the lock.** The drift onto a bush at frames 19–176, while the
+    real target is in frame, is the failure mode this footage adds that ARD-MAV's cleaner
+    backgrounds do not exercise.
+- **Next:** EXP-011 (the appearance-only reference on the same video), and **labels** —
+  see [todo.md](todo.md). The run is keyed at `data/processed/FIELD/images/test/`, so
+  annotating even the three target episodes turns this JSONL into a real score with **no
+  second inference pass**.

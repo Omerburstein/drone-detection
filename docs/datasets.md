@@ -86,11 +86,16 @@ record of it is this section and `docs/experiments.md` EXP-010.
 | Geometry | **1032×752**, 30 fps, **3,600 frames = 120.0 s** |
 | Captured | 2026-06-16 04:02:53 per the filename; filed 2026-09-17 |
 | Scene | Arid hillside — olive terraces, scrub, rock, buildings, hard sky/ridge horizon |
-| Target | A multirotor, against sky across roughly **the last 15 s** (frames ~3000–3600), shrinking as it recedes: ~25×20 px at frame 3150, ~20×18 at 3300, ~12×8 at 3450, ~8 px at 3599. Eight sampled frames before 3000 show none. Twelve frames checked by eye out of 3,600 — not an annotation |
+| Target | A multirotor, always against sky, in **at least three episodes**: frames ~2–180, ~1101–1553 and ~3140–3600. Size runs from ~19×16 px down to ~6 px. Bounds come from EXP-010's boxes confirmed by eye — they mark where the detector fired **and was right**, not where the drone was |
 | Labels | **None.** |
 
 **Header and decoder agree at 3,600 frames**, unlike ARD-MAV and ARD100 where the header
 overstates. Still trust the decoder.
+
+**Do not eyeball this footage for targets.** Filing it, eight full frames were scanned and
+recorded as empty; frame 1350 was one of them and contains a 14×11 px drone in clean sky
+that EXP-010 boxed correctly. At this scale a glance at a full frame misses what the
+detector finds — use a zoomed crop.
 
 ## What the missing labels cost
 
