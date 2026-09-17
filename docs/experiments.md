@@ -1394,6 +1394,12 @@ both are available — but the relative one is what a criterion argument should 
   - **Ground clutter takes the lock.** The drift onto a bush at frames 19–176, while the
     real target is in frame, is the failure mode this footage adds that ARD-MAV's cleaner
     backgrounds do not exercise.
+- **Watch it:** `runs/exp010_field_glad/overlay.mp4` — all 3,600 frames with GLAD's boxes
+  drawn back on, rendered by `src.render_video --no-labels --zoom 3 --zoom-span 100`.
+  **Unscored on purpose:** the normal renderer colours every box by match outcome, so on
+  unlabelled footage it would paint all 866 detections red and caption each a false alarm
+  — a precision claim of zero against a run that sampled 23/24 correct. The unscored mode
+  draws one neutral colour and says on the strip that nothing here is known to be right.
 - **Next:** EXP-011 (the appearance-only reference on the same video), and **labels** —
   see [todo.md](todo.md). The run is keyed at `data/processed/FIELD/images/test/`, so
   annotating even the three target episodes turns this JSONL into a real score with **no

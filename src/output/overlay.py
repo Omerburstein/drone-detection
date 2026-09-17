@@ -35,6 +35,9 @@ GT_COLOUR = (90, 220, 90)  # green: where the drone actually is
 TP_COLOUR = (255, 190, 40)  # blue: a prediction that claimed a target
 FP_COLOUR = (60, 60, 255)  # red: a prediction that claimed nothing
 MISS_COLOUR = (40, 170, 255)  # orange: a target nothing claimed
+# yellow: a prediction on footage with no ground truth. Deliberately neither
+# the TP blue nor the FP red -- the whole point is that nobody knows which.
+UNSCORED_COLOUR = (60, 230, 230)
 INK = (255, 255, 255)
 STRIP = (24, 24, 24)
 
@@ -46,6 +49,8 @@ CAPTION_SCALE = 0.55
 CAPTION_HEIGHT = 58  # two text lines plus padding
 INSET_MARGIN = 16
 LEGEND = "green  ground truth      blue  matched prediction      red  false alarm      orange  missed target"
+UNSCORED_LEGEND = ("yellow  what the detector found      NO GROUND TRUTH: this footage is "
+                   "unlabelled, so no box here is known to be right or wrong")
 
 
 @dataclass(frozen=True)
@@ -87,10 +92,17 @@ class Verdict:
     tp: np.ndarray  # per prediction: did it claim a target
     match_iou: np.ndarray  # per prediction: IoU with the target it claimed
     found: np.ndarray  # per target: was it claimed by any prediction
+    # False when there is no ground truth to judge against. Not inferred from
+    # `found` being empty: a *labelled* frame with no drone in it is also empty,
+    # and there every prediction really is a false alarm. Unlabelled footage has
+    # to say so explicitly or the picture claims a measurement nobody made.
+    scored: bool = True
 
     @property
     def summary(self) -> str:
         """`2 TP, 1 FP, 1 missed` — this frame's contribution to the totals."""
+        if not self.scored:
+            return f"{len(self.tp)} found, unscored"
         tp, fp = int(self.tp.sum()), int((~self.tp).sum())
         missed = int((~self.found).sum())
         return f"{tp} TP, {fp} FP, {missed} missed"
@@ -102,6 +114,20 @@ def judge(frame: EvalFrame, criterion: float | MatchCriterion) -> Verdict:
     found = np.zeros(len(frame.gt_boxes), dtype=bool)
     found[matched_gt[tp]] = True
     return Verdict(tp=tp, match_iou=match_iou, found=found)
+
+
+def unjudged(frame: EvalFrame) -> Verdict:
+    """A `Verdict` for footage with no ground truth: boxes, but no outcome.
+
+    Every prediction is drawn and none is called right or wrong. `tp` is all
+    False so the arrays keep their shape, but `scored` is what the drawing code
+    reads -- nothing may branch on `tp` without checking it first.
+    """
+    count = len(frame.preds)
+    return Verdict(tp=np.zeros(count, dtype=bool),
+                   match_iou=np.zeros(count),
+                   found=np.zeros(len(frame.gt_boxes), dtype=bool),
+                   scored=False)
 
 
 def _draw_box(canvas: np.ndarray, box: np.ndarray, colour: tuple[int, int, int],
@@ -124,7 +150,12 @@ def _draw_box(canvas: np.ndarray, box: np.ndarray, colour: tuple[int, int, int],
 
 
 def _pred_label(index: int, frame: EvalFrame, verdict: Verdict) -> str:
-    """`pred 0.87 TP IoU 0.48` — confidence, outcome, and how well it sits."""
+    """`pred 0.87 TP IoU 0.48` — confidence, outcome, and how well it sits.
+
+    Unscored, the outcome is dropped rather than guessed.
+    """
+    if not verdict.scored:
+        return f"pred {frame.preds.scores[index]:.2f}"
     outcome = "TP" if verdict.tp[index] else "FP"
     iou = f" IoU {verdict.match_iou[index]:.2f}" if verdict.tp[index] else ""
     return f"pred {frame.preds.scores[index]:.2f} {outcome}{iou}"
@@ -138,7 +169,10 @@ def _draw_frame_boxes(canvas: np.ndarray, frame: EvalFrame, verdict: Verdict,
         text = ("gt" if found else "gt missed") if labels else ""
         _draw_box(canvas, box, GT_COLOUR if found else MISS_COLOUR, view, GT_PAD, text)
     for i, box in enumerate(frame.preds.boxes):
-        colour = TP_COLOUR if verdict.tp[i] else FP_COLOUR
+        if not verdict.scored:
+            colour = UNSCORED_COLOUR
+        else:
+            colour = TP_COLOUR if verdict.tp[i] else FP_COLOUR
         _draw_box(canvas, box, colour, view, PRED_PAD,
                   _pred_label(i, frame, verdict) if labels else "", below=True)
 
@@ -207,28 +241,48 @@ def _draw_inset(canvas: np.ndarray, image: np.ndarray, frame: EvalFrame,
 
 
 def _draw_caption(canvas: np.ndarray, frame: EvalFrame, verdict: Verdict,
-                  criterion: MatchCriterion) -> None:
-    """Bottom strip: which frame this is, what the run recorded, what it scored."""
+                  criterion: MatchCriterion | None) -> None:
+    """Bottom strip: which frame this is, what the run recorded, what it scored.
+
+    With no criterion there is no ground truth, so the strip drops the `gt`
+    count and the matching rule and carries the unscored legend instead. Both
+    would otherwise read as measurements: `0 gt` on unlabelled footage means
+    "nobody looked", not "no drone here".
+    """
     height = canvas.shape[0]
     strip = canvas[height - CAPTION_HEIGHT:, :]
     cv2.addWeighted(np.full_like(strip, STRIP), 0.7, strip, 0.3, 0, strip)
 
     extras = "   ".join(f"{k}: {v}" for k, v in frame.extras.items())
-    line = (f"{frame.key}    {len(frame.gt_boxes)} gt   {len(frame.preds)} pred    "
-            f"{verdict.summary}    matched by {criterion.label}")
+    if verdict.scored and criterion is not None:
+        line = (f"{frame.key}    {len(frame.gt_boxes)} gt   {len(frame.preds)} pred    "
+                f"{verdict.summary}    matched by {criterion.label}")
+        legend = LEGEND
+    else:
+        line = f"{frame.key}    {len(frame.preds)} pred    {verdict.summary}"
+        legend = UNSCORED_LEGEND
     cv2.putText(canvas, f"{line}    {extras}".rstrip(),
                 (14, height - CAPTION_HEIGHT + 24), FONT, CAPTION_SCALE, INK, 1,
                 cv2.LINE_AA)
-    cv2.putText(canvas, LEGEND, (14, height - 16), FONT, 0.45, (190, 190, 190), 1,
+    cv2.putText(canvas, legend, (14, height - 16), FONT, 0.45, (190, 190, 190), 1,
                 cv2.LINE_AA)
 
 
 def render_frame(image: np.ndarray, frame: EvalFrame,
-                 criterion: float | MatchCriterion,
+                 criterion: float | MatchCriterion | None,
                  style: Style = Style()) -> np.ndarray:
-    """One annotated canvas: both boxes, the magnified inset and the caption."""
-    criterion = as_criterion(criterion)
-    verdict = judge(frame, criterion)
+    """One annotated canvas: both boxes, the magnified inset and the caption.
+
+    `criterion=None` renders **unscored**: the frame has no ground truth, so the
+    predictions are drawn in one neutral colour and nothing is called a hit or a
+    false alarm. That is the mode for our own field capture, which nobody has
+    labelled -- see `src.render_video --no-labels`.
+    """
+    if criterion is None:
+        verdict = unjudged(frame)
+    else:
+        criterion = as_criterion(criterion)
+        verdict = judge(frame, criterion)
     canvas = image.copy()
     _draw_frame_boxes(canvas, frame, verdict, View(), labels=False)
     if style.zoom:

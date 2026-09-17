@@ -24,6 +24,13 @@ Example
         --pred runs/exp004_glad/detections.jsonl \
         --labels data/processed/ARD-MAV/labels/test \
         --out runs/exp004_glad/examples/phantom19_overlay.mp4
+
+Footage nobody has labelled draws its boxes without judging them:
+
+    py -3.13 -m src.render_video --no-labels \
+        --video data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4 \
+        --pred runs/exp010_field_glad/detections.jsonl \
+        --out runs/exp010_field_glad/overlay.mp4
 """
 
 from __future__ import annotations
@@ -51,8 +58,15 @@ def build_parser() -> argparse.ArgumentParser:
                          "--key-prefix says otherwise.")
     ap.add_argument("--pred", required=True, type=Path,
                     help="detections.jsonl from a recorded run.")
-    ap.add_argument("--labels", required=True, type=Path,
-                    help="Directory of YOLO-format .txt label files for the split.")
+    ap.add_argument("--labels", type=Path, default=None,
+                    help="Directory of YOLO-format .txt label files for the split. "
+                         "Omit it only with --no-labels.")
+    ap.add_argument("--no-labels", action="store_true",
+                    help="Render **unscored**: the footage has no ground truth, so "
+                         "every prediction is drawn in one neutral colour and none is "
+                         "called a hit or a false alarm. For our own field capture. "
+                         "Without this, footage with no labels would paint every "
+                         "detection red -- a false-alarm claim nobody measured.")
     ap.add_argument("--out", required=True, type=Path,
                     help="Output .mp4. Parent directories are created.")
     ap.add_argument("--key-prefix", default=None,
@@ -94,8 +108,14 @@ def open_video(path: Path) -> tuple[cv2.VideoCapture, int, int, float]:
     return capture, width, height, fps
 
 
-def criterion_from_args(args: argparse.Namespace) -> MatchCriterion:
-    """The matching rule the two --match choices select, as in src.evaluate."""
+def criterion_from_args(args: argparse.Namespace) -> MatchCriterion | None:
+    """The matching rule the two --match choices select, as in src.evaluate.
+
+    `None` under --no-labels: with no ground truth there is nothing to match,
+    and the renderer draws the boxes without judging them.
+    """
+    if args.no_labels:
+        return None
     return (MatchCriterion(IOU, args.iou) if args.match == IOU
             else MatchCriterion(CENTER, args.match_tol))
 
@@ -105,11 +125,16 @@ def render(args: argparse.Namespace) -> tuple[int, int]:
     capture, width, height, source_fps = open_video(args.video)
     prefix = args.key_prefix or args.video.stem
 
-    frames = {f.key: f for f in load_frames(args.pred, args.labels, (width, height),
+    # With no labels every lookup misses and `load_label_file` returns an empty
+    # frame, which is exactly right here -- the unscored renderer draws only the
+    # predictions. Point it at the labels directory anyway when one is given.
+    labels_dir = args.labels if args.labels is not None else Path("")
+    frames = {f.key: f for f in load_frames(args.pred, labels_dir, (width, height),
                                             key_filter=lambda k: k.startswith(prefix))}
     if not frames:
         sys.exit(f"No frames keyed '{prefix}_*' in {args.pred}")
-    print(f"{len(frames)} scored frames for {prefix}; {width}x{height} "
+    kind = "unscored" if args.no_labels else "scored"
+    print(f"{len(frames)} {kind} frames for {prefix}; {width}x{height} "
           f"@ {source_fps:.2f} fps")
 
     style = Style(zoom=args.zoom, span=args.zoom_span, caption=not args.no_caption)
@@ -141,8 +166,12 @@ def render(args: argparse.Namespace) -> tuple[int, int]:
 def main() -> None:
     """Render one video's overlay and report what was drawn."""
     args = build_parser().parse_args()
-    if not args.labels.is_dir():
-        sys.exit(f"--labels must be a directory, got {args.labels}")
+    if args.no_labels:
+        if args.labels is not None:
+            sys.exit("--no-labels and --labels are mutually exclusive.")
+    elif args.labels is None or not args.labels.is_dir():
+        sys.exit(f"--labels must be a directory, got {args.labels}. "
+                 f"Pass --no-labels for footage that has no ground truth.")
 
     rendered, skipped = render(args)
     print(f"Wrote {args.out} — {rendered} frames"

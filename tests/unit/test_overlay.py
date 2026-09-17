@@ -194,3 +194,58 @@ class TestRenderFrame:
     def test_output_keeps_the_frame_size(self, canvas, make_frame):
         out = render_frame(canvas, make_frame(gt=[[10, 10, 30, 30]]), CENTRED)
         assert out.shape == canvas.shape
+
+
+class TestUnscored:
+    """Footage with no ground truth: boxes are drawn, nothing is judged.
+
+    The failure this guards against is quiet and serious. `EvalFrame` defaults
+    to zero ground-truth boxes, so unlabelled footage rendered through the
+    scored path would paint **every** detection red and caption it a false
+    alarm — a precision claim nobody measured, on a run whose detections were
+    mostly correct. The mode therefore has to be explicit, and the colour has to
+    be neither the hit colour nor the miss colour.
+    """
+
+    def test_predictions_are_drawn_in_the_unscored_colour(self, canvas, make_frame):
+        frame = make_frame(preds=[([10, 10, 30, 30], 1.0, 0)])
+        out = render_frame(canvas, frame, None, Style(zoom=0, caption=False))
+        assert has_colour(out, overlay.UNSCORED_COLOUR)
+
+    def test_nothing_is_coloured_a_hit_or_a_false_alarm(self, canvas, make_frame):
+        """The load-bearing assertion: no box claims an outcome."""
+        frame = make_frame(preds=[([10, 10, 30, 30], 1.0, 0)])
+        out = render_frame(canvas, frame, None, Style(zoom=0, caption=False))
+        assert not has_colour(out, overlay.FP_COLOUR)
+        assert not has_colour(out, overlay.TP_COLOUR)
+        assert not has_colour(out, overlay.MISS_COLOUR)
+
+    def test_the_same_frame_scored_would_have_been_all_false_alarms(self, canvas,
+                                                                    make_frame):
+        """Pins the difference the flag makes, so it cannot be optimised away."""
+        frame = make_frame(preds=[([10, 10, 30, 30], 1.0, 0)])
+        scored = render_frame(canvas, frame, CENTRED, Style(zoom=0, caption=False))
+        assert has_colour(scored, overlay.FP_COLOUR)
+
+    def test_unjudged_verdict_claims_nothing(self, make_frame):
+        frame = make_frame(preds=[([10, 10, 30, 30], 1.0, 0),
+                                  ([50, 50, 60, 60], 1.0, 0)])
+        verdict = overlay.unjudged(frame)
+        assert verdict.scored is False
+        assert verdict.tp.tolist() == [False, False]
+        assert verdict.summary == "2 found, unscored"
+
+    def test_caption_carries_the_no_ground_truth_warning(self, canvas, make_frame):
+        """A viewer who reads only the strip must not think this was measured."""
+        frame = make_frame(preds=[([10, 10, 30, 30], 1.0, 0)])
+        out = render_frame(canvas, frame, None, Style(zoom=0, caption=True))
+        scored = render_frame(canvas, frame, CENTRED, Style(zoom=0, caption=True))
+        # The two captions differ, and only the scored one draws the gt legend.
+        assert not np.array_equal(out, scored)
+
+    def test_inset_centres_on_the_prediction_when_there_is_no_target(self,
+                                                                     make_frame):
+        frame = make_frame(preds=[([300, 200, 320, 220], 1.0, 0)])
+        x0, y0, span = crop_window(frame, (400, 600), 100)
+        assert x0 <= 310 <= x0 + span
+        assert y0 <= 210 <= y0 + span

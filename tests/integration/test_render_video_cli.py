@@ -150,3 +150,64 @@ class TestRenderVideoCli:
                          "--out", str(tmp_path / "overlay.mp4"))
         assert result.returncode != 0
         assert "must be a directory" in result.stderr
+
+
+class TestUnlabelledFootage:
+    """`--no-labels`: our own field capture, which has no ground truth.
+
+    The seam is the CLI's argument handling, not the drawing — that is pinned in
+    `tests/unit/test_overlay.py`. What matters here is that the two ways of
+    getting it wrong both fail loudly: omitting `--labels` without the flag, and
+    passing both.
+    """
+
+    def test_renders_every_recorded_frame_without_labels(self, clip, tmp_path):
+        video, pred, _ = clip
+        out = tmp_path / "overlay.mp4"
+        result = run_cli("--video", str(video), "--pred", str(pred),
+                         "--no-labels", "--out", str(out))
+
+        assert result.returncode == 0, result.stderr
+        assert frame_count(out) == SCORED_FRAMES
+        assert "unscored frames for clip" in result.stdout
+
+    def test_no_box_claims_an_outcome(self, clip, tmp_path):
+        """The same detections that scored as true positives above must come out
+        in the unscored colour, not in the hit colour."""
+        from src.output import overlay
+
+        video, pred, _ = clip
+        out = tmp_path / "overlay.mp4"
+        assert run_cli("--video", str(video), "--pred", str(pred), "--no-labels",
+                       "--out", str(out), "--zoom", "0",
+                       "--no-caption").returncode == 0
+
+        capture = cv2.VideoCapture(str(out))
+        try:
+            _, frame = capture.read()
+        finally:
+            capture.release()
+
+        def nearest(colour) -> int:
+            return int(np.abs(frame.astype(int) - np.array(colour)).sum(axis=2).min())
+
+        assert nearest(overlay.UNSCORED_COLOUR) < nearest(overlay.TP_COLOUR)
+        assert nearest(overlay.UNSCORED_COLOUR) < nearest(overlay.FP_COLOUR)
+        assert nearest(overlay.UNSCORED_COLOUR) < nearest(overlay.GT_COLOUR)
+
+    def test_missing_labels_without_the_flag_is_an_error(self, clip, tmp_path):
+        video, pred, _ = clip
+        result = run_cli("--video", str(video), "--pred", str(pred),
+                         "--out", str(tmp_path / "overlay.mp4"))
+        assert result.returncode != 0
+        assert "--no-labels" in result.stderr
+
+    def test_both_together_is_an_error(self, clip, tmp_path):
+        """Silently ignoring one of them would render a scored video under a
+        flag that promises an unscored one."""
+        video, pred, labels = clip
+        result = run_cli("--video", str(video), "--pred", str(pred),
+                         "--labels", str(labels), "--no-labels",
+                         "--out", str(tmp_path / "overlay.mp4"))
+        assert result.returncode != 0
+        assert "mutually exclusive" in result.stderr

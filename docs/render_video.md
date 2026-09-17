@@ -21,7 +21,8 @@ a different rule, not at a different detector.
 | --- | --- | --- |
 | `--video` | required | Source `.mp4`. Its stem is the frame-key prefix unless `--key-prefix` says otherwise. |
 | `--pred` | required | `detections.jsonl` from a recorded run (`src.glad_detect`, `src.baseline_detect`). |
-| `--labels` | required | Directory of YOLO-format `.txt` labels for the split. |
+| `--labels` | required *(unless `--no-labels`)* | Directory of YOLO-format `.txt` labels for the split. |
+| `--no-labels` | off | Render **unscored** — footage with no ground truth. Every prediction is drawn in one neutral colour and none is called a hit or a false alarm. Mutually exclusive with `--labels`. See "Footage nobody has labelled" below. |
 | `--out` | required | Output `.mp4`. Parent directories are created. |
 | `--key-prefix` | the video's stem | Which frames of `--pred` belong to this video, e.g. `phantom19`. |
 | `--match` | `center` | How a prediction claims a target, exactly as in `src.evaluate`. Decides only the **colour** of a box, never whether it is drawn. |
@@ -32,6 +33,37 @@ a different rule, not at a different detector.
 | `--no-caption` | off | Drop the bottom caption strip and colour legend. |
 | `--fps` | the source's | Output frame rate. Lower it to slow the footage down. |
 | `--max-frames` | none | Stop after N rendered frames — a contiguous prefix, for checking the overlay before committing to the whole video. |
+
+## Footage nobody has labelled
+
+Our own capture (`data/raw/FIELD/`) has no annotations, and the colour table below is
+built entirely on match outcome — so rendering it the normal way would paint **every**
+detection red and caption each one a false alarm. On EXP-010 that would have been a
+precision claim of zero against a run whose detections were, on a hand-checked sample,
+23/24 correct. A picture that wrong is worse than no picture.
+
+`--no-labels` renders the same boxes without judging them:
+
+```
+py -3.13 -m src.render_video --no-labels     --video data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4     --pred runs/exp010_field_glad/detections.jsonl     --zoom 3 --zoom-span 100     --out runs/exp010_field_glad/overlay.mp4
+```
+
+| Colour | Meaning |
+| --- | --- |
+| **yellow** | what the detector found. Nothing is known about whether it is right |
+
+The caption strip drops the `gt` count and the matching rule — `0 gt` on unlabelled
+footage means "nobody looked", not "no drone here" — and carries the legend
+`NO GROUND TRUTH: this footage is unlabelled, so no box here is known to be right or
+wrong`. The per-frame line reads `N found, unscored`.
+
+**Turn the inset down on a small frame.** The default 5× of a 110 px window is a 550 px
+square, which on a 1032×752 capture covers a third of the picture and can sit on top of
+the target it is magnifying. `--zoom 3 --zoom-span 100` is what EXP-010 used.
+
+The mode is a flag rather than something inferred from an empty labels directory, on
+purpose: a *labelled* frame with no drone in it is also empty, and there every prediction
+really is a false alarm. Only the caller knows which case it is.
 
 ## What you are looking at
 
