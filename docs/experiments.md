@@ -1517,3 +1517,70 @@ both are available — but the relative one is what a criterion argument should 
 - **Next:** this run exhausts what unlabelled footage can answer. Both surviving questions —
   how bad the clutter false-alarm rate actually is, and what recall on our own camera is —
   are measurements, and both need **labels**. See [todo.md](todo.md).
+
+---
+
+## EXP-011 — GLAD on our O4 intercept trials, and what a burned-in HUD does to it
+
+- **Date:** 2026-09-17
+- **Question:** Six clips off our own DJI O4 downlink, five `catch` and one `miss`. Does GLAD find the target on the footage the airframe actually produces?
+- **Model / weights:** identical to EXP-004/005/010 — `third_party/GLAD/weights/{yolov5s_GLAD.pt, yolov5s_GLAD-crop.pt, Net_best.pth}`, `--pad released`, every threshold at the released value. Nothing retrained.
+- **Data:** `data/processed/SOFA-O4/videos/` — six clips, **7,386 frames, 4.1 min, 1440×1080**. Losslessly cropped from 2520×1080 goggles screen recordings; **7,386/7,386 frames verified bit-identical** to the raw crop. [MANIFEST](../data/processed/SOFA-O4/MANIFEST.md). **No labels.**
+- **Hyperparameters:** full rate, contiguous, 100% duty cycle.
+- **Hardware:** i7-1255U CPU, 2,375.9 s, **3.11 fps**.
+- **Command:** `py -3.13 -m src.glad_detect --videos data/processed/SOFA-O4/videos --video-names first_catch second_catch third_catch forth_catch catch_5 miss_1 --record-all --images data/processed/SOFA-O4/images/test --pad released --out runs/exp011_sofa_o4_glad`
+- **Metrics:** none possible — no ground truth. 1,347 detections over 7,386 frames (0.18/frame), 6,039 frames empty (81.8%).
+
+| Branch | Frames | Share |
+| --- | ---: | ---: |
+| `global miss` | 3,456 | 46.8% |
+| `local miss` | 2,577 | 34.9% |
+| `local yolo` | 1,091 | 14.8% |
+| `local mod` | 233 | 3.2% |
+| `global yolo` | 15 | 0.2% |
+| `global mod` | 8 | 0.1% |
+
+### Result: the run measures the overlay, not the detector
+
+**A seeded random sample of 24 of the 1,347 detections, inspected as zoomed crops:**
+
+| What the box was on | Count |
+| --- | ---: |
+| HUD glyph — battery digits `3`/`4`/`8`, the `v`, the `A` of `AIR`, the centre reticle | **21** |
+| Bare ground clutter | 3 |
+| **A drone** | **0** |
+
+Corroborated by geometry: **49.7% of all detections fall in the bottom telemetry strip**
+(y ≥ 900). The two sustained lock-ons — `second_catch` 709–1162 and `miss_1` 1425–1724 —
+are the tracker holding station on the **battery voltage digit**, visible in
+`examples/miss_1_overlay.mp4` at frame 1490.
+
+And it costs real detections: `first_catch` frame **962** contains an unmistakable
+quadcopter against clean sky, and GLAD fired on **nothing** in frames 950–964.
+
+| Clip | Frames | Fired | Fired % |
+| --- | ---: | ---: | ---: |
+| `first_catch` | 964 | 166 | 17.2% |
+| `second_catch` | 1,551 | 509 | 32.8% |
+| `third_catch` | 1,155 | 33 | 2.9% |
+| `forth_catch` | 1,060 | 48 | 4.5% |
+| `catch_5` | 932 | 73 | 7.8% |
+| `miss_1` | 1,724 | 518 | 30.0% |
+
+- **Caveats:** **Do not cite any number here as GLAD's performance on our footage.** The
+  detection count is dominated by an artifact of the recording method. No labels exist, so
+  recall is unmeasured — but it is visibly poor, and the reason is legible: the tracker is
+  captured by a static glyph and stops looking. Resolution is a second-order confound
+  (1440×1080 is 0.817× the 1080p diagonal GLAD's absolute-pixel constants assume).
+- **Watch it:** `runs/exp011_sofa_o4_glad/examples/<clip>_overlay.mp4`, six files, all
+  7,386 frames, unscored (`src.render_video --no-labels --zoom 3 --zoom-span 100`).
+- **What this does establish:**
+  - **3.11 fps at 1440×1080**, against 2.67 on 1080p ARD-MAV and 3.05 on FIELD.
+  - **A burned-in OSD is a blocker, not a nuisance.** The appearance branch fires on
+    high-contrast glyphs and the tracker then holds them for hundreds of frames. Any
+    deployment that taps a goggles feed rather than a clean camera inherits this.
+  - **The trial `raw/` folder is not a way out** — it is 320×240 analog DVR, far worse
+    than the goggles capture.
+- **Next:** crop the telemetry strip (zero risk, removes half the detections) and decide
+  whether to inpaint the centre reticle, which cannot be cropped because it sits where
+  targets appear. Then re-run. See [todo.md](todo.md).

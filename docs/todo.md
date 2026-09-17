@@ -15,6 +15,27 @@ dates, not priorities.
 
 ## Open
 
+### Blocking EXP-011: the O4 footage has a HUD burned into the picture
+
+- [ ] 2026-09-17 — [data] [algo] **Remove the OSD from the SOFA-O4 clips and re-run.**
+  EXP-011 found that **21 of 24 sampled detections were HUD glyphs and 0 were drones**;
+  49.7% of all 1,347 detections land in the bottom telemetry strip, and both sustained
+  lock-ons are the tracker holding the battery voltage digit. Two halves, and the second
+  needs a decision:
+
+  - **The telemetry strip: crop it.** Zero risk — a crop invents no pixels, and it costs
+    ~165 lines of near-field ground where an air target is least likely. Removes the
+    single worst offender outright.
+  - **The centre reticle: undecided.** It sits in the middle of the frame, exactly where
+    targets appear, so it cannot be cropped. Removing it means **inpainting synthetic
+    pixels** over the glyphs, which changes what any resulting number means. **Open
+    question to the user (asked 2026-09-17):** inpaint, or accept the reticle as a
+    documented confound?
+
+  Re-encode as FFV1 into a new processed variant, not over the current one — the existing
+  tree is verified bit-exact and EXP-011 cites it.
+
+
 ### M4b — generalisation: does GLAD hold up on video it has never seen?
 
 - [ ] 2026-08-18 — [M4b] [algo] **Stretch, only after ARD100 lands: FL-Drones** (14
@@ -60,6 +81,8 @@ dates, not priorities.
 - [ ] 2026-09-17 — [data] **Annotate the FIELD capture's three target episodes** — *now the critical path: EXP-011 exhausted what unlabelled footage can answer, and both surviving questions (the ground-clutter false-alarm rate, and recall on our own camera) are measurements.* — frames ~2–180, ~1101–1553 and ~3140–3600 of `captured_raw_20260616_040253_004.mp4`, roughly 1,100 frames. This is the cheapest real score available to the project: EXP-010 is already keyed at `data/processed/FIELD/images/test/`, so labels there turn **an existing JSONL into AP, precision and recall with no second inference pass**. It is also the only way to measure **recall** on our own camera, which EXP-010 leaves unmeasured and which is the number the edge budget actually needs. Two warnings: the episodes' bounds come from where the *detector* fired, so annotating only those frames would score a set chosen by the thing being scored — extend each episode outward until the target is genuinely absent. And **do not eyeball full frames**: a 14×11 px drone at frame 1350 was missed by eye and caught by the detector.
 
 ## Done
+
+- [x] 2026-09-17 — [data] [algo] **Filed the O4 intercept trials and ran GLAD over them — EXP-011.** Six clips from EXP Sofa Base 24-08-26, copied to `data/raw/SOFA-O4/videos/`. They are **goggles screen recordings**: 2520×1080 of which only a 1440×1080 window is picture. Cropped into `data/processed/SOFA-O4/videos/` as **FFV1 lossless** — benchmarked first (mp4v 37.5 dB, avc1 37.8, MJPG 41.2, FFV1 lossless) because a lossy generation would smear the 10–30 px targets being measured — and **verified bit-exact on all 7,386 frames**. Cropped but **not rescaled**: the picture is already 1080 lines, and widening 1440→1920 would stretch 4:3 into 16:9 and turn a round drone into an ellipse. Added `--crop` to `src.glad_detect`/`src.render_video` and `resolve_video` so a stem resolves in any container (FFV1 cannot live in MP4). **The run's headline is a negative result:** 1,347 detections at 3.11 fps, of which a seeded sample of 24 held **21 HUD glyphs, 3 ground, 0 drones** — see the open item above. Six overlay videos in `runs/exp011_sofa_o4_glad/examples/`.
 
 - [x] 2026-09-17 — [algo] **Made GLAD runnable at the right scale — `--scale` on `src.glad_detect`.** Every constant in the motion branch is absolute pixels tuned at 1920×1080 (blob area 30–3000 and the 50-blob cap in `MOD2_global`, `dist_ref = 200` and the 30-blob cap in `MOD2_local`, blur kernel 11, `REGION_HALF = 160`, `MAX_DISTANCE` 50 and 10); none is a ratio, so on our 1032×752 FIELD capture — **0.579× linear, 0.335× in area** — every one of them was being applied to a target a third the size it was calibrated for. EXP-010 therefore measured our failure to rescale alongside the detector. `src.algo.glad.scaling.ScaledPipeline` resizes each frame to the reference **diagonal** and maps boxes back, so the record stays in original pixels and a scaled run's JSONL compares directly against an unscaled one's — unlike `--crop`, which declares its coordinate change. Aspect is preserved rather than forcing 1920×1080: upstream's own commented-out attempt distorts anything not 16:9, and this capture is 1.372:1, while MOD2's flow-coherence tests threshold on exactly the spread anisotropic scaling perturbs. **Frame-side, not constant-side** — the constants are function-local literals inside the vendored, gitignored `MOD2.py`, with nothing `import_motion` can rebind, so doing it properly means porting the motion module and putting every EXP-004–010 number behind a code change; [glad-model.md](glad-model.md) improvement #4 now records the half that is done and the half that is not. A factor leaving the dimensions unchanged delegates with the original array, asserted on **object identity** — a resize to the same size would compare equal while still having run an interpolation kernel — which is what keeps EXP-004–010 citable. Costs 2.98× the pixels on FIELD, measured 2.15 fps against 3.05 native. Reference: [glad_detect.md](glad_detect.md) § "Footage that is not 1080p".
 
