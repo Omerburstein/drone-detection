@@ -1396,6 +1396,10 @@ both are available — but the relative one is what a criterion argument should 
     backgrounds do not exercise.
 - **Watch it:** `runs/exp010_field_glad/overlay.mp4` — all 3,600 frames with GLAD's boxes
   drawn back on, rendered by `src.render_video --no-labels --zoom 3 --zoom-span 100`.
+  **Every hit on one sheet:** `runs/exp010_field_glad/all_hits.png` — all 866 detections
+  as crops ordered by branch and bordered in its colour (`global yolo` 6, `local yolo` 850,
+  `local mod` 10). The three clutter episodes are visible as blocks of hillside among
+  otherwise clean sky: frames ~12–100 (the known bush lock), ~1520–1540, and ~3141–3156.
   **Unscored on purpose:** the normal renderer colours every box by match outcome, so on
   unlabelled footage it would paint all 866 detections red and caption each a false alarm
   — a precision claim of zero against a run that sampled 23/24 correct. The unscored mode
@@ -1504,7 +1508,10 @@ both are available — but the relative one is what a criterion argument should 
   `exp011_new24.png` (the 24 out-of-episode detections, all clutter), `exp010_lost24.png`
   (24 of the 186 in-episode detections EXP-011 dropped, nearly all real drones),
   `exp011_sample24.png` (a seeded 24 of all 763, comparable to EXP-010's 23/24), plus the
-  two throwaway scripts that produced them. **No overlay video was rendered.** EXP-010's is
+  two throwaway scripts that produced them. `all_hits.png` puts **all 763** on one sheet,
+  ordered by branch and bordered in its colour, where the invented clutter locks read as an
+  unbroken block of dark hillside running from frame ~1833 to ~2464 — roughly a fifth of
+  the sheet, against clean sky either side. **No overlay video was rendered.** EXP-010's is
   388 MB and this is a negative result nothing will be built on; the contact sheets carry
   the finding at a fraction of the size.
 - **Next:** this run exhausts what unlabelled footage can answer. Both surviving questions —
