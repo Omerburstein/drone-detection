@@ -75,6 +75,7 @@ from .algo.glad.scaling import NATIVE, ScaledPipeline, parse_scale
 from .algo.glad.vendor import GLAD_DIR
 from .algo.glad.yolo import PAD_STYLES
 from .data.crop import Crop
+from .data.hud_mask import load_mask
 from .data.datasets import SPECS, spec_for
 from .data.sources import resolve_video
 from .data.sampling import BURST, EVERY, NTH, Schedule, build_schedule
@@ -118,6 +119,13 @@ def build_parser() -> argparse.ArgumentParser:
                          "longest side. Recorded boxes are in **cropped** coordinates; "
                          "pass the same --crop to src.render_video. Applied at decode, "
                          "so nothing is re-encoded.")
+    ap.add_argument("--hud-mask", type=Path, default=None,
+                    help="PNG mask of an overlay burned into the video, from "
+                         "src.data.hud_mask. A box lying mostly on it is neither "
+                         "emitted nor locked onto. **For goggles screen "
+                         "recordings only** -- on clean footage it can only cost "
+                         "detections, and leaving it off is what keeps EXP-004, "
+                         "EXP-005 and EXP-010 reproducible.")
     ap.add_argument("--record-all", action="store_true",
                     help="Record every processed frame, including ones with no label "
                          "file. For **unlabelled footage only** -- field capture that "
@@ -302,7 +310,13 @@ def main() -> None:
     if args.invert:
         print("Inverted: 255 - pixel, before the detector. This is a test of the "
               "appearance prior; the run is not comparable to an un-inverted one.")
-    pipeline = GladPipeline.from_release(args.glad_repo, PAD_STYLES[args.pad])
+    hud_mask = None
+    if args.hud_mask is not None:
+        hud_mask = load_mask(args.hud_mask)
+        print(f"HUD mask: {args.hud_mask} -- {100 * hud_mask.mean():.2f}% of the "
+              f"frame is overlay")
+    pipeline = GladPipeline.from_release(args.glad_repo, PAD_STYLES[args.pad],
+                                         hud_mask=hud_mask)
     if args.scale != NATIVE:
         # The resolved factor and resized dimensions depend on the frame, so the
         # wrapper prints them itself on the first frame of each distinct shape.

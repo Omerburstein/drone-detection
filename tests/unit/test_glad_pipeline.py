@@ -62,7 +62,7 @@ class StubMotion:
 
 
 def build(global_results=(), tracking_results=(), acquire_results=(),
-          motion_global=(), motion_local=()):
+          motion_global=(), motion_local=(), hud_mask=None):
     """A pipeline over stubs, plus the stubs themselves for assertions."""
     stubs = {
         "global_detector": StubDetector(*global_results),
@@ -70,7 +70,14 @@ def build(global_results=(), tracking_results=(), acquire_results=(),
         "acquire_detector": StubDetector(*acquire_results),
         "motion": StubMotion(motion_global, motion_local),
     }
-    return GladPipeline(**stubs), stubs
+    return GladPipeline(**stubs, hud_mask=hud_mask), stubs
+
+
+def hud_at(x: int, y: int, width: int, height: int) -> np.ndarray:
+    """A frame-sized mask with one rectangle of burned-in overlay."""
+    mask = np.zeros((FRAME_H, FRAME_W), dtype=bool)
+    mask[y:y + height, x:x + width] = True
+    return mask
 
 
 class TestFirstFrame:
@@ -280,3 +287,70 @@ class TestAsDetections:
 
     def test_a_miss_is_an_empty_detection_set(self):
         assert len(StepResult(None, GLOBAL_MISS).as_detections(1.0)) == 0
+
+
+class TestHudVeto:
+    """A box landing on overlay must be neither reported nor locked onto.
+
+    The lock is the half that matters. EXP-011 held a battery digit for 300
+    frames: one rejected detection costs a frame, but a lock costs every frame
+    until the 30-miss fallback fires, and during it the detector is looking in
+    the wrong place entirely.
+    """
+
+    def test_appearance_hit_on_the_hud_is_rejected(self):
+        pipeline, _ = build(global_results=[[500, 400, 20, 20]],
+                            hud_mask=hud_at(490, 390, 40, 40))
+        pipeline.step(frame(1))
+        result = pipeline.step(frame(2))
+        assert result.box is None
+        assert result.branch == GLOBAL_MISS
+
+    def test_rejecting_it_does_not_lock(self):
+        """The lock is what turns one bad frame into hundreds."""
+        pipeline, stubs = build(global_results=[[500, 400, 20, 20], None],
+                                hud_mask=hud_at(490, 390, 40, 40))
+        pipeline.step(frame(1))
+        pipeline.step(frame(2))
+        pipeline.step(frame(3))
+        # Still unlocked, so the *global* detector was consulted again rather
+        # than the tracking one.
+        assert len(stubs["global_detector"].calls) == 2
+        assert stubs["tracking_detector"].calls == []
+
+    def test_motion_acquisition_on_the_hud_is_rejected(self):
+        pipeline, _ = build(motion_global=[(500, 400, 20, 20)],
+                            acquire_results=[[10, 10, 20, 20]],
+                            hud_mask=hud_at(0, 0, FRAME_W, FRAME_H))
+        pipeline.step(frame(1))
+        result = pipeline.step(frame(2))
+        assert result.box is None
+        assert result.branch == GLOBAL_MISS
+
+    def test_tracking_hit_on_the_hud_becomes_a_miss(self):
+        # The search region anchors at (340, 240), so a region-relative box of
+        # (10, 10) is absolute (350, 250). Mask that and nothing else, or the
+        # acquisition box at (500, 400) would be vetoed first.
+        pipeline, _ = build(global_results=[[500, 400, 20, 20]],
+                            tracking_results=[[10, 10, 20, 20]],
+                            hud_mask=hud_at(345, 245, 30, 30))
+        pipeline.step(frame(1))
+        assert pipeline.step(frame(2)).branch == GLOBAL_YOLO  # locks on
+        result = pipeline.step(frame(3))
+        assert result.box is None
+        assert result.branch == LOCAL_MISS
+
+    def test_a_box_clear_of_the_hud_is_untouched(self):
+        """The confirmed drone in EXP-011 scored 0.000 overlap; nothing about
+        the veto may reach it."""
+        pipeline, _ = build(global_results=[[500, 400, 20, 20]],
+                            hud_mask=hud_at(0, 0, 100, 100))
+        pipeline.step(frame(1))
+        result = pipeline.step(frame(2))
+        assert result.branch == GLOBAL_YOLO
+        assert result.box.tolist() == [500, 400, 20, 20]
+
+    def test_no_mask_is_the_default(self):
+        pipeline, _ = build(global_results=[[500, 400, 20, 20]])
+        pipeline.step(frame(1))
+        assert pipeline.step(frame(2)).branch == GLOBAL_YOLO

@@ -52,7 +52,9 @@ src/data/     frames.py     FrameSource -> Frame; video decode, striding, budget
               sources.py    classify --source as video or images; resolve_video by stem
               crop.py       Crop; the picture region of a frame that is not all picture
               seed_track.py CLI: one hand-placed box -> a labelled segment
+              hud_mask.py   CLI: where a burned-in overlay lives, as a mask
 src/algo/     config.py     InferenceConfig
+              masking.py    rejecting boxes that landed on a burned-in overlay
               detector.py   load_model, detect_frame, detect_tiled
               tiling.py     tile_origins, crop_grid, merge_boxes
               detections.py Detections

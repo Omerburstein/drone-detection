@@ -29,6 +29,7 @@ py -3.13 -m src.glad_detect [--dataset ARD-MAV|ARD100] [options]
 | `--images` | the dataset's `images/<split>` | Directory the JSONL rows are keyed by. Nothing is read from it and **it need not exist** — a labels-only tree (`prepare_ardmav --no-images`) runs fine. It is what lets `src.evaluate` resolve labels exactly as for a stills run. |
 | `--video-names` | the dataset's test 15 | Videos to run, without the `.mp4`. |
 | `--crop` | none | `X,Y,W,H` — detect on this rectangle of each frame instead of the whole one, for sources that are not all picture. Boxes are recorded in **cropped** coordinates. See "Sources that are not all picture" below. |
+| `--hud-mask` | none | PNG from [`src.data.hud_mask`](hud_mask.md). A box lying mostly on a burned-in overlay is neither emitted nor locked onto. Goggles recordings only. |
 | `--record-all` | off | Record **every** processed frame, not only ones with a label file. For unlabelled footage — our own field capture. See "Running it on footage nobody has labelled" below. |
 | `--out` | `runs/glad` | Output directory. Give every experiment its own. |
 | `--max-frames-per-video` | none | Stop each video after N frames. A **contiguous prefix**, so the motion branches still work — for smoke tests, not for results. Counts **decoded** frames, so it covers the same span of video under every `--sample` mode. |

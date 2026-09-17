@@ -80,6 +80,23 @@ feed to fall back on. It is mostly static, so the motion branches difference it 
 the appearance branch has no such protection — check where detections land before trusting
 a count.
 
+## The HUD mask
+
+`hud_mask.png` -- 28,002 px, **1.80% of the frame** -- marks where the overlay is painted.
+Built on 2026-09-17 by sampling 12 frames from each of the six clips and keeping pixels
+saturated in all three channels in at least 35% of them, dilated by 9 px:
+
+```
+py -3.13 -m src.data.hud_mask --videos data/processed/SOFA-O4/videos
+    --out data/processed/SOFA-O4/hud_mask.png
+```
+
+Runs pass it as `src.glad_detect --hud-mask`, which rejects a box lying mostly on it rather
+than altering any pixel. On EXP-011's detections it would veto **83.1%**, while the one
+confirmed drone scores **0.000** overlap. See [hud_mask.md](../../../docs/hud_mask.md).
+
+It does not cover the centre horizon bar, which sweeps with pitch.
+
 ## No labels
 
 There is no `labels/` tree here and no annotations anywhere. **No precision, recall, AP or

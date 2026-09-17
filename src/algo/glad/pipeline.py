@@ -35,6 +35,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from ..detections import Detections
+from ..masking import is_masked
 from .classifier import load_gate
 from .vendor import (GLAD_DIR, GLOBAL_WEIGHTS, LOCAL_WEIGHTS, add_import_roots,
                      import_motion, weights_dir)
@@ -136,21 +137,38 @@ class GladPipeline:
     def __init__(self, global_detector: GlobalDetector,
                  tracking_detector: TrackingDetector,
                  acquire_detector: AcquireDetector,
-                 motion: MotionModule) -> None:
+                 motion: MotionModule,
+                 hud_mask: np.ndarray | None = None) -> None:
         self.global_detector = global_detector
         self.tracking_detector = tracking_detector
         self.acquire_detector = acquire_detector
         self.motion = motion
+        # None by default, so EXP-004, EXP-005 and EXP-010 reproduce exactly.
+        self.hud_mask = hud_mask
         self.reset()
+
+    def _vetoed(self, box: np.ndarray | None) -> bool:
+        """Did this box land on the overlay rather than on the world?
+
+        Checked at every point a box can be *emitted or locked onto*, which is
+        the part that matters: a rejected detection costs one frame, but a lock
+        on a battery digit costs hundreds. EXP-011 held one for 300.
+        """
+        return box is not None and is_masked(box, self.hud_mask)
 
     @classmethod
     def from_release(cls, glad_dir: Path = GLAD_DIR,
-                     pad_value: int = TRAINED_PAD) -> GladPipeline:
+                     pad_value: int = TRAINED_PAD,
+                     hud_mask: np.ndarray | None = None) -> GladPipeline:
         """Build the pipeline from the checkpoints in a GLAD clone.
 
         `pad_value` reaches only the global detector — the local ones take square
         crops and never pad. Pass `RELEASED_PAD` to reproduce upstream exactly,
         bug included; see `src.algo.glad.yolo.PAD_STYLES`.
+
+        `hud_mask` rejects boxes that land on an overlay burned into the video.
+        It defaults to None, so a run that does not ask for it behaves exactly
+        as EXP-004 did.
         """
         add_import_roots(glad_dir)  # first call wins, so this fixes the clone in use
         weights = weights_dir(glad_dir)
@@ -162,6 +180,7 @@ class GladPipeline:
             tracking_detector=TrackingDetector(local_backend),
             acquire_detector=AcquireDetector(local_backend),
             motion=import_motion(load_gate(weights), glad_dir),
+            hud_mask=hud_mask,
         )
 
     def reset(self) -> None:
@@ -193,6 +212,8 @@ class GladPipeline:
     def _global_step(self, frame: np.ndarray, width: int, height: int) -> StepResult:
         """GAD over the full frame, falling back to GMD plus LAD confirmation."""
         box = self.global_detector.detect(frame)
+        if self._vetoed(box):
+            box = None
         if box is not None:
             self._lock_on(box, width, height, rebase=True)
             return StepResult(box, GLOBAL_YOLO)
@@ -216,6 +237,9 @@ class GladPipeline:
             return StepResult(None, GLOBAL_MISS)
 
         absolute = _to_absolute(confirmed, region_x, region_y)
+        if self._vetoed(absolute):
+            self._locked = False
+            return StepResult(None, GLOBAL_MISS)
         self._lock_on(absolute, width, height, rebase=True)
         return StepResult(absolute, GLOBAL_MOD)
 
@@ -236,6 +260,10 @@ class GladPipeline:
                                            frame[rows, cols, :], x_prev, y_prev)
             box = np.array(found) if len(found) else None
             branch = LOCAL_MOD
+
+        if box is not None and is_masked(_to_absolute(box, region_x, region_y),
+                                         self.hud_mask):
+            box = None
 
         if box is None:
             self._local_misses += 1
