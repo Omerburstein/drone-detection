@@ -1668,6 +1668,9 @@ predicts:
   would have caught every episode in the video — the sky ones from the normal pass and the
   terrain one from the inverted. It costs 2× compute, which the edge budget probably cannot
   afford, but it brackets what a polarity-robust detector would be worth.
-- **Evidence** (`runs/exp012_field_glad_inverted/`, gitignored): `all_hits.png` (all 831 by
-  branch), `zoom_drone_over_terrain.png`, `zoom_ambiguous_1540_1700.png`, `new_regions24.png`,
-  plus `zoom.py` and `polarity.py`.
+- **Evidence** (`runs/exp012_field_glad_inverted/`, gitignored): `overlay.mp4` (all 3,600
+  frames, `src.render_video --no-labels --zoom 3 --zoom-span 100`, matching EXP-010's so the
+  two are watchable side by side), `all_hits.png` (all 831 by branch),
+  `zoom_drone_over_terrain.png`, `zoom_ambiguous_1540_1700.png`, `new_regions24.png`.
+  The sheets are reproducible with [`src.crops`](crops.md), which the throwaway scripts that
+  first made them have since become; see the `/inspect` skill for how to read one.
