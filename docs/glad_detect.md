@@ -38,6 +38,7 @@ py -3.13 -m src.glad_detect [--dataset ARD-MAV|ARD100] [options]
 | `--burst-period` | `60` | For `--sample burst`: frames between burst starts. 60 is every 2 s at 30 fps. Sets detection **latency**, not per-burst probability — see below. |
 | `--glad-repo` | `third_party/GLAD` | Clone of the GLAD release. Its `weights/` must hold `yolov5s_GLAD.pt`, `yolov5s_GLAD-crop.pt` and `Net_best.pth`. |
 | `--pad` | `trained` | Letterbox fill for the global detector. `trained` (114) is the value yolov5 v6.0 trained these weights against. `released` (black) reproduces upstream including its padding bug. `tensorrtx` (128) is what upstream intended. See "The letterbox fill" below. |
+| `--scale` | `1.0` | Resize each frame by this factor before the detector, mapping boxes back so they are recorded in **original** pixels. `auto` picks the factor that puts the frame at 1920×1080's diagonal. `1.0` is a no-op. See "Footage that is not 1080p" below. |
 
 **There is no `--stride`, `--conf`, `--imgsz` or `--tile`, deliberately.** Every threshold
 is fixed at the value in the released source, because the point is to reproduce it. And
@@ -45,8 +46,57 @@ striding is not merely discouraged but incoherent here: both motion branches dif
 the current frame against the previous one, so a strided sample measures a different
 algorithm.
 
-`--pad` is the one exception, and it exists because the released value is a defect rather
-than a choice.
+There are two exceptions, and neither is a tuning knob:
+
+- **`--pad`**, because the released value is a defect rather than a choice.
+- **`--scale`**, because the released thresholds are absolute pixels at a resolution we do
+  not shoot at. It does not change a threshold; it puts the frame where the thresholds
+  already are. See below.
+
+## Footage that is not 1080p
+
+Every constant in the motion branch is absolute pixels tuned at 1920×1080 — blob area
+30–3000 and the 50-blob cap in `MOD2_global`, `dist_ref = 200` and the 30-blob cap in
+`MOD2_local`, the Gaussian kernel 11, `REGION_HALF = 160`, `MAX_DISTANCE` 50 and 10. None
+is a ratio. On a smaller frame every one of them is being applied to a target a fraction of
+the size it was calibrated for, and the blob-area gate worst of all, since area falls with
+the **square** of the linear scale.
+
+Our FIELD capture is 1032×752: diagonal 1277 against 2203, so **0.579× linear and 0.335× in
+area**. EXP-010 ran it natively and therefore measured our failure to rescale alongside the
+detector. `--scale auto` is the correction:
+
+```
+py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos     --video-names captured_raw_20260616_040253_004 --record-all     --images data/processed/FIELD/images/test --pad released --scale auto     --out runs/exp011_field_glad_scaled
+```
+
+Four things about it:
+
+- **Boxes are recorded in original coordinates.** Unlike `--crop`, which declares its
+  coordinate change and requires the same flag at render time, `--scale` is invisible in the
+  record: a scaled run's `detections.jsonl` is directly comparable to an unscaled one's, and
+  `src.render_video` needs no matching flag.
+- **Aspect ratio is preserved.** Upstream's own attempt is a commented-out
+  `cv2.resize(frame, (1920, 1080))` in `GLAD.py`, which would distort anything not 16:9 —
+  and this capture is 1.372:1. MOD2's optical-flow coherence tests threshold on the *spread*
+  of flow angles and distances, exactly what anisotropic scaling perturbs. Matching the
+  reference *diagonal* keeps the scaling isotropic.
+- **It costs pixels.** `auto` on the FIELD capture is 1.725× linear, so **2.98× the pixels**
+  through MOD2 and the ego-motion homography. Measured 2.15 fps against 3.05 native. The
+  YOLO branches letterbox to 640 regardless and the local branch works on fixed 320×320
+  crops, so only the global path pays.
+- **A run with `--scale` other than 1.0 is not directly comparable to EXP-004–010.** Say the
+  factor in any comparison, the same way `--pad` and the match threshold have to be stated.
+
+It composes with `--crop`: the crop is applied at decode, the scale to the cropped frame.
+Scaling **down** is allowed and warns — it destroys the small targets this project exists to
+detect.
+
+The better fix is to make the constants themselves scale-relative, which
+[glad-model.md](glad-model.md) ranks as improvement #4. That is not available cheaply: they
+are function-local literals inside the vendored, gitignored `third_party/GLAD/MOD2.py`, with
+no parameter and nothing `import_motion` can rebind. Scaling the frame buys the same
+relationship between target and threshold without touching the vendored tree.
 
 ## Duty cycling — running on fewer frames
 

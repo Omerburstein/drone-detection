@@ -24,6 +24,7 @@ import pytest
 
 from src import glad_detect
 from src.algo.glad.pipeline import GLOBAL_YOLO, StepResult
+from src.algo.glad.scaling import ScaledPipeline
 from src.data.crop import Crop
 from src.data.sampling import Bursts, EveryNth, Schedule
 from src.output.recording import RunRecorder
@@ -93,12 +94,16 @@ def labelled(tmp_path, monkeypatch):
 
 
 def drive(tmp_path, labels: Path, schedule: Schedule, record_all: bool = False,
-          crop=None):
-    """Run one stubbed video under `schedule`; return the stub and the rows."""
+          crop=None, pipeline=None):
+    """Run one stubbed video under `schedule`; return the stub and the rows.
+
+    `pipeline` overrides the bare stub, which is what lets a wrapped pipeline --
+    `ScaledPipeline` -- be driven through the same loop.
+    """
     args = argparse.Namespace(labels=labels, images=tmp_path / "images",
                               max_frames_per_video=None, record_all=record_all,
                               crop=crop)
-    pipeline = StubPipeline()
+    pipeline = pipeline if pipeline is not None else StubPipeline()
     out = tmp_path / "detections.jsonl"
     with RunRecorder(out) as recorder:
         decoded, processed = glad_detect.run_video(
@@ -256,3 +261,72 @@ class TestCrop:
                                             crop=Crop(2, 2, 4, 4))
         assert decoded == processed == TOTAL_FRAMES
         assert keys(rows) == [f"vid_{i:04d}" for i in range(1, TOTAL_FRAMES + 1)]
+
+
+class TestScaledPipeline:
+    """`--scale` through the run loop: the record must not know it happened.
+
+    The wrapper is unit-tested in `tests/unit/test_glad_scaling.py`. What is
+    covered here is the one thing only the wiring can get wrong -- that the
+    boxes reaching `detections.jsonl` are in **original** frame pixels. Scaled
+    coordinates would be entirely plausible on inspection and silently offset
+    every number taken from the run, which is exactly the failure `--crop`
+    avoids by declaring its coordinate change instead of hiding it.
+
+    `run_video` never reads `args.scale`; `main()` decides whether to wrap. So
+    the pipeline is wrapped here directly, which is what `main()` does.
+    """
+
+    def test_boxes_are_recorded_in_original_coordinates(self, tmp_path, labelled):
+        """The stub's box is `[10, 20, 5, 5]` in the frame it was handed, which
+        at 2x is half that in the source frame: `[5, 10, 2.5, 2.5]`, recorded as
+        the corner pair `[5, 10, 7.5, 12.5]`."""
+        inner = StubPipeline()
+        scaled = ScaledPipeline(inner, 2.0, announce=False)
+
+        _, rows, _, _ = drive(tmp_path, labelled, Schedule(), pipeline=scaled)
+
+        assert rows[0]["detections"][0]["bbox"] == pytest.approx([5, 10, 7.5, 12.5])
+
+    def test_the_detector_saw_the_scaled_frame(self, tmp_path, labelled):
+        """The other half of the same assertion: the frame really was resized,
+        so the mapping above is a round trip rather than a no-op.
+
+        Asserted on shape, not on the corner marker the other tests use --
+        interpolation does not preserve a lone non-zero pixel, which is itself
+        the reason the identity path must delegate instead of resizing to the
+        same dimensions.
+        """
+        shapes: list[tuple[int, int]] = []
+
+        class ShapeRecording(StubPipeline):
+            def step(self, frame: np.ndarray) -> StepResult:
+                shapes.append(frame.shape[:2])
+                return super().step(frame)
+
+        drive(tmp_path, labelled, Schedule(),
+              pipeline=ScaledPipeline(ShapeRecording(), 2.0, announce=False))
+
+        assert shapes == [(STUB_SIZE * 2, STUB_SIZE * 2)] * TOTAL_FRAMES
+
+    def test_unscaled_boxes_differ_from_scaled_ones(self, tmp_path, labelled):
+        """Guards the test above against passing for the wrong reason."""
+        _, native_rows, _, _ = drive(tmp_path, labelled, Schedule())
+        _, scaled_rows, _, _ = drive(
+            tmp_path, labelled, Schedule(),
+            pipeline=ScaledPipeline(StubPipeline(), 2.0, announce=False))
+
+        assert (native_rows[0]["detections"][0]["bbox"]
+                != scaled_rows[0]["detections"][0]["bbox"])
+
+    def test_reset_still_reaches_the_inner_pipeline_through_the_wrapper(
+            self, tmp_path, labelled):
+        """A burst that does not reset the *inner* pipeline differences across
+        the gap -- the failure `TestBursts` exists to catch, which the wrapper
+        must not reintroduce by swallowing `reset()`."""
+        inner = StubPipeline()
+        scaled = ScaledPipeline(inner, 2.0, announce=False)
+
+        drive(tmp_path, labelled, Bursts(2, 5), pipeline=scaled)
+
+        assert inner.resets == [0, 0, 2, 4]

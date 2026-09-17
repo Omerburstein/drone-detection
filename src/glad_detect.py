@@ -51,6 +51,10 @@ Example
     py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos \
         --video-names captured_raw_20260616_040253_004 --record-all \
         --images data/processed/FIELD/images/test --out runs/exp010_field
+    py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos \
+        --video-names captured_raw_20260616_040253_004 --record-all \
+        --images data/processed/FIELD/images/test --pad released --scale auto \
+        --out runs/exp011_field_glad_scaled
     py -3.13 -m src.evaluate --pred runs/exp004_glad/detections.jsonl \
         --labels data/processed/ARD-MAV/labels/test \
         --conditions data/processed/ARD-MAV/conditions.json \
@@ -67,6 +71,7 @@ from pathlib import Path
 import cv2
 
 from .algo.glad.pipeline import GladPipeline
+from .algo.glad.scaling import NATIVE, ScaledPipeline, parse_scale
 from .algo.glad.vendor import GLAD_DIR
 from .algo.glad.yolo import PAD_STYLES
 from .data.crop import Crop
@@ -138,6 +143,15 @@ def build_parser() -> argparse.ArgumentParser:
                          "**'released' (black) reproduces upstream, bug and all, and "
                          "is what a comparison against the paper must use.** "
                          "'tensorrtx' (128) is what upstream intended.")
+    ap.add_argument("--scale", type=parse_scale, default=NATIVE, metavar="FACTOR",
+                    help="Resize each frame by FACTOR before the detector, mapping "
+                         "boxes back so they are recorded in **original** pixels. "
+                         "'auto' picks the factor putting the frame at 1920x1080's "
+                         "diagonal, which is the resolution every constant in the "
+                         "motion branch was tuned at (blob area 30-3000, dist_ref 200, "
+                         "a=160). Default 1.0, which is a no-op and the faithful path. "
+                         "**A run with --scale != 1 is not directly comparable to "
+                         "EXP-004-010.** Applied after --crop, so the two compose.")
     ap.add_argument("--sample", choices=(EVERY, NTH, BURST), default=EVERY,
                     help="Duty-cycle policy (default: every frame, which is what "
                          "EXP-004 ran). 'nth' runs the whole pipeline at 1/N of the "
@@ -161,8 +175,8 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def run_video(pipeline: GladPipeline, video: Path, stem: str, args: argparse.Namespace,
-              recorder: RunRecorder, branches: Counter,
+def run_video(pipeline: GladPipeline | ScaledPipeline, video: Path, stem: str,
+              args: argparse.Namespace, recorder: RunRecorder, branches: Counter,
               schedule: Schedule) -> tuple[int, int]:
     """Step the pipeline over one video, recording every annotated frame.
 
@@ -270,6 +284,10 @@ def main() -> None:
     if args.crop is not None:
         print(f"Crop: {args.crop.label} -- boxes are recorded in cropped coordinates")
     pipeline = GladPipeline.from_release(args.glad_repo, PAD_STYLES[args.pad])
+    if args.scale != NATIVE:
+        # The resolved factor and resized dimensions depend on the frame, so the
+        # wrapper prints them itself on the first frame of each distinct shape.
+        pipeline = ScaledPipeline(pipeline, args.scale)
 
     branches: Counter = Counter()
     decoded = processed = 0

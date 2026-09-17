@@ -224,11 +224,26 @@ Ordered by (our expected gain) ÷ (effort). Items 1–4 are cheap and low-risk.
    ratio explode, and the wrap at ±180° gives a target moving left a huge spurious std —
    so **leftward motion is penalised**. Use circular statistics (mean resultant length)
    instead. This is a correctness bug in a rejection test, not a tuning choice.
-4. **Make the constants scale-relative.** `area 30–3000`, `a = 160`, `dist_ref = 200`,
-   blur kernel 11, `local_num == 30` are all absolute pixels tuned for 1920×1080.
-   Anything at another resolution silently mis-filters. **This directly threatens M4b** —
-   FL-Drones is not 1080p, so a naive run there would measure our failure to rescale, not
-   GLAD's generalisation. Normalise by frame diagonal before that experiment.
+4. **Make the constants scale-relative.** *Half done — see below.* `area 30–3000`,
+   `a = 160`, `dist_ref = 200`, blur kernel 11, `local_num == 30` are all absolute pixels
+   tuned for 1920×1080. Anything at another resolution silently mis-filters. **This
+   directly threatens M4b** — FL-Drones is not 1080p, so a naive run there would measure
+   our failure to rescale, not GLAD's generalisation. Normalise by frame diagonal before
+   that experiment.
+
+   **What exists:** `src.algo.glad.scaling.ScaledPipeline`, reached by
+   `src.glad_detect --scale`, resizes the *frame* to the reference diagonal and maps boxes
+   back, so the relationship between target and threshold is restored without the constants
+   moving. EXP-011 is the first run to use it.
+
+   **What is still open:** the constants themselves. They are function-local literals inside
+   the vendored, gitignored `third_party/GLAD/MOD2.py` — no parameter, no module global, and
+   nothing `vendor.import_motion` can rebind, since it replaces module *attributes* and these
+   are statements inside a function body. Doing it properly means porting `MOD2.py` into
+   `src/`, which breaks the package's stated contract that the motion modules are used
+   verbatim and puts every EXP-004–010 number behind a code change. Frame-side scaling was
+   taken first because it is free of both costs; it is not equivalent, because resizing also
+   resamples the target's appearance, which the constant-side fix would leave untouched.
 5. **Attack the hovering failure.** The authors' own worst case. The appearance branch is
    the only thing that can see a stationary target, and it is the weak branch. Options:
    accumulate the difference over a longer baseline (frame *t* vs *t−k*) so slow relative
