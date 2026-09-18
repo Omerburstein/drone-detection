@@ -32,10 +32,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+import cv2
 import numpy as np
 
 from ..detections import Detections
-from ..masking import is_masked
+from ..masking import has_twin, is_masked
 from .classifier import load_gate
 from .motion import UPSTREAM, MotionConfig
 from .vendor import (GLAD_DIR, GLOBAL_WEIGHTS, LOCAL_WEIGHTS, add_import_roots,
@@ -155,13 +156,18 @@ class GladPipeline:
                  tracking_detector: TrackingDetector,
                  acquire_detector: AcquireDetector,
                  motion: MotionModule,
-                 hud_mask: np.ndarray | None = None) -> None:
+                 hud_mask: np.ndarray | None = None,
+                 osd_twins: bool = False) -> None:
         self.global_detector = global_detector
         self.tracking_detector = tracking_detector
         self.acquire_detector = acquire_detector
         self.motion = motion
         # None by default, so EXP-004, EXP-005 and EXP-010 reproduce exactly.
         self.hud_mask = hud_mask
+        # Off by default for the same reason. The HUD that moves -- see
+        # `src.algo.masking.twin_score`.
+        self.osd_twins = osd_twins
+        self._gray: np.ndarray | None = None
         self.reset()
 
     def _vetoed(self, box: np.ndarray | None) -> bool:
@@ -170,13 +176,22 @@ class GladPipeline:
         Checked at every point a box can be *emitted or locked onto*, which is
         the part that matters: a rejected detection costs one frame, but a lock
         on a battery digit costs hundreds. EXP-011 held one for 300.
+
+        The static mask covers overlay that stays put; `osd_twins` covers the
+        overlay that moves, by asking whether the box has identical copies one
+        OSD column away on the current frame.
         """
-        return box is not None and is_masked(box, self.hud_mask)
+        if box is None:
+            return False
+        if is_masked(box, self.hud_mask):
+            return True
+        return self._gray is not None and has_twin(self._gray, box)
 
     @classmethod
     def from_release(cls, glad_dir: Path = GLAD_DIR,
                      pad_value: int = TRAINED_PAD,
                      hud_mask: np.ndarray | None = None,
+                     osd_twins: bool = False,
                      motion_config: MotionConfig | None = None) -> GladPipeline:
         """Build the pipeline from the checkpoints in a GLAD clone.
 
@@ -186,7 +201,8 @@ class GladPipeline:
 
         `hud_mask` rejects boxes that land on an overlay burned into the video.
         It defaults to None, so a run that does not ask for it behaves exactly
-        as EXP-004 did.
+        as EXP-004 did. `osd_twins` rejects boxes that are one of a row of
+        identical OSD characters -- the overlay a static mask cannot hold.
 
         `motion_config` selects a tuning of the motion branches. `None` loads
         the **vendored** `MOD2` rather than the port, so the default path is
@@ -203,6 +219,7 @@ class GladPipeline:
             acquire_detector=AcquireDetector(local_backend),
             motion=_build_motion(weights, glad_dir, motion_config, hud_mask),
             hud_mask=hud_mask,
+            osd_twins=osd_twins,
         )
 
     def reset(self) -> None:
@@ -226,6 +243,8 @@ class GladPipeline:
             return StepResult(None, FIRST_FRAME)
 
         height, width = frame.shape[:2]
+        self._gray = (cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if self.osd_twins
+                      else None)
         result = (self._local_step(frame, width, height) if self._locked
                   else self._global_step(frame, width, height))
         self._prev = frame
@@ -283,8 +302,7 @@ class GladPipeline:
             box = np.array(found) if len(found) else None
             branch = LOCAL_MOD
 
-        if box is not None and is_masked(_to_absolute(box, region_x, region_y),
-                                         self.hud_mask):
+        if box is not None and self._vetoed(_to_absolute(box, region_x, region_y)):
             box = None
 
         if box is None:

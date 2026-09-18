@@ -44,6 +44,8 @@ after** — 28,002 px of 1440×1080.
 | `--white-level` | 225 | Minimum channel value counting as HUD-white. |
 | `--min-fraction` | 0.35 | Share of samples a pixel must be white in. |
 | `--dilate` | 9 | Dilation, in pixels. |
+| `--block-fraction` | none | A looser threshold for OSD **text blocks**, applied only outside `--picture-rows`. Each block it finds is filled to its bounding rectangle. Off by default. |
+| `--picture-rows` | none | `TOP:BOTTOM` — the rows `--block-fraction` must never touch: the band where the scene, the moving horizon bar and the target are. |
 
 ## Using it
 
@@ -84,23 +86,56 @@ rarely white at any single position and it survives the threshold. It was not am
 offenders in EXP-011's sample. Lower `--min-fraction` if it starts producing detections,
 at the cost of masking more of the frame.
 
-## Analog OSD needs a lower `--white-level`
+## Analog OSD
 
-Measured on the Sofa Base **analog** goggles recordings (960×720, EXP-013). At the default
-225, the mask caught only the date strip. Analog OSD glyphs are soft grey after the
-analog link and the capture re-encode, so they are never saturated in all three channels.
-**`--white-level 180`** covers the telemetry blocks as well (25,905 px, 3.75%), with no sky
-masked:
+Measured on the Sofa Base **analog** goggles recordings (960×720, EXP-013 and EXP-014).
+Three things differ from O4.
+
+**Lower `--white-level`.** At the default 225, the mask caught only the date strip. Analog
+OSD glyphs are soft grey after the analog link and the capture re-encode, so they are never
+saturated in all three channels. 180 finds them without masking any sky.
+
+**Text blocks, not glyph pixels.** The telemetry digits tick and the compass letters
+scroll, so no single pixel in those blocks is white often enough. At 0.35 the mask held the
+glyph cores, but the motion branch still made 31 `local mod` hits on the edges of the
+telemetry in EXP-013. Lowering the threshold everywhere does not work either: at 0.08 it
+also paints the middle of the sky, where the horizon bar smears across samples and where a
+target being flown at appears. So `--block-fraction` applies the loose threshold **only
+outside `--picture-rows`**, joins nearby characters, and fills each block to its rectangle:
 
 ```
 py -3.13 -m src.data.hud_mask --videos data/raw/SOFA-ANALOG/videos
-    --out data/processed/SOFA-ANALOG/hud_mask.png --white-level 180
+    --out data/processed/SOFA-ANALOG/hud_mask.png
+    --white-level 180 --block-fraction 0.08 --picture-rows 150:530
 ```
 
-The analog OSD also carries a **scrolling compass tape** and a **dashed artificial horizon**.
-Both move, so neither can be masked this way. In EXP-013 these two produced 53 of 82
-detections. Every clip under `--videos` must share one resolution, and the analog folder
-mixes in a 2520×1080 and a 1280×720 file.
+The result is 90,883 px (13.15%): the clock, compass tape, link block, date and battery,
+with the sky from row 150 to row 530 left clear. Against EXP-013's 82 detections it vetoes
+**64**, compared with 0 for the O4-style mask.
+
+**Every clip under `--videos` must share one resolution.** The analog source folder mixes
+in a 2520×1080 file and a 1280×720 file.
+
+## The HUD that moves
+
+The analog **artificial horizon** is a row of identical dashes that slides with pitch and
+roll, so no static mask can hold it. It is also the most convincing false alarm this
+project has recorded. At 10 px, a dash (a bright line over a black outline) looks like a
+sunlit quadcopter, and in EXP-013 one held a `local yolo` lock for 43 frames.
+
+What gives a dash away is that it has **twins**. The OSD chip draws on a 30-column
+character grid, so identical dashes sit one column (`width / 30`, 32 px at 960 wide) to
+either side. A drone has no twin. `src.glad_detect --osd-twins` looks 0.5–2.5 columns left
+and right, with ±16 px of vertical slack for roll, and vetoes a box whose best normalised
+match is **≥ 0.70**. Featureless boxes (std < 8) never twin, because correlation stretches
+flat sky to full contrast.
+
+Measured on EXP-013's detections, the 15 horizon-dash boxes score 0.58–0.95, and 13 of
+them clear 0.70. Together with the block mask, **77 of 82** are vetoed. The survivors are
+3 frames of ground clutter and 2 weaker dashes.
+
+**What it would cost:** a real drone flying in formation with an identical drone one
+column apart. It would also veto clutter that repeats at that spacing, which is not a loss.
 
 ## Do not use it on clean footage
 

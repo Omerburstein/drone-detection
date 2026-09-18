@@ -1781,6 +1781,11 @@ The 769–811 span needed a full-resolution look to call: in a 230 px crop it re
 small quadcopter against sky. Seen at frame scale beside its neighbours, it is plainly the
 horizon bar.
 
+- **Correction (2026-09-18, EXP-014):** there *was* a drone to find. It is in open sky for
+  roughly **frames 510–585**, closing from a speck to ~25 px, and this run emitted **no box
+  on it**. During that span GLAD was locked onto telemetry digits: the `local yolo` at 540
+  and the `local mod` hits at 542, 563 and 578. The 8-frame scan below skipped the whole
+  passage. It stands as a record of why an eyeball negative is not evidence.
 - **What this does *not* establish:** that there was no drone to find. The clip was
   scanned by eye at 8 frames (600–870), and no airframe was visible at that scale. By the
   standing warning in `datasets.md`, that is **not evidence of absence** at these sizes.
@@ -1796,3 +1801,61 @@ horizon bar.
   on this footage. Without a known passage, a miss and an empty clip look identical. If a
   target passage exists and GLAD misses it, this becomes the same story as EXP-012a, and
   fine-tuning (M7) is again the answer, not masking.
+
+## EXP-014 — the same clip with the moving OSD vetoed: the drone found, once
+
+- **Date:** 2026-09-18
+- **Question:** EXP-013's 82 detections were all OSD. If the moving OSD is vetoed too, does
+  GLAD find the target?
+- **Model / weights / data:** identical to EXP-013. `catch_2`, 890 frames, 960×720,
+  `--pad released`, default motion, no `--scale`.
+- **Changes:**
+  - **Block mask.** `data/processed/SOFA-ANALOG/hud_mask.png` was rebuilt with
+    `--white-level 180 --block-fraction 0.08 --picture-rows 150:530`: OSD text blocks
+    outside the picture rows, each filled to its rectangle, 13.15% of the frame.
+  - **`--osd-twins`.** A box is vetoed if it has an identical copy 0.5–2.5 OSD columns
+    away, at a score of at least 0.70.
+  - Both are described in [hud_mask.md](hud_mask.md#analog-osd).
+- **Hardware:** i7-1255U CPU, 255.8 s, **3.48 fps**. The pytest suite ran concurrently for
+  part of the run.
+- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/SOFA-ANALOG/videos --video-names catch_2 --record-all --pad released --hud-mask data/processed/SOFA-ANALOG/hud_mask.png --osd-twins --images data/processed/SOFA-ANALOG/images/test --out runs/exp014_analog_catch2_osd`
+
+### Result
+
+| | EXP-013 | EXP-014 |
+| --- | ---: | ---: |
+| Detections | 82 | **8** |
+| on OSD | 81 | **2** |
+| **on the drone** | **0** | **1** (frame 547) |
+| `local yolo` frames | 48 | 2 |
+| `global miss` | 45.6% | 83.6% |
+
+All 8 were inspected at frame scale:
+
+| Frame | Branch | What it is |
+| --- | --- | --- |
+| **547** | `global yolo` | **the target.** A dark multirotor silhouette in open sky, confirmed by stepping 540–552 |
+| 242–244 | `global yolo` → `local yolo` | ground clutter, as in EXP-013 |
+| 483 | `global yolo` | a horizon-height blob on an analog breakup frame. Undetermined |
+| 555 | `local mod` | a building edge, the motion branch's fallback after 547 |
+| 811 | `global yolo` | a horizon dash whose twins scored below 0.70 on this frame |
+| 822 | `local mod` | the RSSI glyph just below the telemetry block's rectangle |
+
+- **The veto worked on both sides.** Of the 81 OSD false alarms, 79 are gone. Freed from the
+  telemetry locks EXP-013 sat in, the global detector reached the target, which **no
+  earlier run on this footage had boxed**.
+- **The veto did not reach the drone.** Its twin score was measured on its own positions:
+  **0.42, 0.59, 0.63** at frames 560, 570 and 580, against a 0.70 veto. By 580 it is flying
+  level with the horizon dashes, so **the margin there is 0.07**. The dashes themselves
+  scored 0.58–0.95, so the two populations overlap, and 0.70 sits in the overlap.
+- **Recall is still ~1 frame in ~75.** The target is visible for roughly frames 510–585,
+  judged by eye. GLAD boxed it once and did not hold it: `local yolo` never locked on, and
+  the motion fallback wandered to a building at 555. **Nothing here is a score:** the
+  passage bounds are eyeballed and there are no labels.
+- **Next:** label 510–585 with `/annotate`, so this clip scores against real ground truth.
+  The appearance branch is the gap, as in EXP-012a on O4. A 25 px dark quad against sky is
+  the opposite of GLAD's white-Phantom-over-ground training prior (glad-model.md §5b), so
+  fine-tuning (M7) remains the remedy. `--invert` (EXP-012) is the cheap probe to try first
+  on this passage.
+- **Artefacts (gitignored):** `runs/exp014_analog_catch2_osd/overlay.mp4`, `all_hits.png`
+  and the mask preview `runs/exp014_hud_preview.png`.

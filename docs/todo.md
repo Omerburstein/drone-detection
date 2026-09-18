@@ -15,6 +15,10 @@ dates, not priorities.
 
 ## Open
 
+### Analog `catch 2`: a confirmed target passage
+
+- [ ] 2026-09-18 — [data] **Label `catch_2` frames ~510–585 with `/annotate`.** The drone closes from a speck to ~25 px against sky, and GLAD boxed it once (EXP-014). Until this is labelled, the 1-in-75 figure is eyeballed. Then try `--invert` on the passage as the cheap probe of the appearance prior.
+
 ### EXP-012: measure whether the O4 fixes actually work
 
 The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
@@ -101,6 +105,8 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-17 — [data] **Annotate the FIELD capture's three target episodes** — *now the critical path: EXP-011 exhausted what unlabelled footage can answer, and both surviving questions (the ground-clutter false-alarm rate, and recall on our own camera) are measurements.* — frames ~2–180, ~1101–1553 and ~3140–3600 of `captured_raw_20260616_040253_004.mp4`, roughly 1,100 frames. This is the cheapest real score available to the project: EXP-010 is already keyed at `data/processed/FIELD/images/test/`, so labels there turn **an existing JSONL into AP, precision and recall with no second inference pass**. It is also the only way to measure **recall** on our own camera, which EXP-010 leaves unmeasured and which is the number the edge budget actually needs. Two warnings: the episodes' bounds come from where the *detector* fired, so annotating only those frames would score a set chosen by the thing being scored — extend each episode outward until the target is genuinely absent. And **do not eyeball full frames**: a 14×11 px drone at frame 1350 was missed by eye and caught by the detector.
 
 ## Done
+
+- [x] 2026-09-18 — [algo] **Vetoed the moving analog OSD, and GLAD found the drone in `catch 2` (EXP-014).** Detections fell from 82 to 8. The drone was boxed at frame 547 of a passage visible from about 510 to 585, which EXP-013 missed entirely while locked on telemetry. Two additions made it work. `src.data.hud_mask --block-fraction/--picture-rows` masks OSD text blocks as whole rectangles, but only outside the picture rows. `src.glad_detect --osd-twins` vetoes a box with an identical copy one OSD column away, which catches the artificial-horizon dashes. The drone's own twin score was measured at 0.42–0.63 against a 0.70 veto. 21 new tests. Also corrected EXP-013, which said no drone was found.
 
 - [x] 2026-09-18 — [algo] **Ran GLAD on the analog `catch 2` clip and rendered it — EXP-013.** No drone was found. All 82 detections were inspected: 38 are the compass tape's "N", 31 are telemetry digits, 15 are one dash of the artificial horizon, 3 are ground clutter and 1 is undetermined. The overlay is at `runs/exp013_analog_catch2/overlay.mp4`. Staged the nine 960×720 analog clips under `data/raw/SOFA-ANALOG/` and built an analog HUD mask. Analog OSD needs `--white-level 180`, because the O4 default of 225 caught only the date strip. The next step is to find the target in `catch_2` by hand, since a miss and an empty clip currently look the same.
 

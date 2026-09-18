@@ -62,7 +62,7 @@ class StubMotion:
 
 
 def build(global_results=(), tracking_results=(), acquire_results=(),
-          motion_global=(), motion_local=(), hud_mask=None):
+          motion_global=(), motion_local=(), hud_mask=None, osd_twins=False):
     """A pipeline over stubs, plus the stubs themselves for assertions."""
     stubs = {
         "global_detector": StubDetector(*global_results),
@@ -70,7 +70,7 @@ def build(global_results=(), tracking_results=(), acquire_results=(),
         "acquire_detector": StubDetector(*acquire_results),
         "motion": StubMotion(motion_global, motion_local),
     }
-    return GladPipeline(**stubs, hud_mask=hud_mask), stubs
+    return GladPipeline(**stubs, hud_mask=hud_mask, osd_twins=osd_twins), stubs
 
 
 def hud_at(x: int, y: int, width: int, height: int) -> np.ndarray:
@@ -354,3 +354,43 @@ class TestHudVeto:
         pipeline, _ = build(global_results=[[500, 400, 20, 20]])
         pipeline.step(frame(1))
         assert pipeline.step(frame(2)).branch == GLOBAL_YOLO
+
+
+def dashes(marker: int, y: int = 400) -> np.ndarray:
+    """A frame carrying a row of OSD horizon dashes, one column apart."""
+    image = frame(marker)
+    image[:, :, :] = 150
+    column = FRAME_W // 30
+    for k in range(-3, 4):
+        x = 500 + k * column
+        image[y:y + 2, x:x + 10] = 215
+        image[y + 3:y + 5, x:x + 10] = 85
+    return image
+
+
+class TestOsdTwinVeto:
+    """The moving-HUD veto reaches every emit and lock point, like the mask."""
+
+    def test_acquiring_a_dash_is_rejected(self):
+        pipeline, stubs = build(global_results=[[500, 400, 10, 5], None],
+                                osd_twins=True)
+        pipeline.step(dashes(1))
+        assert pipeline.step(dashes(2)).branch == GLOBAL_MISS
+        pipeline.step(dashes(3))
+        assert stubs["tracking_detector"].calls == []  # never locked
+
+    def test_tracking_onto_a_dash_becomes_a_miss(self):
+        # Acquire at (700, 200) on sky, then the tracker returns the dash at
+        # absolute (500, 400). The region anchors on the box's top-left.
+        origin_x, origin_y = 700 - 160, 200 - 160
+        pipeline, _ = build(global_results=[[700, 200, 10, 5]],
+                            tracking_results=[[500 - origin_x, 400 - origin_y, 10, 5]],
+                            osd_twins=True)
+        pipeline.step(dashes(1))
+        assert pipeline.step(dashes(2)).branch == GLOBAL_YOLO
+        assert pipeline.step(dashes(3)).branch == LOCAL_MISS
+
+    def test_off_by_default(self):
+        pipeline, _ = build(global_results=[[500, 400, 10, 5]])
+        pipeline.step(dashes(1))
+        assert pipeline.step(dashes(2)).branch == GLOBAL_YOLO

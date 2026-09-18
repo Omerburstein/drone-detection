@@ -137,6 +137,12 @@ def build_parser() -> argparse.ArgumentParser:
                          "recordings only** -- on clean footage it can only cost "
                          "detections, and leaving it off is what keeps EXP-004, "
                          "EXP-005 and EXP-010 reproducible.")
+    ap.add_argument("--osd-twins", action="store_true",
+                    help="Also reject a box that has an identical copy 0.5-2.5 "
+                         "OSD character columns to either side on the same "
+                         "frame -- the moving HUD a static --hud-mask cannot "
+                         "hold, such as an analog artificial horizon. **For "
+                         "goggles screen recordings only**, like --hud-mask.")
     ap.add_argument("--record-all", action="store_true",
                     help="Record every processed frame, including ones with no label "
                          "file. For **unlabelled footage only** -- field capture that "
@@ -326,11 +332,15 @@ def main() -> None:
         hud_mask = load_mask(args.hud_mask)
         print(f"HUD mask: {args.hud_mask} -- {100 * hud_mask.mean():.2f}% of the "
               f"frame is overlay")
+    if args.osd_twins:
+        print("OSD twins: a box with an identical copy one character column "
+              "away is treated as overlay")
     motion_config = PROFILES[args.motion_profile] if args.motion_profile else None
     if motion_config is not None:
         print(f"Motion: {motion_config.label}")
     pipeline = GladPipeline.from_release(args.glad_repo, PAD_STYLES[args.pad],
                                          hud_mask=hud_mask,
+                                         osd_twins=args.osd_twins,
                                          motion_config=motion_config)
     if args.scale != NATIVE:
         # The resolved factor and resized dimensions depend on the frame, so the
