@@ -70,7 +70,7 @@ set. *(Exact container unverified — it is only visible post-DUA.)*
 | DUT / VisioDECT / Drone-vs-Bird / Anti-UAV* / LRDDv2-3 / MMAUD / MM-UAV / USC-Drone | ✅ | mixed | ❌ ground | Auxiliary only |
 | SynDroneVision / SimD3 | ✅ | ✅ | ✅ | Synthetic |
 | **FIELD** (ours) | ✅ | ✅ | ✅ | **Our own capture — no labels, so no score** |
-| **SOFA-O4** (ours) | ✅ | ✅ | ✅ | **Our own intercept trials — no labels, so no score** |
+| **SOFA-O4** (ours) | ✅ | ✅ | ✅ | **Our own intercept trials — `first_catch` hand-labelled (2026-09-18); other five unlabelled** |
 
 ---
 
@@ -178,11 +178,30 @@ Do not read the filename as ground truth for a detector: a clip named `catch` st
 contains long stretches with no target in view, and a detection in one is not validated by
 the name of the file it came from.
 
-## No labels
+## Labels — `first_catch` only
 
-As with FIELD: **no precision, recall, AP or mAP is computable.** Runs are keyed at
-`data/processed/SOFA-O4/images/test/`, so labels dropped there later score the existing
-JSONL with no second inference pass.
+Labelled 2026-09-18 in the annotator (`src.data.annotate`) against the **processed** 1440×1080
+crop, so boxes share the coordinate system of every SOFA-O4 run. Labels are at
+`data/processed/SOFA-O4/labels/test/`, judged frames in `data/processed/SOFA-O4/verified.jsonl`,
+and the resumable session in `data/processed/SOFA-O4/annotations/first_catch.json`.
+
+| | |
+| --- | --- |
+| Frames judged | **964 / 964**, the whole clip |
+| Confirmed empty | **707**, frames 1–707 (the drone is not yet in view) |
+| Boxes | **257**, frames 708–964, one per frame |
+| Placed by hand | **67** boxes, roughly one every 3–4 frames through the passage |
+| Proposed by the follower | **190**. 92 of them scored below 0.8, and 15 below 0.6 (lowest are frames 926, 961, 870, 960, 942 at 0.46–0.49) |
+| Box size (longest side) | median **72 px**, from 17 to 142 px |
+
+The follower's boxes were reviewed at playback speed only. The low-scoring frames above are
+the ones to check first if a score on this clip looks strange. The drone is large here: a
+median of 72 px is well above the 10–30 px this project targets, so `first_catch` tests
+the close approach, not long-range detection.
+
+The other five clips have no labels, so **no precision, recall, AP or mAP is computable**
+for them. Runs are keyed at `data/processed/SOFA-O4/images/test/`, so labels added there
+later score the existing JSONL without running inference again.
 
 Frame diagonal after the crop is 1800 against 1080p's 2203 — **0.817× linear**, closer to
 the tuning of GLAD's absolute-pixel motion constants than FIELD's 0.579×, but not 1.0.
