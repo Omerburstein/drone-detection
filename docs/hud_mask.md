@@ -84,6 +84,24 @@ rarely white at any single position and it survives the threshold. It was not am
 offenders in EXP-011's sample. Lower `--min-fraction` if it starts producing detections,
 at the cost of masking more of the frame.
 
+## Analog OSD needs a lower `--white-level`
+
+Measured on the Sofa Base **analog** goggles recordings (960×720, EXP-013). At the default
+225, the mask caught only the date strip. Analog OSD glyphs are soft grey after the
+analog link and the capture re-encode, so they are never saturated in all three channels.
+**`--white-level 180`** covers the telemetry blocks as well (25,905 px, 3.75%), with no sky
+masked:
+
+```
+py -3.13 -m src.data.hud_mask --videos data/raw/SOFA-ANALOG/videos
+    --out data/processed/SOFA-ANALOG/hud_mask.png --white-level 180
+```
+
+The analog OSD also carries a **scrolling compass tape** and a **dashed artificial horizon**.
+Both move, so neither can be masked this way. In EXP-013 these two produced 53 of 82
+detections. Every clip under `--videos` must share one resolution, and the analog folder
+mixes in a 2520×1080 and a 1280×720 file.
+
 ## Do not use it on clean footage
 
 On a real camera feed there is no overlay, so the mask can only cost detections. Leaving

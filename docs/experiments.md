@@ -1738,3 +1738,61 @@ compensable background — is inverted here.
 - **Next:** the appearance branch has to carry this, which means **fine-tuning on our own
   labels** — Stage E of the plan and the existing M7. Before that, `--motion-profile
   clutter` should not be adopted: it is slower and, on this evidence, buys nothing.
+
+## EXP-013 — GLAD on analog goggles footage: every box is the OSD, no drone found
+
+- **Date:** 2026-09-18
+- **Question:** asked directly: detect the drone in `catch 2` of the Sofa Base analog
+  recordings and render an annotated video.
+- **Model / weights:** identical to EXP-012a (GLAD released pipeline, `--pad released`).
+  **Default motion profile** (vendored `MOD2`). EXP-012a said not to adopt `clutter`, so
+  this run does not use it. **No `--scale`**: 960×720 is 0.545× the 1080p diagonal, so
+  every motion constant is off by that factor, and EXP-011 showed `--scale auto` did not
+  help on the FIELD capture.
+- **Data:** `data/raw/SOFA-ANALOG/videos/catch_2.mp4`, 890 frames, 960×720 @ 30 fps. This is
+  an **analog FPV** goggles recording, a different link from the O4 clips. Staged from
+  `Downloads/EXP Sofa Base 24-08-26/processed/analog/catch 2.mp4` (MD5 `e89ab834…`).
+  **No labels.** The source folder is mixed: `catch 1` is O4-format 2520×1080 and
+  `catch 9` is 1280×720. Only the nine 960×720 clips were staged.
+- **HUD mask:** `data/processed/SOFA-ANALOG/hud_mask.png`, built from those nine clips.
+  **The O4 default `--white-level 225` does not work here**: it caught only the date strip,
+  because analog OSD glyphs are soft grey, not saturated. `--white-level 180` covers the
+  telemetry blocks and the date strip, with no sky masked (25,905 px, **3.75%**). It cannot
+  cover the scrolling compass tape or the artificial-horizon dashes, which both move.
+- **Hardware:** i7-1255U CPU. It ran at **5.1–5.3 fps** unimpeded. The overall 4,237 s
+  (0.21 fps) comes from a stall between frames 500 and 750 (0.18 fps), most likely host
+  sleep or contention. **Do not quote it as throughput.**
+- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/SOFA-ANALOG/videos --video-names catch_2 --record-all --pad released --hud-mask data/processed/SOFA-ANALOG/hud_mask.png --images data/processed/SOFA-ANALOG/images/test --out runs/exp013_analog_catch2`
+
+### Result
+
+82 detections on 82 of 890 frames: `global yolo` 3, `local yolo` 48, `local mod` 31.
+**All 82 were inspected as crops, and none is a drone:**
+
+| Frames | Branch | What it is |
+| --- | --- | --- |
+| 363–401 | `global yolo` → `local yolo` (38) | the compass tape's **"N"** glyph. Moving HUD, so the mask cannot reach it |
+| 402–837 | `local mod` (31) | telemetry digits (`7:100`, RSSI) at the edges of the masked cells |
+| 769–811 | `global yolo` → `local yolo` (15) | **one dash of the artificial-horizon bar.** It sits in a row of identical unboxed dashes and steps 596 → 563 → 530 px, which is the dash spacing |
+| 242–244 | `global yolo` → `local yolo` (3) | a ~40×26 px dark-and-white object on the ground. Clutter |
+| 540 | `local yolo` (1) | an 8×6 px blob. Undetermined |
+
+The 769–811 span needed a full-resolution look to call: in a 230 px crop it resembles a
+small quadcopter against sky. Seen at frame scale beside its neighbours, it is plainly the
+horizon bar.
+
+- **What this does *not* establish:** that there was no drone to find. The clip was
+  scanned by eye at 8 frames (600–870), and no airframe was visible at that scale. By the
+  standing warning in `datasets.md`, that is **not evidence of absence** at these sizes.
+  `catch` is a trial outcome, not a detection label.
+- **What it does establish:** on analog footage, the burned-in OSD dominates GLAD's output
+  more thoroughly than it did on O4. The moving elements are the failure: the compass
+  letters and the horizon dashes are high-contrast, drone-sized glyphs against sky. A
+  static mask cannot fix that.
+- **Artefacts (gitignored):** `runs/exp013_analog_catch2/overlay.mp4` (unscored,
+  `--zoom 3 --zoom-span 100`), `all_hits.png` (all 82), `sky_769_811.png`,
+  `ground_242_244.png`, plus the mask preview `runs/exp013_hud_preview.png`.
+- **Next:** locate the target in `catch_2` by hand (`/annotate`) before any further run
+  on this footage. Without a known passage, a miss and an empty clip look identical. If a
+  target passage exists and GLAD misses it, this becomes the same story as EXP-012a, and
+  fine-tuning (M7) is again the answer, not masking.
