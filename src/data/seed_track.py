@@ -33,7 +33,7 @@ Example
 -------
     py -3.13 -m src.data.seed_track
         --video data/processed/SOFA-O4/videos/first_catch.avi
-        --seed 962 690 236 46 26
+        --seed 962 738 382 80 34
         --labels-out data/processed/SOFA-O4/labels/test
         --verified-out data/processed/SOFA-O4/verified.jsonl
         --review-out runs/labels_review

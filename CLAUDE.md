@@ -52,6 +52,9 @@ src/data/     frames.py     FrameSource -> Frame; video decode, striding, budget
               sources.py    classify --source as video or images; resolve_video by stem
               crop.py       Crop; the picture region of a frame that is not all picture
               seed_track.py CLI: one hand-placed box -> a labelled segment
+              annotate.py   CLI: the annotation window -- draw, correct, box follows
+              annotation.py per-frame verdicts, how they spread, save/resume/export
+              box_edit.py   grabbing, dragging and zooming a box, in frame pixels
               hud_mask.py   CLI: where a burned-in overlay lives, as a mask
 src/algo/     config.py     InferenceConfig
               masking.py    rejecting boxes that landed on a burned-in overlay
@@ -229,7 +232,8 @@ runs on. Data / model / does-it-run-in-the-field are the three boundaries. Accur
 stay `algo-agent`'s property even when `deploy-agent` produced the run that moved them.
 
 `.claude/skills/` — `/clean-up` (quality only, not a bug hunt), `/test-creation`,
-`/eval`, `/inspect` (looking at what a run fired on when there are no labels: the
+`/eval`, `/annotate` (opens the labelling window for the user and reads back what they
+labelled), `/inspect` (looking at what a run fired on when there are no labels: the
 overlay video and the contact sheet, plus how to judge a crop and how not to),
 `/todo` (captures a task in `docs/todo.md`; capture only, does not do the work).
 
