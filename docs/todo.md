@@ -116,6 +116,9 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-09-22 — [algo] **Deleted the `runs/field/_scratch_*` folders (~120 MB).** They held throwaway output from 2026-09-17: codec trials, sample frames, early HUD-mask attempts, smoke runs and trial labels. Nothing in the repo referenced them. The codec results are in `data/processed/SOFA-O4/MANIFEST.md` and the real mask is `data/processed/SOFA-O4/hud_mask.png`. The one keeper, the lossless crop script that produced `data/processed/SOFA-O4/videos/`, moved beside that MANIFEST as `make_processed.py`.
+
+
 - [x] 2026-09-22 — [algo] **Grouped `runs/` by footage.** It now has `field/` (EXP-010–012 and the two `_scratch_*` folders), `sofa_o4/` (EXP-011 O4, 012a, 012b) and `sofa_analog/` (EXP-013, 014). Each experiment kept its folder name as a subfolder, because runs share file names such as `detections.jsonl` and `overlay.mp4`. Logs and previews sit beside their run. Every path cited in `docs/` and in the `src/glad_detect.py` and `src/render_video.py` docstrings was rewritten to match.
 
 - [x] 2026-09-22 — [algo] **Pruned `runs/` to the FIELD and SOFA runs.** Deleted the EXP-004–009 run folders (ARD-MAV / ARD100), both `compare_*` folders and their logs — about 1.9 GB. The EXP-001–003 metric JSONs were already gone. Every number those runs produced was already in `docs/experiments.md`, which now notes that the `runs/` paths cited in EXP-001–009 no longer exist and must be regenerated from each entry's recorded command. Kept: EXP-010–014, 012a/b, and the two FIELD `_scratch_*` folders.
