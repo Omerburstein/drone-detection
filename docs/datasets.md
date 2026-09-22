@@ -71,6 +71,7 @@ set. *(Exact container unverified — it is only visible post-DUA.)*
 | SynDroneVision / SimD3 | ✅ | ✅ | ✅ | Synthetic |
 | **FIELD** (ours) | ✅ | ✅ | ✅ | **Our own capture — no labels, so no score** |
 | **SOFA-O4** (ours) | ✅ | ✅ | ✅ | **Our own intercept trials — `first_catch` hand-labelled (2026-09-18); other five unlabelled** |
+| **SOFA-ANALOG** (ours) | ✅ | ✅ | ✅ | **Same trials, analog FPV link — `catch_2` hand-labelled (2026-09-22); other eight unlabelled** |
 
 ---
 
@@ -206,6 +207,34 @@ later score the existing JSONL without running inference again.
 Frame diagonal after the crop is 1800 against 1080p's 2203 — **0.817× linear**, closer to
 the tuning of GLAD's absolute-pixel motion constants than FIELD's 0.579×, but not 1.0.
 Left as-is rather than upscaled, for the reason above.
+
+---
+
+# Same trials, analog link — `data/raw/SOFA-ANALOG/`
+
+Nine 960×720 @ 30 fps **analog FPV** goggles recordings from the same 2026-08-24 trials:
+`catch_2`–`catch_8`, `miss_1`, `miss_2`. Staging, source MD5 and the HUD mask are in
+EXP-013 in [experiments.md](experiments.md). **There is no processed copy.** Runs read the
+raw mp4 uncropped, so labels are in raw-frame pixels. Only the outputs live under
+`data/processed/SOFA-ANALOG/`.
+
+## Labels — `catch_2` only
+
+Labelled 2026-09-22 in the annotator. Labels are at `data/processed/SOFA-ANALOG/labels/test/`,
+judged frames in `data/processed/SOFA-ANALOG/verified.jsonl`, and the session in
+`data/processed/SOFA-ANALOG/annotations/catch_2.json`.
+
+| | |
+| --- | --- |
+| Frames judged | **890 / 890**, the whole clip |
+| Boxes | **224**, in five spans: 491–591, 647–678, 682–683, 687–735, 746–785 |
+| Confirmed empty | **666**, including the gaps between those spans, where the drone leaves the frame and comes back |
+| Placed by hand | **65** boxes (and 22 hand-marked empties) |
+| Proposed by the follower | **159**. 75 of them scored below 0.8, and 3 below 0.6 (lowest are frames 547, 720, 649 at 0.55–0.60) |
+| Box size (longest side) | median **37 px**, from 18 to 80 px |
+
+The follower's boxes were reviewed at playback speed only. The mp4 is long-GOP, so labelling
+was done by playing through, not by seeking.
 
 ---
 
