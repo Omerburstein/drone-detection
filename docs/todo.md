@@ -52,6 +52,17 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
   strength instead of shape; loosen the aspect test in the global branch; then re-run the
   EXP-012a command and score it against the labels. Measure it on `first_catch` first,
   because that clip has the labels.
+  **Refined by EXP-015 (2026-09-22):**
+  - **Ranking score.** Rank by the *edge-normalised* difference, D / max(G, 2) or its
+    windowed form, not raw strength. At equal empty-frame load it halves the candidates
+    carried per drone frame (26 → 14), and top-10 goes 0.11 → 0.27.
+  - **Mask the host airframe.** Add a mask for the host drone's own prop blades (left
+    and right edges, y≈500–620). They are the loudest thing in the difference image.
+  - **Mask the pitch ladder where it is.** It moves with pitch, so a fixed-position
+    mask misses much of it.
+
+  After normalisation, 69% of the top false peaks are frame-edge or overlay, not scene.
+  This will not reach 708–800, where no motion map ranks the drone in the top 10.
 
 - [ ] 2026-09-17 — [algo] **Fisheye undistortion before differencing.** *Premise withdrawn
   2026-09-22 by EXP-012b:* the residual after the homography is ~1 px median and 3–7 px
@@ -115,6 +126,14 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-17 — [data] **Annotate the FIELD capture's three target episodes** — *now the critical path: EXP-011 exhausted what unlabelled footage can answer, and both surviving questions (the ground-clutter false-alarm rate, and recall on our own camera) are measurements.* — frames ~2–180, ~1101–1553 and ~3140–3600 of `captured_raw_20260616_040253_004.mp4`, roughly 1,100 frames. This is the cheapest real score available to the project: EXP-010 is already keyed at `data/processed/FIELD/images/test/`, so labels there turn **an existing JSONL into AP, precision and recall with no second inference pass**. It is also the only way to measure **recall** on our own camera, which EXP-010 leaves unmeasured and which is the number the edge budget actually needs. Two warnings: the episodes' bounds come from where the *detector* fired, so annotating only those frames would score a set chosen by the thing being scored — extend each episode outward until the target is genuinely absent. And **do not eyeball full frames**: a 14×11 px drone at frame 1350 was missed by eye and caught by the detector.
 
 ## Done
+
+- [x] 2026-09-22 — [algo] **Tried an edge-normalised frame difference on `first_catch` (EXP-015).** The compensated difference is divided by the local gradient, both pointwise and as a windowed normal-flow magnitude. The map is scored as a peak generator against the 257 labelled frames and compared with MOD2's plain difference, with the threshold set to 10 candidates per empty frame (1–707).
+  - **It suppresses static textured clutter as predicted.** Roofs and canopies go dark, and scene statics read their 5–6 px misalignment.
+  - **At the same empty-frame load it halves the candidates per drone frame** (26 → 14). Median drone rank goes 56 → 29, and top-10 goes 0.11 → 0.27, reaching 1.00 at 954–964.
+  - **It gets 0 of 93 frames in 708–800,** the long-range stretch, and so does every variant: lighter blur, ε, windowed, and DIS dense flow, which scored 0 everywhere.
+  - **The loudest clutter was the host drone's own prop blades and the moving pitch ladder,** not terrain.
+
+  Scripts and stills are in `runs/sofa_o4/exp015_normalised_motion/` (gitignored). The recommendation is to fold normalised ranking and airframe/ladder masks into the global branch (see the open item), and to label more long-range O4 footage before any learned-model decision.
 
 - [x] 2026-09-22 — [algo] **Deleted the `runs/field/_scratch_*` folders (~120 MB).** They held throwaway output from 2026-09-17: codec trials, sample frames, early HUD-mask attempts, smoke runs and trial labels. Nothing in the repo referenced them. The codec results are in `data/processed/SOFA-O4/MANIFEST.md` and the real mask is `data/processed/SOFA-O4/hud_mask.png`. The one keeper, the lossless crop script that produced `data/processed/SOFA-O4/videos/`, moved beside that MANIFEST as `make_processed.py`.
 

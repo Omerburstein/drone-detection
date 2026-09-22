@@ -2042,3 +2042,180 @@ All 8 were inspected at frame scale:
   on this passage.
 - **Artefacts (gitignored):** `runs/sofa_analog/exp014_analog_catch2_osd/overlay.mp4`, `all_hits.png`
   and the mask preview `runs/sofa_analog/exp014_hud_preview.png`.
+
+---
+
+## EXP-015 — edge-normalised frame difference on `first_catch`
+
+- **Date:** 2026-09-22
+- **Question:** EXP-012b found that static objects make blobs because the difference
+  image is roughly gradient × misalignment. The single homography leaves 3–5 px of
+  misalignment on textured edges at other depths. Dividing the compensated difference by
+  the local gradient should turn it into roughly "pixels of displacement". Static edges
+  would then read their misalignment (3–5 px) and the drone its differential motion
+  (4–22 px). Does that isolate the drone better than the plain difference?
+  Is motion worth pursuing further before a learned model?
+- **Model / weights:** none. GLAD's grid-KLT homography, reproduced in
+  `common.homography` with H returned. It was checked **bit-for-bit identical** to
+  `Functions.motion_compensate`'s warp on frame 849→850.
+- **Data:** `data/processed/SOFA-O4/videos/first_catch.avi`, 1440×1080. Labels:
+  `annotations/first_catch.json`, 257 drone frames (708–964, 67 hand-placed and 190
+  follower). Empty frames 2–707, every second one (353 frames), for the false-alarm load.
+- **Hardware / cost:** i7-1255U CPU. The run took ~9.5 min for all 20 maps plus the peaks.
+  One normalised map costs well under 0.1 s/frame on top of the homography.
+- **Scripts (gitignored, throwaway):** `runs/sofa_o4/exp015_normalised_motion/`.
+  - `common.py`: homography, masks, maps and peaks.
+  - `collect.py`: writes `peaks.pkl`.
+  - `score.py`: `MASK=none|props|fixed|strict`, writes `score_<mask>.csv`.
+  - `categorise.py`: where the false peaks sit.
+  - `draw.py`: the stills.
+
+  All run from the repo root with `PYTHONPATH=".;runs/sofa_o4/exp015_normalised_motion"`.
+
+### Method
+
+- **Frame pair** (n−1, n), warped with GLAD's homography (fitted on MOD2's 11×11-blurred
+  grey frames). D = |current − warped previous|.
+- **Maps.**
+  - `plain_b{11,5}`: D, at MOD2's 11×11 blur and at a lighter 5×5.
+  - `norm_b*_g{cur,max}_e{1,2,4}`: D / max(G, ε). G is the Sobel gradient in grey
+    levels/px, taken either from the current frame or as the max of both frames.
+    ε is the floor, 1, 2 or 4 grey/px.
+  - `win_b*_e*`: sqrt(Σ D² / (Σ G_max² + ε²)) over a 9×9 window. This is the
+    least-squares normal-flow magnitude, the cheap Lucas–Kanade-style version.
+  - `dis_b5`: dense DIS optical-flow magnitude from the warped previous frame to the
+    current one, as a flow residual.
+- **Candidates are peaks,** not blobs: local maxima with a 15 px radius, strongest
+  first, so ranks do not depend on a threshold.
+- **Match criterion:** a peak is "on the drone" if it lies inside the label box grown by
+  max(10 px, 25% of its longest side). That margin covers the ghost at the previous
+  position. The drone's rank is 1 + the number of off-drone peaks stronger than its best
+  on-drone peak.
+- **Operating point:** the threshold τ10 gives **10 candidates per empty frame** (1–707)
+  for each map. The table reports "found" (drone peak ≥ τ10) and candidates per drone
+  frame at that τ, so every map carries the same empty-frame false-alarm load.
+- **Masks, in order of strength:**
+  - **Always on:** the warp border (eroded 8 px), a 24 px edge margin, and the HUD mask
+    dilated 7 px.
+  - `fixed`: also drops screen-fixed clutter. These are pixels where `plain_b11`'s top-50
+    peaks land in ≥5% of the empty frames (2.7% of the frame before a 4 px dilation). It is
+    calibrated only on frames without the drone.
+  - `strict`: a **headroom estimate only.** It adds a 60 px edge band and everything
+    within 30 px of an overlay, 42% of the frame. It removes half the drone box in
+    901–964, and it was chosen after seeing this clip.
+
+### First finding: the biggest clutter is not the scene
+
+With only the HUD mask, `plain_b11`'s τ10 is **126 grey levels**, far above anything
+terrain produces. The top peaks sit in two places, both **fixed to the screen**:
+- **the host drone's own propeller blades**, visible at the left and right edges at
+  y≈500–620;
+- **the pitch ladder dashes and HUD digits** that the mask misses.
+
+See `screen_fixed_800.jpg`. Every number below uses the `fixed` mask unless it says
+otherwise. The drone touches that mask in 43 labelled frames (877–891, 926–930 and
+others, near the ladder). The pitch ladder moves with pitch, so a fixed-position mask
+cannot catch all of it.
+
+### Results (`fixed` mask)
+
+Each cell reads top-1 / top-5 / top-10, then the median rank.
+
+| Frames | Box (median) | `plain_b11` (MOD2 difference) | `norm_b11_gmax_e2` | `win_b11_e4` (windowed) | `norm_b5_gmax_e4` |
+| --- | ---: | --- | --- | --- | --- |
+| 708–800 | 43 px | 0 / 0 / 0, 183 | 0 / 0 / 0, 213 | 0 / 0 / 0, 102 | 0 / 0 / 0, 98 |
+| 801–900 | 87 px | 0 / .04 / .06, 41 | .01 / .11 / .22, 20 | 0 / .13 / .40, 14 | 0 / .09 / .23, 19 |
+| 901–953 | 104 px | .09 / .32 / .42, 14 | .21 / .47 / .68, 6 | 0 / .06 / .32, 14 | .19 / .40 / .55, 8 |
+| 954–964 | 112 px | 0 / 0 / .09, 18 | .09 / .55 / 1.00, 5 | 0 / 0 / .09, 17 | 0 / .09 / .82, 9 |
+| **708–964** | 72 px | **.02 / .08 / .11, 56** | **.05 / .16 / .27, 29** | .00 / .06 / .23, 27 | .04 / .12 / .24, 25 |
+
+At the same load of **10 candidates per empty frame**:
+
+| Frames | `plain_b11` found / cands per drone frame | `norm_b11_gmax_e2` found / cands |
+| --- | --- | --- |
+| 708–800 | 0.00 / 15.3 | 0.00 / 7.6 |
+| 801–900 | 0.21 / 29.8 | 0.23 / 13.0 |
+| 901–953 | 0.91 / 33.9 | 0.87 / 16.8 |
+| 954–964 | 1.00 / 46.1 | 1.00 / 53.6 |
+| **all** | **0.31 / 26.1** | **0.31 / 13.6** |
+
+- **Other variants.**
+  - Gradient from the max of both frames beats the current frame alone in every setting.
+    With the current frame only, the ghost next to the drone is amplified, and so is
+    every canopy-against-sky edge.
+  - Lighter blur (5×5) does not rescue the early stretch.
+  - Without the `fixed` mask, every map is worse: top-10 is 0.09 plain vs 0.15 normalised.
+- **Dense flow (`dis_b5`) is useless here:** top-10 is 0 in every stretch. DIS invents
+  large flow on low-texture sky and on the warped border (top off-drone peak 137 px
+  against the drone's 5.7). Farneback costs 1.2 s/frame at full resolution and was not
+  run over the clip.
+- **Headroom under `strict`:** top-10 overall rises to 0.49 normalised and 0.28 plain.
+  The last two stretches reach median rank 1. **708–800 stays at 0–1%.**
+
+### What the stills show
+
+`still_<n>.jpg` has four panels. Top: the top-10 peaks, plain on the left and normalised on
+the right, with green marking a peak on the drone. Bottom: the two heatmaps.
+`zoom_<n>.jpg` crops the frame and both maps around the label. I looked at all of them.
+
+- **Static textured clutter is suppressed.** At 850 and 925, the shed's corrugated roof,
+  the tree canopies and the far tree line are the brightest things in the plain
+  difference, and they are nearly black in the normalised map. That is the predicted
+  effect. The windowed map puts a number on it: under `strict`, the strongest off-drone
+  scene peak reads **4.8–6.0 px** from frame 801 on (8.1 px in 708–800), close to
+  EXP-012b's 3–5.5 px misalignment.
+- **What survives normalisation:**
+  - the edges of the prop blades just outside the mask;
+  - the left edge of the picture;
+  - the **pitch-ladder dashes**, which at 925 and 962 sit a few tens of px from the drone;
+  - HUD digits;
+  - canopy tops against sky, where gradient is low and D is not.
+
+  Of the top-10 off-drone normalised peaks on drone frames, **40% are within 60 px of
+  the frame edge and 29% within 30 px of an overlay.** Only 32% are in open scene.
+- **962:** normalised puts peaks on the drone as N1 and N6. Plain puts its top 10 on the
+  ladder, the canopy and the props.
+- **750, the long-range case:** the drone does not show in either map (`zoom_750.jpg`).
+- **600, empty:** the top peaks are the prop edges and near ground at the bottom left.
+
+### Displacement read-out (hand-placed boxes only)
+
+The windowed map reads the drone at **1.4 / 4.4 / 4.6 / 8.1 px** over the four stretches.
+EXP-012b measured 4.3 / 10.1 / 13.0 / 22.2 px/frame of true differential motion, so the
+drone reads **2–3× low**. Normal flow under-reads once displacement exceeds the blurred
+edge width, and a window averages over flat pixels. The map is a usable ranking score. It
+is not a calibrated velocity.
+
+### Reading
+
+- **Normalisation works as designed, and it helps.** At an equal empty-frame load it
+  **halves the candidates carried in drone frames** (26 → 14). It **roughly halves the
+  drone's median rank** (56 → 29) and **doubles or better top-5 and top-10** (0.08 → 0.16,
+  0.11 → 0.27). It does this for about the cost of a Sobel. The mid and late approach
+  (801–964) is where it pays: top-10 is 0.68 at 901–953 and 1.00 at 954–964.
+- **It does nothing for 708–800,** the long-range stretch this project cares most about:
+  **0 of 93 frames in the top 10 for every variant.** The drone reads 20 grey levels plain
+  and ~1.4 px windowed, against a top clutter peak of 109 grey levels / 8 px. With two
+  frames and this blur, the small, slow drone is not in the motion signal. That agrees with
+  EXP-012b's 58 frames without a blob, all in this stretch.
+- **The remaining false alarms are mostly own-airframe and overlay, not scene.** This
+  needs a mask fix (prop blades, and a pitch-ladder mask that moves with it), not a
+  better motion cue.
+- **Caveats:**
+  - One clip and one close approach. The median drone is 72 px, above the 10–30 px brief.
+  - The `fixed` mask is calibrated on this clip's own empty frames, so it is in-sample for
+    the overlay layout, though not for the drone. `strict` is tuned on this clip and is a
+    ceiling, not a result.
+  - Ranks and top-k use follower boxes as well as hand-placed ones. Displacement claims
+    use hand-placed boxes only.
+  - No `detections.jsonl` was written. Peaks have no extent, so a P/R at an IoU threshold
+    would mean nothing; the match criterion above stands in for it.
+- **Next:**
+  1. Rank the global branch's candidates by windowed or normalised difference instead of
+     `candidate_score`. Add the prop and pitch-ladder masks. Re-score `first_catch`
+     (CPU, about an hour, under the open todo).
+  2. For long range, two-frame motion is not the answer on this evidence. Try multi-frame
+     accumulation over 708–800 before paying for a learned model.
+  3. Before choosing or training any learned model (YOLOMG, which is GPL-3.0, or a GLAD
+     fine-tune), label more O4 clips with long-range spans. The whole evaluation set is
+     one close approach.
