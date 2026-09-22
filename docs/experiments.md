@@ -1849,6 +1849,17 @@ image to `blobs.csv` (67k rows). A *candidate* is a blob that passes upstream's 
   top 10 by area in 46% of frames and ranked first in 3%. The current shape score ranks it
   about 66th.
 
+**Seen, not only counted:** `draw_blobs.py` in the same directory renders
+`blobs_708_964.mp4` (every labelled frame, 10 fps) and stills with zoom sheets for frames
+750 / 850 / 925 / 958 / 962. Each blob is coloured by fate: grey rejected, orange
+candidate, red top-10 by area, green on the drone. Judged by eye in those stills, not
+counted: the large blobs are **tree canopies, roof edges, the fisheye rim and near ground
+at the frame bottom**. Many small ones are **HUD elements the mask misses**: pitch-ladder
+dots, side-scale ticks and chevrons, and the ALT / voltage / bitrate digits. At 962 the
+drone's blob is a clean quadcopter outline, widened along its motion past the 3:1 aspect
+limit. **In most of the passage (750, 850, 925) the drone is against trees or terrain, not
+sky.** Only the last ~10 frames put it against open sky.
+
 So ranking alone does not isolate it. Ranking by size or by size × strength would keep it
 inside a budget of 50 in most frames where the shape score drops it. Picking it out of the
 ~10 blobs still ahead of it needs something else, such as persistence over several frames
