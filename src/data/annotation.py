@@ -90,12 +90,11 @@ def predict(box: Box, prior: Box | None) -> Box:
 class Follower:
     """Carries the user's box to the next frame: correlation plus a motion prior.
 
-    Deliberately **not** frame differencing. The camera is on a moving drone,
-    and EXP-012a measured the background residual after motion compensation at
-    ~10 px against a target moving 4.5 px/frame -- a motion detector on this
-    footage fires on the terrain. Correlation against the box the user drew
-    knows only what the target looks like, and the velocity prior (`predict`)
-    supplies the motion.
+    Deliberately **not** frame differencing. The camera is on a moving drone, and
+    after compensation the difference image carries ~100 terrain blobs per frame
+    besides the target (EXP-012b) -- it says something moved, not which thing is
+    the user's box. Correlation against the box the user drew knows what the
+    target looks like, and the velocity prior (`predict`) supplies the motion.
 
     The template is the **last box the user placed**, never a tracked one: this
     is `seed_track`'s pinned-template finding (with blending, a track that

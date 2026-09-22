@@ -1679,6 +1679,15 @@ predicts:
 
 ## EXP-012a — the O4 fixes on one clip: the mask works, the motion fix does not
 
+> **Corrected 2026-09-22 by [EXP-012b](#exp-012b--exp-012as-motion-claim-re-measured-on-the-labels).**
+> The HUD-veto result stands. The explanation for the motion miss **does not**: it compared
+> the target's *raw* image motion (4.5 px) with the *raw* background spread, when the
+> test that matters is the target's motion *relative to the compensated background*
+> (~22 px at 954–964) against the residual *left after* the homography (p90 7.4 px). The
+> drone is not buried in compensation error. It is in the difference image. GLAD drops it
+> later, in the crowding bail and the blob shape test. The "~955–964" passage was also
+> wrong: the labels put the drone in view for frames 708–964.
+
 - **Date:** 2026-09-17
 - **Question:** EXP-011 measured the overlay instead of the detector. With the HUD vetoed and the motion branches no longer discarding their candidates, does GLAD find the drone?
 - **Model / weights:** identical to EXP-004/005/010/011. `--pad released`.
@@ -1738,6 +1747,104 @@ compensable background — is inverted here.
 - **Next:** the appearance branch has to carry this, which means **fine-tuning on our own
   labels** — Stage E of the plan and the existing M7. Before that, `--motion-profile
   clutter` should not be adopted: it is slower and, on this evidence, buys nothing.
+
+## EXP-012b — EXP-012a's motion claim re-measured on the labels
+
+- **Date:** 2026-09-22
+- **Question:** EXP-012a concluded the drone was "quieter than the noise it sits in": target
+  4.5 px/frame against a ~10 px background spread, so no motion threshold could recover it.
+  That was measured over 11 frames placed by eye. `first_catch` now has 257 labelled
+  frames (708–964, [datasets.md](datasets.md)). Does the claim survive them?
+- **Model / weights:** none for the first part. The second part runs GLAD's own
+  `motion_compensate` and `MotionPort` (both `UPSTREAM` and `CLUTTER` profiles, HUD mask
+  on) with the released LeNet gate.
+- **Data:** `data/processed/SOFA-O4/videos/first_catch.avi`, frames 708–964, boxes from
+  `annotations/first_catch.json`. 67 boxes placed by hand, 190 by the follower.
+- **Hardware:** i7-1255U CPU, a few minutes.
+- **Scripts:** `runs/exp012b_motion_check/motion_check.py` and `stage_check.py`, run from
+  the repo root with `PYTHONPATH=.`. They are throwaway (gitignored with their outputs
+  `motion.csv` and `stages.json`), not tested code.
+
+### What was measured, and how
+
+For each consecutive labelled pair: GLAD's grid-KLT homography, as `motion_compensate`
+computes it, with background points taken outside the target box and the HUD mask.
+
+- **Differential motion:** where the background model says the target's previous centre
+  should now be, minus where it actually is. This is what a differencing detector sees.
+- **Residual:** how far the background points themselves miss after compensation. This is
+  the noise the target has to beat.
+
+Follower boxes are biased: the follower moves the box *with* the image, which pulls
+differential motion toward zero. So the headline uses only **hand-placed to hand-placed
+spans** (66), chaining the per-frame homographies across the 3–4 frame gap.
+
+| Frames | Box (median) | Target differential, hand spans | Residual median | Residual p90 | Spans above residual p90 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 708–800 | 43 px | **4.3** px/f | 0.6 | 2.8 | 70% |
+| 801–900 | 87 px | **10.1** | 1.3 | 4.1 | 97% |
+| 901–953 | 104 px | **13.0** | 0.9 | 4.2 | 100% |
+| 954–964 | 112 px | **22.2** | 1.2 | 7.4 | 100% |
+
+At the pixel level (blurred, grey, compensated difference image, as `MOD2_global` builds
+it), frames 954–964 have **target-box p90 difference 61** against a **background p99 of
+54**. The drone is among the loudest things in the frame.
+
+### Where EXP-012a went wrong
+
+1. **The wrong subtraction.** 4.5 px was the target's raw image motion. 19–34 px was the
+   background's raw motion. The ~10 px "median to p90 spread" is mostly rotation and
+   perspective, which a homography models. What it cannot model, the residual, has a
+   median of **~1 px**. The target's motion relative to the background is roughly
+   background motion minus target motion, about 22 px. The claim that "intercept geometry
+   inverts GLAD's premise" has it backwards: a target the camera is holding still, over
+   streaming ground, is exactly the differential motion a compensator exposes.
+2. **The wrong passage.** "~955–964" was a guess. The drone is in view from frame 708, at
+   17–142 px.
+
+### Where GLAD actually loses it
+
+Frame by frame through `MOD2_global`, with the stage where the labelled drone drops out
+(257 frames, each against the one before it):
+
+| Stage | `upstream` | `clutter` |
+| --- | ---: | ---: |
+| No blob on the target at all | 58 (all in 708–800, small and slow) | 58 |
+| Blob fails the area / aspect test | 73 (2 too big) | 71 |
+| Crowding: >50 candidates, upstream **returns nothing** | **126** | — |
+| Crowding: ranked below the top 50 | — | **90** |
+| Not rigid (`_moving_coherently`) | — | 15 |
+| LeNet gate rejects it | — | 19 |
+| Another candidate accepted first | — | 4 |
+| **Found** | **0** | **0** |
+
+- **In 199 of 257 frames the drone is in the difference image.** The motion branch does
+  not miss it for lack of signal.
+- **Crowding is the largest loss.** Frames carry a median ~115 candidates, so the ground
+  residual is real clutter. But the target is *one of them*, not below them. `clutter`'s
+  shape-based ranking (`candidate_score`: fill × squareness) puts it outside the top 50 in
+  90 frames.
+- **The shape test is the second.** 79% of those blobs are within the area range, so the
+  0.6–3.0 aspect ratio rejects them. The likely cause, not verified, is a moving target's
+  difference blob being the target plus its ghost, stretched along the motion. At 962 the
+  on-target blob is 2,841 px² and is rejected on shape.
+
+### Reading
+
+- **EXP-012a's mechanism is retracted.** Motion is a live cue on this footage, and in the
+  late approach it is a strong one.
+- **Its practical conclusion still holds:** `--motion-profile clutter` found the drone in
+  **0** frames, so it should still not be adopted. The reason is ranking and shape
+  filtering, not physics, and both are fixable.
+- **Next candidates**, cheapest first: rank candidates by difference strength rather than
+  shape; loosen or drop the aspect test in the global branch; then re-run EXP-012a.
+- **Caveats:** one clip, one approach, a target larger than this project's 10–30 px brief
+  (median 72 px). The early small-target stretch (708–800) is the weakest: differential
+  4.3 px/f, 58 frames with no blob at all. That stretch, not the close approach, is the
+  one a long-range detector has to win. Follower boxes were used only for the per-frame
+  pixel statistics and the stage trace, not for the headline differential.
+
+---
 
 ## EXP-013 — GLAD on analog goggles footage: every box is the OSD, no drone found
 

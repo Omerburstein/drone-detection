@@ -41,13 +41,23 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
   **`--motion-profile clutter` should not be adopted on this evidence.** EXP-012a ran it
   over `first_catch`: recall on the confirmed passage stayed at **zero**, all 9 detections
   were HUD or ground, and it cost **2.3x the compute** (3.11 -> 1.37 fps). Run EXP-012
-  with the mask alone unless a labelled measurement says otherwise.
+  with the mask alone unless a labelled measurement says otherwise. EXP-012b traced the
+  zero to candidate ranking and the shape test, not to missing signal — see the next item.
 
-- [ ] 2026-09-17 — [algo] **Fisheye undistortion before differencing.** EXP-012a measured
-  the real problem: background flow is 18.9–24.3 px median with a **p90 of 34.3 — a ~10 px
-  spread that is parallax**, and a single homography cannot represent it. The residual it
-  leaves is larger than the target's entire 4.5 px differential motion. Undistorting would
-  at least make the homography model valid; it would not make the target louder.
+- [ ] 2026-09-22 — [algo] **Make the global motion branch keep the drone it already sees.**
+  EXP-012b: the labelled drone is in `MOD2_global`'s difference image in 199 of 257
+  `first_catch` frames and is found in 0. It is lost to the >50-candidate bail (126
+  frames upstream), to `candidate_score`'s shape ranking pushing it out of the top 50 (90
+  under `clutter`), and to the 0.6–3.0 aspect test (71). Try, in order: rank by difference
+  strength instead of shape; loosen the aspect test in the global branch; then re-run the
+  EXP-012a command and score it against the labels. Measure it on `first_catch` first,
+  because that clip has the labels.
+
+- [ ] 2026-09-17 — [algo] **Fisheye undistortion before differencing.** *Premise withdrawn
+  2026-09-22 by EXP-012b:* the residual after the homography is ~1 px median and 3–7 px
+  p90, below the drone's 4–22 px differential motion, so compensation error is not what
+  hides the target. Undistortion might still cut the ~115 terrain candidates per frame.
+  Low priority until the ranking item above is done.
   **Superseded within this item:** `motion_compensate`'s 50 px flow-rejection cap is *not*
   binding on this footage — measured flow is under 50 everywhere — so porting it is no
   longer a priority.
@@ -105,6 +115,8 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-17 — [data] **Annotate the FIELD capture's three target episodes** — *now the critical path: EXP-011 exhausted what unlabelled footage can answer, and both surviving questions (the ground-clutter false-alarm rate, and recall on our own camera) are measurements.* — frames ~2–180, ~1101–1553 and ~3140–3600 of `captured_raw_20260616_040253_004.mp4`, roughly 1,100 frames. This is the cheapest real score available to the project: EXP-010 is already keyed at `data/processed/FIELD/images/test/`, so labels there turn **an existing JSONL into AP, precision and recall with no second inference pass**. It is also the only way to measure **recall** on our own camera, which EXP-010 leaves unmeasured and which is the number the edge budget actually needs. Two warnings: the episodes' bounds come from where the *detector* fired, so annotating only those frames would score a set chosen by the thing being scored — extend each episode outward until the target is genuinely absent. And **do not eyeball full frames**: a 14×11 px drone at frame 1350 was missed by eye and caught by the detector.
 
 ## Done
+
+- [x] 2026-09-22 — [algo] **Re-measured EXP-012a's motion claim on the `first_catch` labels (EXP-012b), and it was wrong.** EXP-012a compared the target's raw image motion (4.5 px) with the raw background spread. The right comparison is the target's motion relative to the compensated background, against what the homography leaves behind. On hand-placed boxes that is **4.3 / 10.1 / 13.0 / 22.2 px/frame** through the approach, against a residual of ~1 px median and 3–7 px p90. The drone is in `MOD2_global`'s difference image in 199 of 257 frames and is found in 0: it is lost to the crowding bail (126 frames), shape ranking (90 under `clutter`) and the aspect test (71). A correction note sits on EXP-012a. `docs/annotate.md` and the `Follower` docstring repeated the old claim and are fixed. The fisheye item's premise is withdrawn, and a new item targets ranking and the aspect test.
 
 - [x] 2026-09-18 — [algo] **Vetoed the moving analog OSD, and GLAD found the drone in `catch 2` (EXP-014).** Detections fell from 82 to 8. The drone was boxed at frame 547 of a passage visible from about 510 to 585, which EXP-013 missed entirely while locked on telemetry. Two additions made it work. `src.data.hud_mask --block-fraction/--picture-rows` masks OSD text blocks as whole rectangles, but only outside the picture rows. `src.glad_detect --osd-twins` vetoes a box with an identical copy one OSD column away, which catches the artificial-horizon dashes. The drone's own twin score was measured at 0.42–0.63 against a 0.70 veto. 21 new tests. Also corrected EXP-013, which said no drone was found.
 

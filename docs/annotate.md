@@ -86,10 +86,10 @@ predicts where the target has gone from its last displacement, then searches a w
 appearance. The tracker core is `seed_track.TemplateTracker`, with its pinned-template
 default (`seed_track.md` records why blending is a trap).
 
-Frame differencing, the usual meaning of "motion detection", does not work from this
-camera. EXP-012a measured the background residual after motion compensation at ~10 px
-against a target moving 4.5 px/frame, so a differencing detector fires on terrain. Motion
-is still used, as a **prior on where to look**. `tests/unit/test_annotation.py` pins what it
+The follower does not use frame differencing. A difference image tells you *something*
+moved, but on this footage it also holds ~100 other blobs from the terrain per frame
+(EXP-012b), and it cannot say which of them is the box you drew. Correlation against your
+box can. Motion is still used, as a **prior on where to look**. `tests/unit/test_annotation.py` pins what it
 buys: at 60 px/frame, correlation alone loses the target on the first step and the prior
 holds it every frame.
 
