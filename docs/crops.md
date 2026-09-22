@@ -9,9 +9,9 @@ at them — and 866 is far too many to open one at a time and far too few to sum
 number nobody can check.
 
 ```bash
-py -3.13 -m src.crops --pred runs/exp012_field_glad_inverted/detections.jsonl \
+py -3.13 -m src.crops --pred runs/field/exp012_field_glad_inverted/detections.jsonl \
     --video data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4 \
-    --out runs/exp012_field_glad_inverted/all_hits.png
+    --out runs/field/exp012_field_glad_inverted/all_hits.png
 ```
 
 ## Parameters
@@ -39,9 +39,9 @@ py -3.13 -m src.crops --pred runs/exp012_field_glad_inverted/detections.jsonl \
 by the branch that produced it and bordered in that branch's colour.
 
 ```bash
-py -3.13 -m src.crops --pred runs/exp010_field_glad/detections.jsonl \
+py -3.13 -m src.crops --pred runs/field/exp010_field_glad/detections.jsonl \
     --video data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4 \
-    --out runs/exp010_field_glad/all_hits.png
+    --out runs/field/exp010_field_glad/all_hits.png
 ```
 
 Grouping is the point, not a convenience. GLAD's `global yolo` fires **six times in 3,600

@@ -45,7 +45,7 @@ alarm. `verified.jsonl` is the fix — pass it to `src.evaluate --keys-from` and
 adjudicated frames are scored.
 
 ```
-py -3.13 -m src.evaluate --pred runs/exp011_sofa_o4_glad/detections.jsonl
+py -3.13 -m src.evaluate --pred runs/sofa_o4/exp011_sofa_o4_glad/detections.jsonl
     --labels data/processed/SOFA-O4/labels/test
     --keys-from data/processed/SOFA-O4/verified.jsonl
     --frame-size 1440 1080

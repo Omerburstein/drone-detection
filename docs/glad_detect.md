@@ -71,7 +71,7 @@ area**. EXP-010 ran it natively and therefore measured our failure to rescale al
 detector. `--scale auto` is the correction:
 
 ```
-py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos     --video-names captured_raw_20260616_040253_004 --record-all     --images data/processed/FIELD/images/test --pad released --scale auto     --out runs/exp011_field_glad_scaled
+py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos     --video-names captured_raw_20260616_040253_004 --record-all     --images data/processed/FIELD/images/test --pad released --scale auto     --out runs/field/exp011_field_glad_scaled
 ```
 
 Four things about it:
@@ -119,7 +119,7 @@ distribution and the pale clutter moves off it. If the prior is what drives the 
 cold acquisition (`global yolo`) should rise and the clutter locks should not form.
 
 ```
-py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos     --video-names captured_raw_20260616_040253_004 --record-all     --images data/processed/FIELD/images/test --pad released --invert     --out runs/exp012_field_glad_inverted
+py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos     --video-names captured_raw_20260616_040253_004 --record-all     --images data/processed/FIELD/images/test --pad released --invert     --out runs/field/exp012_field_glad_inverted
 ```
 
 - **Geometry is untouched.** Inversion is pointwise, so boxes are recorded exactly as they
@@ -491,7 +491,7 @@ It is for **our own capture** — `data/raw/FIELD/` — where there is no ground
 and the default gate above would write an empty JSONL.
 
 ```
-py -3.13 -m src.glad_detect     --videos data/raw/FIELD/videos     --video-names captured_raw_20260616_040253_004     --record-all --pad released     --images data/processed/FIELD/images/test     --out runs/exp010_field_glad
+py -3.13 -m src.glad_detect     --videos data/raw/FIELD/videos     --video-names captured_raw_20260616_040253_004     --record-all --pad released     --images data/processed/FIELD/images/test     --out runs/field/exp010_field_glad
 ```
 
 Three things to hold onto when reading such a run:

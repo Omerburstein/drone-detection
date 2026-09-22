@@ -50,11 +50,11 @@ Example
         --burst-period 60 --out runs/exp007_burst_pairs
     py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos \
         --video-names captured_raw_20260616_040253_004 --record-all \
-        --images data/processed/FIELD/images/test --out runs/exp010_field
+        --images data/processed/FIELD/images/test --out runs/field/exp010_field
     py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos \
         --video-names captured_raw_20260616_040253_004 --record-all \
         --images data/processed/FIELD/images/test --pad released --scale auto \
-        --out runs/exp011_field_glad_scaled
+        --out runs/field/exp011_field_glad_scaled
     py -3.13 -m src.evaluate --pred runs/exp004_glad/detections.jsonl \
         --labels data/processed/ARD-MAV/labels/test \
         --conditions data/processed/ARD-MAV/conditions.json \

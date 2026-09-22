@@ -29,8 +29,8 @@ Footage nobody has labelled draws its boxes without judging them:
 
     py -3.13 -m src.render_video --no-labels \
         --video data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4 \
-        --pred runs/exp010_field_glad/detections.jsonl \
-        --out runs/exp010_field_glad/overlay.mp4
+        --pred runs/field/exp010_field_glad/detections.jsonl \
+        --out runs/field/exp010_field_glad/overlay.mp4
 """
 
 from __future__ import annotations

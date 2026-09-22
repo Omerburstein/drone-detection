@@ -210,7 +210,7 @@ grass, buildings. That is what the weights were fitted to. Our capture is the op
 both axes at once: a **dark airframe silhouetted against bright sky**. And our false alarms
 — pale rocks and bush crowns on dark hillside — sit in the *training* distribution far more
 comfortably than our actual target does. `appearance_bias.png` in
-`runs/exp011_field_glad_scaled/` puts the three side by side and the resemblance between
+`runs/field/exp011_field_glad_scaled/` puts the three side by side and the resemblance between
 rows 1 and 3 is immediate.
 
 This reframes several things already in this document:

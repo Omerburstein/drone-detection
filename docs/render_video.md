@@ -46,7 +46,7 @@ precision claim of zero against a run whose detections were, on a hand-checked s
 `--no-labels` renders the same boxes without judging them:
 
 ```
-py -3.13 -m src.render_video --no-labels     --video data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4     --pred runs/exp010_field_glad/detections.jsonl     --zoom 3 --zoom-span 100     --out runs/exp010_field_glad/overlay.mp4
+py -3.13 -m src.render_video --no-labels     --video data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4     --pred runs/field/exp010_field_glad/detections.jsonl     --zoom 3 --zoom-span 100     --out runs/field/exp010_field_glad/overlay.mp4
 ```
 
 | Colour | Meaning |

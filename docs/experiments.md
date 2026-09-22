@@ -26,6 +26,11 @@ Maintained by `algo-agent`. Metrics come from `src.evaluate` (see
 > cited in EXP-001–009 — detections, match dumps, metric JSONs, figures, example crops —
 > no longer exists on disk. The numbers in those entries are the record; to regenerate a
 > file, re-run the entry's recorded command (with the flag notes above).
+>
+> **`runs/` is grouped by footage** (2026-09-22): `runs/field/` (EXP-010–012),
+> `runs/sofa_o4/` (EXP-011 O4, 012a, 012b), `runs/sofa_analog/` (EXP-013, 014). Each
+> experiment is a subfolder, with its log beside it. Paths below use this layout, and
+> that includes the `--out` in recorded commands.
 
 ---
 
@@ -1354,7 +1359,7 @@ both are available — but the relative one is what a criterion argument should 
 - **Data:** `data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4` — 1032×752, 30 fps, **3,600 frames (120.0 s)**, arid hillside, hard sky/ridge horizon. **No labels.** Provenance in [datasets.md](datasets.md).
 - **Hyperparameters:** every fixed threshold of the released source; no stride, no duty cycle (`--sample every`, 100% duty)
 - **Hardware:** i7-1255U CPU, 1,179.4 s wall-clock, **3.05 fps**
-- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos --video-names captured_raw_20260616_040253_004 --record-all --images data/processed/FIELD/images/test --pad released --out runs/exp010_field_glad`
+- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos --video-names captured_raw_20260616_040253_004 --record-all --images data/processed/FIELD/images/test --pad released --out runs/field/exp010_field_glad`
 - **Metrics:** **none, and none are possible.** No ground truth exists for this video, so
   there is no AP, mAP, precision, recall or `far`. What the run has is 866 detections over
   3,600 frames (0.24/frame), 2,734 frames empty (75.9%), and this branch split:
@@ -1400,9 +1405,9 @@ both are available — but the relative one is what a criterion argument should 
   - **Ground clutter takes the lock.** The drift onto a bush at frames 19–176, while the
     real target is in frame, is the failure mode this footage adds that ARD-MAV's cleaner
     backgrounds do not exercise.
-- **Watch it:** `runs/exp010_field_glad/overlay.mp4` — all 3,600 frames with GLAD's boxes
+- **Watch it:** `runs/field/exp010_field_glad/overlay.mp4` — all 3,600 frames with GLAD's boxes
   drawn back on, rendered by `src.render_video --no-labels --zoom 3 --zoom-span 100`.
-  **Every hit on one sheet:** `runs/exp010_field_glad/all_hits.png` — all 866 detections
+  **Every hit on one sheet:** `runs/field/exp010_field_glad/all_hits.png` — all 866 detections
   as crops ordered by branch and bordered in its colour (`global yolo` 6, `local yolo` 850,
   `local mod` 10). The three clutter episodes are visible as blocks of hillside among
   otherwise clean sky: frames ~12–100 (the known bush lock), ~1520–1540, and ~3141–3156.
@@ -1439,7 +1444,7 @@ both are available — but the relative one is what a criterion argument should 
   coordinates and is directly comparable to EXP-010's.
 - **Hardware:** i7-1255U CPU, 1,351.7 s wall-clock, **2.66 fps**. The machine was **not
   idle** — a second session ran against it throughout. Treat as approximate.
-- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos --video-names captured_raw_20260616_040253_004 --record-all --images data/processed/FIELD/images/test --pad released --scale auto --out runs/exp011_field_glad_scaled`
+- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos --video-names captured_raw_20260616_040253_004 --record-all --images data/processed/FIELD/images/test --pad released --scale auto --out runs/field/exp011_field_glad_scaled`
 - **Metrics:** **none, and none are possible** — same as EXP-010, and for the same reason.
   What follows is what the detector *did*, not how well it did it.
 
@@ -1510,7 +1515,7 @@ both are available — but the relative one is what a criterion argument should 
   *not* what this pipeline spends its time on; the YOLO forward passes are, and GAD
   letterboxes to 640 regardless of source resolution. That matters for the edge budget:
   optimising MOD2 would buy almost nothing.
-- **Evidence in the run directory** (`runs/exp011_field_glad_scaled/`, gitignored):
+- **Evidence in the run directory** (`runs/field/exp011_field_glad_scaled/`, gitignored):
   `exp011_new24.png` (the 24 out-of-episode detections, all clutter), `exp010_lost24.png`
   (24 of the 186 in-episode detections EXP-011 dropped, nearly all real drones),
   `exp011_sample24.png` (a seeded 24 of all 763, comparable to EXP-010's 23/24), plus the
@@ -1534,7 +1539,7 @@ both are available — but the relative one is what a criterion argument should 
 - **Data:** `data/processed/SOFA-O4/videos/` — six clips, **7,386 frames, 4.1 min, 1440×1080**. Losslessly cropped from 2520×1080 goggles screen recordings; **7,386/7,386 frames verified bit-identical** to the raw crop. [MANIFEST](../data/processed/SOFA-O4/MANIFEST.md). **No labels.**
 - **Hyperparameters:** full rate, contiguous, 100% duty cycle.
 - **Hardware:** i7-1255U CPU, 2,375.9 s, **3.11 fps**.
-- **Command:** `py -3.13 -m src.glad_detect --videos data/processed/SOFA-O4/videos --video-names first_catch second_catch third_catch forth_catch catch_5 miss_1 --record-all --images data/processed/SOFA-O4/images/test --pad released --out runs/exp011_sofa_o4_glad`
+- **Command:** `py -3.13 -m src.glad_detect --videos data/processed/SOFA-O4/videos --video-names first_catch second_catch third_catch forth_catch catch_5 miss_1 --record-all --images data/processed/SOFA-O4/images/test --pad released --out runs/sofa_o4/exp011_sofa_o4_glad`
 - **Metrics:** none possible — no ground truth. 1,347 detections over 7,386 frames (0.18/frame), 6,039 frames empty (81.8%).
 
 | Branch | Frames | Share |
@@ -1578,7 +1583,7 @@ quadcopter against clean sky, and GLAD fired on **nothing** in frames 950–964.
   recall is unmeasured — but it is visibly poor, and the reason is legible: the tracker is
   captured by a static glyph and stops looking. Resolution is a second-order confound
   (1440×1080 is 0.817× the 1080p diagonal GLAD's absolute-pixel constants assume).
-- **Watch it:** `runs/exp011_sofa_o4_glad/examples/<clip>_overlay.mp4`, six files, all
+- **Watch it:** `runs/sofa_o4/exp011_sofa_o4_glad/examples/<clip>_overlay.mp4`, six files, all
   7,386 frames, unscored (`src.render_video --no-labels --zoom 3 --zoom-span 100`).
 - **What this does establish:**
   - **3.11 fps at 1440×1080**, against 2.67 on 1080p ARD-MAV and 3.05 on FIELD.
@@ -1608,7 +1613,7 @@ quadcopter against clean sky, and GLAD fired on **nothing** in frames 950–964.
   un-inverted. The machine was **not idle**, but a 4.4× gap is too large for contention
   alone; the likely cause is more motion candidates surviving the blob-area gate and each
   paying a LeNet call. Not investigated.
-- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos --video-names captured_raw_20260616_040253_004 --record-all --images data/processed/FIELD/images/test --pad released --invert --out runs/exp012_field_glad_inverted`
+- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/FIELD/videos --video-names captured_raw_20260616_040253_004 --record-all --images data/processed/FIELD/images/test --pad released --invert --out runs/field/exp012_field_glad_inverted`
 - **Metrics:** none possible, as with EXP-010 and EXP-011.
 
 **The prediction was wrong, and the hypothesis survived anyway.** The stated test was that
@@ -1641,7 +1646,7 @@ predicts:
   candidate survive confirmation.
 - **It eliminated EXP-011's clutter.** The 2350–2480 block that EXP-011 produced 75
   detections in — small white man-made structures on the hillside, 4–8 px, confirmed at high
-  zoom in `runs/exp011_field_glad_scaled/zoom_white_structures.png`, with a second identical
+  zoom in `runs/field/exp011_field_glad_scaled/zoom_white_structures.png`, with a second identical
   unboxed structure visible below-left in most frames — drops to **zero**. The bush lock
   falls 41 → 14.
 - **The polarity preference itself is confirmed and stable.** Measured on the **original**
@@ -1674,7 +1679,7 @@ predicts:
   would have caught every episode in the video — the sky ones from the normal pass and the
   terrain one from the inverted. It costs 2× compute, which the edge budget probably cannot
   afford, but it brackets what a polarity-robust detector would be worth.
-- **Evidence** (`runs/exp012_field_glad_inverted/`, gitignored): `overlay.mp4` (all 3,600
+- **Evidence** (`runs/field/exp012_field_glad_inverted/`, gitignored): `overlay.mp4` (all 3,600
   frames, `src.render_video --no-labels --zoom 3 --zoom-span 100`, matching EXP-010's so the
   two are watchable side by side), `all_hits.png` (all 831 by branch),
   `zoom_drone_over_terrain.png`, `zoom_ambiguous_1540_1700.png`, `new_regions24.png`.
@@ -1700,7 +1705,7 @@ predicts:
 - **Data:** `data/processed/SOFA-O4/videos/first_catch.avi` — 964 frames, 1440×1080. **No labels**, but one target passage confirmed by eye and by tracker: frames ~955–964, 80×34 px against clean sky at frame 962.
 - **Hyperparameters:** `--hud-mask` (1.80% of frame) and `--motion-profile clutter` (ranked candidates, blob ceiling 3,000 → 12,000 px²).
 - **Hardware:** i7-1255U CPU, 701.2 s, **1.37 fps**.
-- **Command:** `py -3.13 -m src.glad_detect --videos data/processed/SOFA-O4/videos --video-names first_catch --record-all --pad released --hud-mask data/processed/SOFA-O4/hud_mask.png --motion-profile clutter --out runs/exp012a_first_catch`
+- **Command:** `py -3.13 -m src.glad_detect --videos data/processed/SOFA-O4/videos --video-names first_catch --record-all --pad released --hud-mask data/processed/SOFA-O4/hud_mask.png --motion-profile clutter --out runs/sofa_o4/exp012a_first_catch`
 
 ### Result
 
@@ -1767,7 +1772,7 @@ compensable background — is inverted here.
 - **Data:** `data/processed/SOFA-O4/videos/first_catch.avi`, frames 708–964, boxes from
   `annotations/first_catch.json`. 67 boxes placed by hand, 190 by the follower.
 - **Hardware:** i7-1255U CPU, a few minutes.
-- **Scripts:** `runs/exp012b_motion_check/motion_check.py` and `stage_check.py`, run from
+- **Scripts:** `runs/sofa_o4/exp012b_motion_check/motion_check.py` and `stage_check.py`, run from
   the repo root with `PYTHONPATH=.`. They are throwaway (gitignored with their outputs
   `motion.csv` and `stages.json`), not tested code.
 
@@ -1837,7 +1842,7 @@ Frame by frame through `MOD2_global`, with the stage where the labelled drone dr
 
 ### The ~100 other blobs: how big, how close
 
-`runs/exp012b_motion_check/blob_census.py` writes every blob in `MOD2_global`'s binary
+`runs/sofa_o4/exp012b_motion_check/blob_census.py` writes every blob in `MOD2_global`'s binary
 image to `blobs.csv` (67k rows). A *candidate* is a blob that passes upstream's area
 (30–3,000 px²) and aspect tests. Frames carry ~276 blobs and a median **103** candidates.
 
@@ -1940,7 +1945,7 @@ or distance from the last known position.
 - **Hardware:** i7-1255U CPU. It ran at **5.1–5.3 fps** unimpeded. The overall 4,237 s
   (0.21 fps) comes from a stall between frames 500 and 750 (0.18 fps), most likely host
   sleep or contention. **Do not quote it as throughput.**
-- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/SOFA-ANALOG/videos --video-names catch_2 --record-all --pad released --hud-mask data/processed/SOFA-ANALOG/hud_mask.png --images data/processed/SOFA-ANALOG/images/test --out runs/exp013_analog_catch2`
+- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/SOFA-ANALOG/videos --video-names catch_2 --record-all --pad released --hud-mask data/processed/SOFA-ANALOG/hud_mask.png --images data/processed/SOFA-ANALOG/images/test --out runs/sofa_analog/exp013_analog_catch2`
 
 ### Result
 
@@ -1972,9 +1977,9 @@ horizon bar.
   more thoroughly than it did on O4. The moving elements are the failure: the compass
   letters and the horizon dashes are high-contrast, drone-sized glyphs against sky. A
   static mask cannot fix that.
-- **Artefacts (gitignored):** `runs/exp013_analog_catch2/overlay.mp4` (unscored,
+- **Artefacts (gitignored):** `runs/sofa_analog/exp013_analog_catch2/overlay.mp4` (unscored,
   `--zoom 3 --zoom-span 100`), `all_hits.png` (all 82), `sky_769_811.png`,
-  `ground_242_244.png`, plus the mask preview `runs/exp013_hud_preview.png`.
+  `ground_242_244.png`, plus the mask preview `runs/sofa_analog/exp013_hud_preview.png`.
 - **Next:** locate the target in `catch_2` by hand (`/annotate`) before any further run
   on this footage. Without a known passage, a miss and an empty clip look identical. If a
   target passage exists and GLAD misses it, this becomes the same story as EXP-012a, and
@@ -1996,7 +2001,7 @@ horizon bar.
   - Both are described in [hud_mask.md](hud_mask.md#analog-osd).
 - **Hardware:** i7-1255U CPU, 255.8 s, **3.48 fps**. The pytest suite ran concurrently for
   part of the run.
-- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/SOFA-ANALOG/videos --video-names catch_2 --record-all --pad released --hud-mask data/processed/SOFA-ANALOG/hud_mask.png --osd-twins --images data/processed/SOFA-ANALOG/images/test --out runs/exp014_analog_catch2_osd`
+- **Command:** `py -3.13 -m src.glad_detect --videos data/raw/SOFA-ANALOG/videos --video-names catch_2 --record-all --pad released --hud-mask data/processed/SOFA-ANALOG/hud_mask.png --osd-twins --images data/processed/SOFA-ANALOG/images/test --out runs/sofa_analog/exp014_analog_catch2_osd`
 
 ### Result
 
@@ -2035,5 +2040,5 @@ All 8 were inspected at frame scale:
   the opposite of GLAD's white-Phantom-over-ground training prior (glad-model.md §5b), so
   fine-tuning (M7) remains the remedy. `--invert` (EXP-012) is the cheap probe to try first
   on this passage.
-- **Artefacts (gitignored):** `runs/exp014_analog_catch2_osd/overlay.mp4`, `all_hits.png`
-  and the mask preview `runs/exp014_hud_preview.png`.
+- **Artefacts (gitignored):** `runs/sofa_analog/exp014_analog_catch2_osd/overlay.mp4`, `all_hits.png`
+  and the mask preview `runs/sofa_analog/exp014_hud_preview.png`.
