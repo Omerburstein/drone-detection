@@ -1860,6 +1860,35 @@ drone's blob is a clean quadcopter outline, widened along its motion past the 3:
 limit. **In most of the passage (750, 850, 925) the drone is against trees or terrain, not
 sky.** Only the last ~10 frames put it against open sky.
 
+**Why static objects make blobs.** `why_static.py` measures, on the same five frames,
+how far each pixel is still misaligned after GLAD's warp (dense Farneback flow from the
+compensated previous frame to the current one) and how textured it is. It excludes the
+drone, the HUD mask and the warp border. It also writes `residual_<frame>.jpg` heatmaps.
+
+| Frame | Threshold | Misalignment in blobs / elsewhere (px) | Gradient in / out (grey/px) | Gradient × misalignment in / out |
+| --- | ---: | ---: | ---: | ---: |
+| 750 | 10 | 3.00 / 0.13 | 3.4 / 0.6 | 11.3 / 0.1 |
+| 850 | 14 | 4.34 / 0.33 | 4.5 / 0.6 | 20.6 / 0.3 |
+| 925 | 12 | 4.01 / 0.58 | 3.9 / 1.4 | 17.8 / 1.1 |
+| 958 | 14 | 5.55 / 0.56 | 2.8 / 1.1 | 18.0 / 0.8 |
+| 962 | 14 | 5.26 / 0.38 | 3.0 / 1.1 | 16.2 / 0.6 |
+
+A difference-image value is roughly gradient × misalignment. Inside blobs that product
+is 11–21 grey levels, just over the 10–14 threshold. Outside, it is about 1. Blobs appear
+where both things are true: the warp leaves 3–5 px of error **and** the surface is
+textured. The heatmaps show where that is:
+- the tree line and canopies, which sit at a different depth from the ground the warp
+  mostly fits;
+- the near bunker, where parallax is largest;
+- the fisheye rim, which a homography cannot model;
+- the HUD, which is fixed to the screen. The warp moves it along with the scene, so it
+  is misaligned by the whole camera motion.
+
+This refines the earlier "residual ~1 px median": that median is dominated by sky and
+far ground. Objects at other depths keep 3–5 px. It is still below the drone's
+differential motion late in the approach, but it is concentrated on high-contrast
+edges, which is what makes it look like a moving target.
+
 So ranking alone does not isolate it. Ranking by size or by size × strength would keep it
 inside a budget of 50 in most frames where the shape score drops it. Picking it out of the
 ~10 blobs still ahead of it needs something else, such as persistence over several frames
