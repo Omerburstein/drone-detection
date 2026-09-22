@@ -2178,6 +2178,11 @@ the right, with green marking a peak on the drone. Bottom: the two heatmaps.
 - **750, the long-range case:** the drone does not show in either map (`zoom_750.jpg`).
 - **600, empty:** the top peaks are the prop edges and near ground at the bottom left.
 
+**Video:** `overlay_exp015.mp4` (`draw_video.py`, same directory) covers frames 650–964
+at 10 fps, starting 58 drone-free frames before the drone appears. Top row: the top-10
+peaks and the drone's rank, plain vs `norm_b11_gmax_e2`, under the `fixed` mask. Bottom
+row: the two heatmaps, plain scaled to 40 grey levels and normalised to 10 px.
+
 ### Displacement read-out (hand-placed boxes only)
 
 The windowed map reads the drone at **1.4 / 4.4 / 4.6 / 8.1 px** over the four stretches.
