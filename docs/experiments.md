@@ -1829,6 +1829,31 @@ Frame by frame through `MOD2_global`, with the stage where the labelled drone dr
   difference blob being the target plus its ghost, stretched along the motion. At 962 the
   on-target blob is 2,841 px² and is rejected on shape.
 
+### The ~100 other blobs: how big, how close
+
+`runs/exp012b_motion_check/blob_census.py` writes every blob in `MOD2_global`'s binary
+image to `blobs.csv` (67k rows). A *candidate* is a blob that passes upstream's area
+(30–3,000 px²) and aspect tests. Frames carry ~276 blobs and a median **103** candidates.
+
+- **They are small.** Background candidates are 90 px² median (p10 38, p90 430, p99 2,017),
+  longest side 16 px median. 55% are under 100 px². They are the same size throughout the
+  approach, 87–106 px² median in every stretch.
+- **They are mostly far from the drone.** Median 557 px from its centre, and only 1.6%
+  within 100 px. Per frame: a median of **1** within 100 px, 11 within 200 px, and the
+  nearest at 87 px. They come from the terrain, not from a halo around the target.
+- **The drone's blob is larger and stronger than the typical one, but not the largest or
+  strongest.** Its area grows with the approach: 48 → 634 → 1,084 → 2,825 px² median, against
+  a background median of ~90. Its mean difference is 18–46 against 14–22 for the background,
+  but the background's p90 is 33–52. In the 126 frames where it is a candidate, its median
+  rank is 13th by area, 12th by area × strength, and 30th by strength alone. It is in the
+  top 10 by area in 46% of frames and ranked first in 3%. The current shape score ranks it
+  about 66th.
+
+So ranking alone does not isolate it. Ranking by size or by size × strength would keep it
+inside a budget of 50 in most frames where the shape score drops it. Picking it out of the
+~10 blobs still ahead of it needs something else, such as persistence over several frames
+or distance from the last known position.
+
 ### Reading
 
 - **EXP-012a's mechanism is retracted.** Motion is a live cue on this footage, and in the
