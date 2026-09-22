@@ -20,6 +20,12 @@ Maintained by `algo-agent`. Metrics come from `src.evaluate` (see
 > so **add `--match iou`** to reproduce the numbers in that entry; without it the run is
 > scored by the centre rule and the P/R will not match. Pass `--save` when re-scoring —
 > the log keeps each criterion's answer instead of overwriting the last one.
+>
+> **Run artifacts for EXP-001–009 were deleted on 2026-09-22.** `runs/` now keeps only
+> the FIELD and SOFA runs (EXP-010 on). Every `runs/exp00*` and `runs/compare_*` path
+> cited in EXP-001–009 — detections, match dumps, metric JSONs, figures, example crops —
+> no longer exists on disk. The numbers in those entries are the record; to regenerate a
+> file, re-run the entry's recorded command (with the flag notes above).
 
 ---
 
