@@ -18,6 +18,19 @@ dates, not priorities.
 ### Analog `catch 2`: a confirmed target passage
 
 - [ ] 2026-09-18 — [data] **Label `catch_2` frames ~510–585 with `/annotate`.** The drone closes from a speck to ~25 px against sky, and GLAD boxed it once (EXP-014). Until this is labelled, the 1-in-75 figure is eyeballed. Then try `--invert` on the passage as the cheap probe of the appearance prior.
+  *(Labelling landed 2026-09-23 — 890 frames judged, 224 boxes; `--invert` on the passage is what remains.)*
+
+- [ ] 2026-09-23 — [data] **Label a *second* analog clip with long-range spans, as the held-out
+  test.** `data/raw/SOFA-ANALOG/videos/` has `catch_3`…`catch_8`, `miss_1`, `miss_2` and
+  none is labelled. **This is now the binding constraint on the whole motion branch, not
+  the algorithm.** EXP-016's verdict on `catch_2` turns on single-digit event counts over
+  **22 seconds** of drone-free footage — the frozen false-alarm rate is *one track*, so ±1
+  moves it by 5.4/min, the same order as the budget it is measured against. Every threshold
+  in EXP-016 was also chosen on `catch_2`'s own empty frames, so nothing in that entry is
+  out-of-sample for this clip's clutter. `/annotate` does it. The user prioritises analog,
+  so this comes before more O4 labelling. Pick a clip with a **long-range span against the
+  horizon and one against ground** — EXP-016 found those two backgrounds behave completely
+  differently (49% coverage against sky, 0% against terrain).
 
 ### EXP-012: measure whether the O4 fixes actually work
 
@@ -64,6 +77,25 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
   After normalisation, 69% of the top false peaks are frame-edge or overlay, not scene.
   This will not reach 708–800, where no motion map ranks the drone in the top 10.
 
+  **Refined again by EXP-016 (2026-09-23), and one sub-item is now a prerequisite:**
+  - **Multi-frame accumulation does reach 708–800 for *ranking*.** Verifying each
+    `win_b5_e4` seed over time by its motion relative to its own 25–120 px ring puts the
+    drone in the top 10 of **0.22–0.30** of those frames, against EXP-015's **0%**. If the
+    global branch is ever re-ranked, accumulated differential z is the score to rank by.
+  - **It does not reach it for *detection*.** The z\* the false-alarm budget demands on
+    `first_catch` is **60**; the drone's maximum z on 708–800 is **13.9**. Do not build a
+    confirm/reject stage on this statistic without fixing the two items below first.
+  - **The pitch-ladder mask is a prerequisite, not an optimisation.** **59% of EXP-016's
+    surviving confirmed false tracks on O4 confirm within 30 px of a burned-in overlay**,
+    and 81% of them score at or above EXP-014's 0.70 OSD-twin threshold. The twin test
+    itself **must not** be turned on for O4: the on-drone tracks score a median **0.76** on
+    it, because O4's HUD is a digital overlay with no MAX7456 character grid and the test
+    fires on scene texture. See the separate pitch-ladder item below.
+  - **The ring needs to respect depth.** On analog, 57% of false tracks confirm at the
+    sky/tree-line boundary, where the ring straddles two depths and its median describes
+    neither. Segmenting the ring by flow magnitude, or rejecting a bimodal ring, is the
+    named fix.
+
 - [ ] 2026-09-17 — [algo] **Fisheye undistortion before differencing.** *Premise withdrawn
   2026-09-22 by EXP-012b:* the residual after the homography is ~1 px median and 3–7 px
   p90, below the drone's 4–22 px differential motion, so compensation error is not what
@@ -106,6 +138,20 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-08-13 — [M7] [algo] [deploy] Fine-tune GLAD from its released weights on ARD-MAV's official training split, on a rented GPU (Kaggle 2×T4 free, or RunPod ~$1–2 for 3–4 h). Extract the 45 training videos **on the instance**, not locally. Score on the same held-out 15 videos; record whether it still fits the edge budget. Split across agents: `algo-agent` owns the training recipe and the ledger entry, `deploy-agent` owns provisioning, staging and the cost/wall-clock report.
 - [ ] 2026-08-24 — [deploy] [algo] **Measure 10 fps (`--sample-n 3`), and a 3-frame burst (`--burst-length 3`).** EXP-006/008 showed half rate costs only 8.5% of recall with the tracking lock intact and `global miss` unmoved, so the 50 px `MAX_DISTANCE` gate has margin left — one run establishes whether the penalty is linear in interval or has a knee. Separately, every 2-frame burst spends half its frames on a structurally guaranteed miss (measured: 0 TP from 471 and 560 targets); a 3-frame burst buys two usable frames for 1.5× the cost and might let the local regime engage once, which no 2-frame burst can. Same code, no new flags. Cheap: ~1 h and ~15 min respectively per dataset.
 
+- [ ] 2026-09-23 — [deploy] **Analog optics give a 4× shorter detection range than
+  `edge-budget.md` assumes — re-derive §1 and the latency budget that hangs off it.**
+  Raised by `algo-agent` out of EXP-016; it is `deploy-agent`'s to resolve.
+  [edge-budget.md §1](edge-budget.md) assumes **1920 px across ~60°** (0.031°/px) and puts
+  a 0.6 m target at **10 px ≈ 110 m, 2.8 s from contact**. The analog feed the user cares
+  about most is **960 px across 120°** — 8 px per degree, 0.125°/px — so the same target is
+  **275/R px**: **10 px at ~27 m** and 5 px at ~55 m. At 40 m/s closing that is **~0.7 s**,
+  not 2.8 s. Every range, time-to-contact and "first detectable" figure in §1, §4.2 and
+  §4.3 needs re-deriving for this optic, and the recall projections that cite them
+  re-checked. **It bites immediately:** EXP-016's confirmation latency on analog is
+  **0.6–2.5 s** depending on the threshold, which is the *whole* budget or more. Related to the
+  open "pin down the airframe's actual camera" backlog item, but this one does not wait for
+  hardware — the numbers are already in hand.
+
 - [ ] 2026-08-23 — [deploy] **Profile `GladPipeline.step` per stage on idle hardware.** `time.perf_counter()` around GAD, LAD, `MOD2_global`, `MOD2_local` and the classifier gate in `src/algo/glad/pipeline.py`, over ~2,000 contiguous frames. [edge-budget.md §2.3](edge-budget.md) currently *estimates* the split by solving `0.884*T_LAD + 0.116*(T_LAD + T_MOD) = 374 ms` and infers `T_MOD ~ 1.5 s`; that is arithmetic, not a profile, and it is the one number the whole edge budget rests on. **Could not be taken on 2026-08-23** — `exp005_glad_ard100` was occupying the CPU and a contended timing run violates the benchmarking rules in `deploy-agent`'s own charter. Cheap: minutes, no GPU. Also worth emitting p50/p95/p99 and the worst video rather than a run mean.
 - [ ] 2026-08-23 — [deploy] **Export the two GLAD `yolov5s` checkpoints to ONNX and re-run through ONNX Runtime / OpenVINO on this host.** [edge-budget.md §3](edge-budget.md) item 1: expected 1.5-3x on the stage that dominates 88.4% of frames, and the ONNX artifact is the same one a Jetson TensorRT build would start from, so the work is not throwaway. **Not free of accuracy risk despite being fp32->fp32** — the NMS implementation changes — so it needs an `src.evaluate` re-score at the same criterion before the number is carried anywhere. Blocked on nothing.
 - [ ] 2026-08-23 — [deploy] **Measure the pixel-scaling exponent of GLAD's motion path — no camera needed.** [edge-budget.md §4.2.4](edge-budget.md) prices a 12 MP Alvium by assuming every full-frame stage scales **linearly with pixel count (5.88x)**, and the entire "naive 12 MP is not viable" verdict rests on that one untested assumption. It is free to check: run `src.glad_detect` over a downscaled copy of two ARD-MAV test videos (960x540, i.e. 0.25x the pixels) and compare per-branch timings against 1080p. If the motion path does **not** fall ~4x, the 12 MP projection is wrong and must be redone. **Fold this into the per-stage profile above rather than running it separately** — same instrumentation, one extra resolution. Timings only: GLAD's constants are absolute pixels tuned for 1920x1080 ([glad-model.md §6](glad-model.md) item 4), so **the accuracy of a downscaled run is meaningless** and must not be recorded as a result.
@@ -126,6 +172,16 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-17 — [data] **Annotate the FIELD capture's three target episodes** — *now the critical path: EXP-011 exhausted what unlabelled footage can answer, and both surviving questions (the ground-clutter false-alarm rate, and recall on our own camera) are measurements.* — frames ~2–180, ~1101–1553 and ~3140–3600 of `captured_raw_20260616_040253_004.mp4`, roughly 1,100 frames. This is the cheapest real score available to the project: EXP-010 is already keyed at `data/processed/FIELD/images/test/`, so labels there turn **an existing JSONL into AP, precision and recall with no second inference pass**. It is also the only way to measure **recall** on our own camera, which EXP-010 leaves unmeasured and which is the number the edge budget actually needs. Two warnings: the episodes' bounds come from where the *detector* fired, so annotating only those frames would score a set chosen by the thing being scored — extend each episode outward until the target is genuinely absent. And **do not eyeball full frames**: a 14×11 px drone at frame 1350 was missed by eye and caught by the detector.
 
 ## Done
+
+- [x] 2026-09-23 — [algo] **Stage 1 of the multi-frame motion plan: built it, ran it on both clips, and it does not pass (EXP-016).** Seed the top 200 `win_b5_e4` peaks per frame, then verify each over time by its motion relative to its own **25–120 px ring** — the 3–5 px parallax that swamps a whole-frame map is shared by the surroundings and cancels — with sequential confirmation (k_min 3, k_max 15 = the user's 0.5 s ceiling), the overlay veto, and a **speed cap derived in physical units** (0.6 m airframe, 30 m/s, doubled for closing ⇒ 3.33 × apparent size px/frame, camera-independent). z\* calibrated on empty frames only, two-fold, frozen per clip before any drone frame was scored. Analog `catch_2` carried equal weight to O4 `first_catch` throughout.
+  - **Every pre-set pass bar fails.** O4: never confirms on the drone at the frozen z\* = 60 (bar: by frame 760), 0% coverage of 708–800 (bar: 50%), top-10 **0.24** (bar: ≥ 0.30). Analog: first on-drone confirmation **+76 frames** (bar: 30), **15%** span coverage (bar: 40%), at 2.7 false tracks/min.
+  - **The one real win is ranking.** On `first_catch` 708–800, EXP-015 put the drone in the top 10 of **0 of 93** frames for every two-frame map. Accumulated differential z puts it in the top 10 of **0.22–0.30** at every threshold from z\* = 6 up (0.24 at the frozen z\* = 60) and in the top 5 of 0.12. The ~9σ premise re-derived clean on hand-placed labels: **4.2 px/frame against a 0.63 px ring scatter**.
+  - **The mechanism of failure is measured, not guessed.** The z\* the false-alarm budget demands on O4 is **60**; the drone's maximum z on 708–800 is **13.9** — a 4× gap that no threshold closes. The clutter produces the same statistic: on analog **57% of false tracks confirm at the sky/tree-line boundary**, where the ring straddles two depths; on O4 **59% confirm within 30 px of a burned-in overlay**. Both bars *are* reachable on analog, but only at 11–76 false tracks/min against a 5/min budget.
+  - **The speed cap is correct and nearly inert.** It scales with apparent size and clutter seeds are large — 53% of O4 seeds sit at the size clamp — so it rejects almost nothing. It is free, keep it, do not expect it to discriminate.
+  - **The cheap comparison arm is dead.** A long-baseline difference through chained homographies (k = 3, 6) is *worse* than two frames on both clips: analog top-10 0.19 → 0.02 → 0.00. It does not need trying again.
+  - **Two design-pass figures corrected.** Seed coverage of 708–800 is **76%**, not 92% (91% over 708–964); and the ~9σ ring result holds only on hand-placed labels — on follower boxes the same measurement reads **1.1σ**, because the follower smooths and lags.
+  - **Stage 2 is not authorised.** `src/algo/temporal/` is not built. The binding constraint is now the evidence base, not the algorithm: both verdicts rest on ~22 s of drone-free footage per clip and one approach each. See the new open items — label a second analog clip, and the analog-range finding for `deploy-agent`.
+  - Nothing under `src/` changed, so no tests were added; everything lives in the gitignored `runs/sofa_o4/exp016_multiframe/` and `runs/sofa_analog/exp016_multiframe/`. Full entry, tables, caveats and overlay-video notes in [experiments.md](experiments.md).
 
 - [x] 2026-09-22 — [algo] **Tried an edge-normalised frame difference on `first_catch` (EXP-015).** The compensated difference is divided by the local gradient, both pointwise and as a windowed normal-flow magnitude. The map is scored as a peak generator against the 257 labelled frames and compared with MOD2's plain difference, with the threshold set to 10 candidates per empty frame (1–707).
   - **It suppresses static textured clutter as predicted.** Roofs and canopies go dark, and scene statics read their 5–6 px misalignment.

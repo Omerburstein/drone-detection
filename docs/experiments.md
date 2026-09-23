@@ -2224,3 +2224,478 @@ is not a calibrated velocity.
   3. Before choosing or training any learned model (YOLOMG, which is GPL-3.0, or a GLAD
      fine-tune), label more O4 clips with long-range spans. The whole evaluation set is
      one close approach.
+
+---
+
+## EXP-016 — multi-frame local-ring differential motion, stage 1: the bars are not met
+
+- **Date:** 2026-09-23
+- **Question:** EXP-015 ended with the long-range drone outside the top 10 of every
+  two-frame motion map on `first_catch` 708–800. The user's observation was that over
+  10–15 frames it becomes obvious which blob is the drone. Does verifying each motion peak
+  over time — by its motion **relative to its own local background ring**, with a
+  sequential confirmation test — find the target at an affordable false-alarm rate?
+  Stage 1 is a falsification run in `runs/`, deliberately before any code lands in `src/`.
+- **Model / weights:** none. No learned component anywhere. GLAD's grid-KLT homography
+  (`runs/sofa_o4/exp015_normalised_motion/common.py::homography`, unchanged) plus OpenCV
+  pyramidal Lucas–Kanade.
+- **Data, both clips carrying equal weight:**
+  - **O4** `data/processed/SOFA-O4/videos/first_catch.avi`, 1440×1080, 964 frames.
+    Labels `annotations/first_catch.json`: 257 drone frames (708–964; 67 hand-placed, 190
+    follower). Empty frames 2–707 = **23.5 s**.
+  - **Analog** `data/raw/SOFA-ANALOG/videos/catch_2.mp4`, 960×720, 890 frames.
+    Labels `annotations/catch_2.json`: 224 drone frames in five spans (491–591, 647–678,
+    682–683, 687–735, 746–785), median box 37 px. Empty frames = 665 = **22.2 s**.
+  - **No split rule applies** — nothing is trained. z\* is calibrated on empty frames only,
+    two-fold, frozen before any drone frame is scored, separately per clip.
+- **Hardware / cost:** i7-1255U CPU, no GPU. `collect` 406 s (O4) / 202 s (analog); one
+  `verify` pass 4–20 min (O4) / 45–110 s (analog) depending on z\*; 7 ladder passes per
+  clip plus the frozen pass, ~3 h wall clock in total, all backgrounded.
+- **Scripts (gitignored, throwaway):** implementation in
+  `runs/sofa_o4/exp016_multiframe/`, clip settings in
+  `runs/sofa_analog/exp016_multiframe/clipcfg.py`. Every pixel constant is quoted at
+  1440 px wide and scaled by 960/1440 for analog, so analog is the same rule read on a
+  smaller picture rather than a re-tuned one.
+  - `mf.py` — masks, seeds, background flow, the `Hypothesis`, the speed cap.
+  - `collect.py` — per consecutive pair: H, 200 seeds, the grid flow. `win_b5_e4` is
+    asserted **bit-identical** to EXP-015's `maps()` on a sample frame in every run.
+  - `verify.py` — the tracker, one pass per z\*.
+  - `calibrate.py` — two-fold z\* on empty frames. `sweep.py` — the operating curve.
+  - `score.py`, `falsecheck.py`, `longbase.py`, `draw_video.py`, `stills.py`,
+    `seedcheck.py`, `ringcheck.py`, `screenfixed.py`, `interlace_check.py`.
+  - Run from the repo root, e.g.
+    `PYTHONPATH="runs/sofa_analog/exp016_multiframe;runs/sofa_o4/exp016_multiframe;runs/sofa_o4/exp015_normalised_motion;." py -3.13 -m verify --zstar 20 --tag frozen`
+
+### Method
+
+1. **Seeds, blind.** The top 200 peaks per frame of EXP-015's `win_b5_e4`, anywhere in the
+   valid frame. No centre prior — stage 1 is the acquisition question. Masks: the warp
+   border, a 24 px edge margin, the clip's HUD mask dilated 7 px, and the screen-fixed map.
+2. **Background flow.** GLAD's homography plus forward-backward LK on a 24 px grid. A grid
+   point's **residual** is its tracked motion minus the homography's prediction for it.
+3. **Hypothesis update.** Each live hypothesis is LK-tracked with a forward-backward check.
+   Its **differential vector** is its own motion, minus the homography prediction, minus
+   the median residual of grid points in its **25–120 px ring**. Accumulated as
+   `z_k = |Σd| / sqrt(Σ_j (1.48·ring_MAD_j + 0.3 px)²)`, which equals the plan's
+   `|Σd| / (√k·σ)` for a constant ring.
+4. **Confirm** at the first `k ≥ 3` with `z ≥ z*` and `|Σd| ≥ 6 px`. **Kill** at `k = 15`
+   (the user's 0.5 s ceiling), after two forward-backward failures, or on the speed cap.
+   A confirmed track is held by LK with a template re-lock and dropped when its trailing
+   15-frame z has sat below `z*/2` for 10 frames.
+5. **Overlay veto.** Raw image motion < 0.5 px/f while the ring flows > 3 px/f ⇒
+   screen-fixed. On analog, EXP-014's OSD-twin test is applied at confirmation as well.
+6. **Speed cap, in physical units.** A 0.6 m airframe at ≤30 m/s, worst case 60 m/s
+   closing, at 30 fps bounds image motion at **`2·v_max/(fps·size_m) = 3.33 × apparent
+   size px` per frame**. The ratio is lens-, range- and resolution-independent, so the same
+   number serves O4 and analog with no scaling — the code derives it from
+   `target_size_m`, `v_max_ms`, `closing_factor` and the frame rate rather than storing a
+   pixel threshold. It also sets the KLT re-lock gate and the seed association gate per
+   hypothesis.
+7. **Match criterion**, unchanged from EXP-015: a position is on the drone if it lies
+   inside the label box grown by max(10 px, 25% of its longest side).
+
+### Pre-flight on analog: not interlaced, but KLT does suffer
+
+`interlace_check.py`. Median vertical/horizontal neighbour difference **1.33**, and
+decimating vertically *raises* the neighbour difference (ratio 0.42) rather than lowering
+it — the comb signature of interlace is absent. Row-band frame differences show no seam.
+The 1.33 is analog's horizontal low-pass along the scanline, not two fields.
+
+**Forward-backward failure rates**, reported separately from mask rejections because they
+mean different things:
+
+| | grid FB failure | grid FB error, median frame | hypothesis FB failure |
+| --- | ---: | ---: | ---: |
+| O4, gate 1.00 px | **46.1%** | 0.013 px | **17.5%** |
+| analog, gate 0.67 px | **49.2%** | 0.218 px | **35.2%** |
+
+Analog's median forward-backward error is **17× O4's**, which is the grain the plan warned
+about. On the fixed grid the *failure rate* is nearly the same on both clips, because both
+distributions are bimodal — a large population tracks to a hundredth of a pixel and a large
+population does not track at all. Where the difference shows is on the **hypotheses**,
+which sit on motion peaks rather than on an arbitrary grid: **35.2% of analog hypothesis
+tracks fail the check against 17.5% on O4**, so analog grain costs a tracker twice as many
+frames of evidence. Masked and wild tracks account for a further 18.2% / 10.0% (analog) and 9.2% /
+4.2% (O4). About 39% (analog) and 49% (O4) of grid points survive, which leaves 20–65
+usable ring points per hypothesis.
+
+### The premise, re-derived rather than trusted
+
+`ringcheck.py`, from the labels on `first_catch` 708–800:
+
+| label source | raw motion | after H | after the ring | ring σ | z per frame |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| hand-placed, ≤3 frames apart (n=10) | 4.10 | 4.31 | **4.23** | **0.63** | **7.7** |
+| every consecutive label, follower included (n=92) | 3.57 | 0.84 | 0.87 | 0.47 | 1.1 |
+
+The design pass's ~9σ is **confirmed on hand-placed labels** (4.2 px/frame against a
+0.63 px ring scatter) and **not reproduced on follower labels**, where the drone reads
+0.87 px/frame. The follower smooths and lags, so its frame-to-frame displacement
+under-reads the target's true motion by ~5×. Any future differential-motion number on this
+project must say which labels it used.
+
+**Seed coverage, re-derived** (`seedcheck.py`, consecutive frames, top 200 of `win_b5_e4`):
+O4 708–800 is **76%**, not the 92% the design pass quoted; 91% over 708–964. Analog is
+**86%** on 491–591 and 77% overall. The 92% figure was the whole drone stretch, not the
+long-range part of it. A seed usually exists; it is ranked 19–95 at the median.
+
+### z\* calibration, empty frames only, two-fold
+
+Empty frames split into two contiguous halves; z\* tuned on one and counted on the other,
+both ways round; frozen at the more conservative of the two before any drone frame was
+scored. Selection rule fixed in advance: the smallest ladder value at or under 5 confirmed
+false tracks per minute.
+
+**Confirmed false tracks per minute, by fold:**
+
+| z\* | O4 fold A | O4 fold B | analog fold A | analog fold B |
+| ---: | ---: | ---: | ---: | ---: |
+| 4 | 953.5 | 912.7 | 189.8 | 243.2 |
+| 6 | 719.0 | 387.5 | 70.5 | 81.1 |
+| 8 | 545.6 | 244.8 | 38.0 | 59.5 |
+| 12 | 326.3 | 153.0 | 10.8 | 10.8 |
+| 16 | 219.3 | 96.9 | 5.4 | 5.4 |
+| 20 | 96.9 | 40.8 | 5.4 | 0.0 |
+| 25 | 56.1 | 20.4 | — | — |
+| 30 | 20.4 | 15.3 | — | — |
+| 40 | 15.3 | 0.0 | — | — |
+| 60 | **0.0** | **0.0** | — | — |
+
+- **Analog freezes at z\* = 20**, held-out rate **5.4 false tracks/min** (one track in a
+  fold). One track moves the rate by 5.4/min, so the calibration is coarse: 22 s of empty
+  footage is what this clip has.
+- **O4 freezes at z\* = 60**, the first ladder value at which fold A is clean; fold B is
+  clean from z\* = 40. Held-out rate **0.0 false tracks/min**. But at z\* = 60 **the drone
+  never confirms either** — its maximum z anywhere on the clip is 53, and on 708-800 it is
+  **13.9**. The threshold the false-alarm budget demands is **four times the largest value
+  the long-range target ever produces**. That single sentence is the result.
+- The analog ladder was stopped at z\* = 20 once the budget was met; the O4 ladder ran to
+  60.
+
+**At the frozen z\* = 60, O4 confirms one track in the entire clip and none of it is the
+drone:**
+
+| stretch | n | coverage | fragments | top-1 | top-5 | **top-10** | median rank | seen |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **708-800** | 93 | 0.00 | 0 | 0.00 | 0.12 | **0.24** | 12 | 0.66 |
+| 801-900 | 100 | 0.00 | 0 | 0.05 | 0.15 | 0.28 | 14 | 0.93 |
+| 901-953 | 53 | 0.00 | 0 | 0.57 | 0.91 | 0.92 | 1 | 1.00 |
+| 954-964 | 11 | 0.00 | 0 | 0.00 | 1.00 | 1.00 | 2 | 1.00 |
+| 708-964 | 257 | 0.00 | 0 | 0.14 | 0.33 | 0.43 | 10 | 0.85 |
+
+### Analog `catch_2` at the frozen z\* = 20
+
+47,147 hypotheses born, **4 confirmed tracks in the whole clip**, 3 vetoed by the OSD-twin
+test, 1 confirmed false track = **2.7 per minute**.
+
+| stretch | n | coverage | fragments | top-1 | top-5 | top-10 | median rank | seen |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **491–591** | 101 | **0.15** | 2 | 0.33 | 0.42 | 0.43 | 2 | 0.75 |
+| 647–678 | 32 | 0.00 | 0 | 0.00 | 0.16 | 0.22 | 35 | 0.56 |
+| 687–735 | 49 | 0.00 | 0 | 0.02 | 0.12 | 0.27 | 34 | 0.61 |
+| 746–785 | 40 | 0.00 | 0 | 0.00 | 0.02 | 0.02 | 36 | 0.70 |
+| 491–785 | 224 | 0.07 | 2 | 0.15 | 0.24 | 0.29 | 22 | 0.69 |
+
+First confirmed on-drone frame on the primary span: **567, i.e. +76 frames (2.53 s)**
+after the target's first labelled frame.
+
+**Verdict against the pre-set analog bars:**
+
+| bar | result | |
+| --- | --- | :-: |
+| confirmed within 30 frames of 491 | +76 frames | **FAIL** |
+| ≥ 40% coverage of a span | 15% on 491–591, 0% elsewhere | **FAIL** |
+| false tracks per minute reported | 2.7/min | reported |
+
+### The operating curve, which is what the single point cannot show
+
+`sweep.py`, primary span 491–591. **z\* was frozen on empty frames; this table exists to
+show the shape of the trade, not to pick a better point afterwards.**
+
+| z\* | FA/min | acquisition | coverage | fragments | top-10 |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 4 | 216.5 | +17 | 0.49 | 5 | 0.57 |
+| 6 | 75.8 | +17 | 0.49 | 5 | 0.57 |
+| 8 | 48.7 | +43 | 0.30 | 3 | 0.50 |
+| 12 | 10.8 | +28 | 0.30 | 4 | 0.52 |
+| 16 | 5.4 | +78 | 0.09 | 2 | 0.41 |
+| **20 (frozen)** | **2.7** | **+76** | **0.15** | 2 | 0.43 |
+
+Both analog bars *are* reachable — but not together, and not at the false-alarm budget.
+Acquisition within 30 frames needs z\* ≈ 12, which costs **10.8 FA/min**; 40% coverage
+needs z\* ≤ 6, which costs **76 FA/min**, 15× the budget.
+
+### The comparison arm: a longer baseline makes it worse
+
+`longbase.py`, frame n against n−k through chained homographies, ranked exactly as
+EXP-015 ranks peaks. Analog 491–591, drone in the top 10 of the map:
+
+| k | 1 | 3 | 6 |
+| --- | ---: | ---: | ---: |
+| top-10 | **0.19** | 0.02 | 0.00 |
+| median rank | 29 | 49 | 138 |
+
+Chaining homographies accumulates misalignment faster than the drone accumulates
+displacement, so the cheap multi-frame arm is worse than the two-frame one it was meant to
+improve. That is the negative result which justifies paying for per-hypothesis tracking
+rather than a wider difference.
+
+### O4 `first_catch`, at the threshold where it does acquire
+
+The frozen z\* = 60 table is above and it is all zeros. The table below is at **z\* = 6**,
+the point where the drone is acquired on 708–800 at all. It runs at **553 false tracks per
+minute, 110× the budget**, and is reported so the failure has a shape — not as an operating
+point, and not as a number to quote.
+
+| stretch | n | coverage | fragments | top-1 | top-5 | top-10 | median rank | seen |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **708–800** | 93 | **0.37** | 2 | 0.00 | 0.12 | **0.30** | 12 | 0.68 |
+| 801–900 | 100 | 0.63 | 9 | 0.00 | 0.25 | 0.39 | 13 | 0.94 |
+| 901–953 | 53 | 0.91 | 22 | 0.25 | 0.49 | 0.87 | 6 | 1.00 |
+| 954–964 | 11 | 1.00 | 5 | 0.00 | 0.91 | 0.91 | 2 | 1.00 |
+| 708–964 | 257 | 0.61 | 34 | 0.05 | 0.28 | 0.48 | 9 | 0.86 |
+
+First confirmed on-drone frame: **742**, i.e. +34 frames (1.13 s) after the drone appears.
+
+**The operating curve** (`sweep.py`, primary span 708–800):
+
+| z\* | FA/min | acquisition | coverage 708–800 | top-10 708–800 |
+| ---: | ---: | ---: | ---: | ---: |
+| 4 | 933.1 | frame 708 (+0) | **0.57** | 0.00 |
+| 6 | 553.3 | frame 742 (+34) | 0.37 | 0.30 |
+| 8 | 395.2 | frame 759 (+51) | 0.12 | 0.24 |
+| 12 | 239.7 | never | 0.00 | 0.19 |
+| 16 | 158.1 | never | 0.00 | 0.05 |
+| 20 | 68.8 | never | 0.00 | 0.27 |
+| 25 | 38.2 | never | 0.00 | — |
+| 30 | 17.8 | never | 0.00 | 0.22 |
+| 40 | 7.6 | never | 0.00 | — |
+
+The drone's z on 708–800 peaks at **13.9**; the surviving false tracks reach **62**. There
+is no threshold at which the long-range drone is above the clutter on this clip.
+
+### What survives: the false tracks, named
+
+`falsecheck.py`, classifying each confirmed false track by where it confirmed.
+
+**Analog**, at z\* = 4 so there are enough to characterise (80 tracks):
+
+| where | share |
+| --- | ---: |
+| upper half — sky and the horizon tree line | **57.5%** |
+| frame edge | 16.2% |
+| within 30 px of an overlay | 13.8% |
+| lower half — ground | 12.5% |
+
+Their median OSD-twin score is **0.42 and none reaches the 0.70 veto**, so the moving OSD
+is *not* what survives — the twin test had already removed 54 candidates earlier in the
+pass. What survives is the **horizon**: a depth discontinuity where the ring straddles sky
+(no parallax) and near tree line (several px), so the ring median no longer describes the
+hypothesis's own background and the residual it leaves looks like differential motion.
+At the frozen z\* = 20 one false track remains, and it is at the horizon.
+
+**O4**, at z\* = 20 (27 tracks): **59.3% confirm within 30 px of a burned-in overlay**,
+18.5% sky/horizon, 14.8% frame edge, 7.4% ground. The pitch ladder moves with pitch, so
+the static screen-fixed mask cannot hold it, and **81% of these score at or above the 0.70
+OSD-twin veto** — which is not applied on O4.
+
+**But that veto does not transfer.** Applying it post hoc (`twinveto.py`) across the whole
+ladder:
+
+| z\* | FA/min | FA/min with the veto | on-drone tracks | kept |
+| ---: | ---: | ---: | ---: | ---: |
+| 6 | 553.3 | 247.3 | 34 | 10 |
+| 20 | 68.8 | 12.7 | 9 | 6 |
+| 25 | 38.2 | **5.1** | 7 | 5 |
+| 30 | 17.8 | 5.1 | 2 | 1 |
+
+It cuts the false rate 5–8× and would reach the budget at z\* ≈ 25 — but the **on-drone
+confirmed tracks score a median 0.76 on the same test**, above the veto. O4's HUD is a
+digital overlay with no MAX7456 character grid, so "one character column away" is not a
+meaningful distance there and the test fires on scene texture. The missing veto is real,
+the available veto is not the one to use, and that is a prerequisite this experiment
+cannot claim as solved.
+
+O4, the same arm (`longbase.py`), drone in the top 10:
+
+| k | 708–800 | 801–900 | 901–953 | 954–964 | seed present, 708–800 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | **0.00** | 0.22 | 0.08 | 0.00 | 0.76 |
+| 3 | 0.00 | 0.11 | 0.00 | 0.91 | 0.71 |
+| 6 | 0.00 | 0.03 | 0.02 | 0.45 | 0.40 |
+
+Same conclusion on both clips: the long baseline is worse, and it is worse because chained
+homographies drift. Only the final 11 frames, where the target is 112 px and moving 22
+px/frame, benefit from k = 3.
+
+### Verdict against the pre-set bars
+
+Every bar was written into the plan before any of this ran.
+
+| clip | bar | result | |
+| --- | --- | --- | :-: |
+| O4 | first confirmation by frame 760 | never confirms at z\* = 60; frame 742 at z\* = 6 (553 FA/min) | **FAIL** |
+| O4 | ≥ 50% coverage of 708–800 | 0% at z\* = 60; 37% at z\* = 6, 57% at z\* = 4 | **FAIL** |
+| O4 | ≤ 5 false tracks/min | 0.0/min at z\* = 60 — but only because nothing confirms at all | pass, vacuously |
+| O4 | top-10 in 708–800 ≥ 30 pts above EXP-015's 0% | **0.24** at z\* = 60; 0.30 at z\* = 6 | **FAIL by 6 pts** |
+| analog | confirmed within 30 frames of 491 | +76 frames at z\* = 20; +28 at z\* = 12 (10.8 FA/min) | **FAIL** |
+| analog | ≥ 40% span coverage | 15% at z\* = 20; 49% at z\* = 6 (76 FA/min) | **FAIL** |
+| analog | false tracks/min reported | 2.7/min at the frozen z\* | reported |
+
+**Stage 1 does not pass. Stage 2 is not authorised by this result.**
+
+### What did work, and it is not nothing
+
+- **The drone's rank by z is transformed.** On `first_catch` 708–800, EXP-015 put the drone
+  in the top 10 of **0 of 93 frames** for every two-frame map. Ranking live hypotheses by
+  accumulated differential z puts it in the top 10 of **0.22–0.30** of those frames at every
+  threshold from z\* = 6 upward, **0.24 at the frozen z\* = 60**, and in the top 5 of 0.12.
+  (Two thresholds break the pattern — 0.05 at z\* = 16 and 0.00 at z\* = 4 — because at
+  those settings the frame is crowded with *held* false tracks that outrank the drone.)
+  The signal the design pass measured is real and the accumulation extracts it. What fails
+  is the **absolute** threshold: the clutter produces the same statistic, only more of it.
+- **The local ring does cancel parallax as predicted.** Re-derived above: 4.2 px/frame of
+  drone motion against a 0.63 px ring scatter on hand-placed labels.
+- **The analog target is acquired at all.** EXP-014 boxed it once in ~75 frames with GLAD;
+  here a single confirmed track holds it from 567 through the rest of the span at rank #1,
+  with one false track in the clip. That is a better hold than anything this project has had
+  on analog — at 2.5× the acquisition bar, and only once the target is ~60 px.
+- **The long-baseline arm is dead.** Measured on both clips, at k = 3 and 6. It does not
+  need trying again.
+
+### Why it fails, as far as this run can say
+
+1. **The clutter has the same statistic.** A hypothesis confirms when it moves consistently
+   against its ring. At a **depth discontinuity** the ring is not its background: on analog
+   57% of false tracks confirm at the sky/tree-line boundary, where half the ring has no
+   parallax and half has several px. The test's own premise — "the surroundings share the
+   parallax" — is exactly what a horizon violates.
+2. **The speed cap barely bites.** It is physically correct and it is free, but it scales
+   with apparent size, and clutter seeds are *large*: **53% of O4 seeds and 40% of analog
+   seeds sit at the 120 px size clamp**, giving a 400 px/frame cap that rejects nothing.
+   The cap is a real constraint only for small candidates, which is where it is least
+   needed because they move least. It killed a negligible share of hypotheses in every run.
+3. **The latency ceiling and the threshold fight each other.** z grows as √k, so a 15-frame
+   ceiling caps the achievable z at roughly 3.9× the single-frame z. On `first_catch`
+   708–800 the drone's single-frame z is ~4–8, so its ceiling is ~14 — measured max 13.9 —
+   while clutter reaches 62 because a clutter track that survives is one whose ring is
+   *systematically* wrong, not one that is noisy.
+4. **Analog's later spans are over ground.** 647–785 puts the drone against textured
+   terrain rather than sky, and coverage there is 0% at every z\*. The one span that works
+   is the one against sky.
+
+### What the overlay videos show
+
+Watched frame by frame, not summarised from the tables.
+
+- **Analog `overlay_exp016.mp4`, frames 441–800**, and `still_500/520/545/570/585.png`.
+  - At **500** the target is **19×20 px**, a faint dark smudge just above the tree line,
+    barely separable by eye in the picture and invisible in the `win_b5_e4` panel. **No
+    hypothesis is on it.** This is the acquisition failure, and it is a seeding-and-signal
+    failure, not a verification failure.
+  - At **520** (36×23 px) a hypothesis is on it and it is **rank #1 by z at 13.2** — below
+    the frozen 20, so it is not confirmed. The margin at that moment is the whole result.
+  - At **570** (61×33 px) the drone is an unmistakable dark quadrotor against sky, the
+    brightest blob in the `win_b5_e4` crop, confirmed, rank #1, z 31.
+  - At **574** the whole frame carries **169 live hypotheses and exactly one confirmation**,
+    and it is the drone.
+  - At **585** (47×26 px) the drone is plainly visible and **no hypothesis is on it at
+    all** — the screen-fixed mask has a blob sitting on the tree line the drone has flown
+    across. That mask is calibrated on this clip's own empty frames and it is costing
+    recall here; see the caveats.
+  - At **699** (span 687–735) the target is low in the frame against fast-moving ground,
+    the seed map is uniformly speckled, and nothing tracks it. That is the 0% coverage on
+    the later spans.
+
+### Caveats
+
+- **Both clips are one approach each**, and the bars are decided by a handful of events:
+  the analog false-track rate at the frozen z\* is **one track in 22 seconds**, so ±1 track
+  moves it by 5.4/min. Every false-alarm-per-minute figure here has Poisson error of the
+  same order as the budget. Longer empty footage is the fix, and this project does not have
+  it yet.
+- **The screen-fixed mask is calibrated in-sample on each clip's own empty frames**, as it
+  was in EXP-015. On analog it is worse than in-sample: it masks a patch of the *tree line*
+  the drone later flies across (frame 585), because the camera pointed the same way during
+  the empty frames. A deployed system cannot build this mask and would not have it.
+- **The analog screen-fixed map is this experiment's own reconstruction** of EXP-015's
+  rule (`screenfixed.py`); EXP-015 kept the `.npy` but not the script. Re-deriving it on O4
+  gives an IoU of 0.23 against the original and covers 0.62% of the frame against 2.67%, so
+  it is *more conservative*, not less. O4 keeps using EXP-015's original file so the two
+  experiments stay comparable.
+- **The ~9σ premise holds only on hand-placed labels** (n = 10 usable pairs in 708–800).
+  On follower labels the same measurement gives 1.1σ. This is the single most fragile
+  number in the chain.
+- **O4's "long range" drone is 43 px**, well above the 10–30 px brief. Analog's 491–591
+  span starts at 17–20 px, which is the honest small-target case, and it is the case that
+  failed.
+- **Top-k here is not EXP-015's top-k.** EXP-015 ranked peaks in a static map; this ranks
+  live hypotheses by accumulated z, and the populations differ in size and composition.
+  The comparison is the one the plan asked for, and it is directional, not exact.
+- **No `detections.jsonl` was written and nothing was scored through `src.evaluate`.**
+  Hypotheses are points, not boxes, so an IoU-thresholded P/R would mean nothing. The match
+  criterion above stands in for it, exactly as in EXP-015.
+- The confirmation-hold rule (drop a confirmed track when its trailing 15-frame z sits
+  below z\*/2 for 10 frames) is a stage-1 invention, not from the plan, and it affects
+  coverage and fragment counts. It does not affect acquisition latency or the false-track
+  count, which are decided at confirmation.
+
+### Next
+
+1. **Do not build stage 2.** `src/algo/temporal/` is not authorised by this result. The
+   plan's stage 2 was conditional on stage 1 passing and it did not. Promoting a detector
+   that needs 110× its false-alarm budget to acquire would repeat EXP-012a's mistake at a
+   larger scale.
+2. **The evidence base is the binding constraint, not the algorithm.** Every bar here is
+   decided by single-digit event counts over 22–23 s of empty footage and one approach per
+   clip. **Label a second analog clip with long-range spans** (`/annotate`) before any
+   further algorithm work on this branch — see the todo. It is the cheapest thing that
+   could change the verdict, and it is also the only way the current verdict can be
+   trusted.
+3. **If the branch is picked up again, the two things worth trying are named by the
+   failure**, not by the plan:
+   - **A ring that respects depth.** Segment the ring by flow magnitude and take the mode
+     rather than the median, or reject a hypothesis whose ring is bimodal. 57% of analog's
+     false tracks are one geometry — the horizon — and it is detectable in the ring itself.
+   - **A moving-overlay veto that suits a digital HUD.** O4's dominant surviving source is
+     the pitch ladder; the MAX7456 twin test cuts it 5× but takes the drone with it
+     (on-drone median twin score 0.76). A ladder-shaped mask that moves with pitch is the
+     already-open todo and it is a prerequisite, not an optimisation.
+4. **The speed-capped velocity bank is still open** but its trigger is not met the way the
+   plan expected: the O4 miss on 708–800 is only **24%** a seeding failure (76% of frames
+   do carry a seed on the drone), so a recall booster under the ring test addresses the
+   smaller half of the problem.
+5. **Separately, for deploy-agent:** the analog optics. 120° across 960 px is 8 px/degree,
+   so a 0.6 m target is **275/R px** — **10 px at ~27 m**, 5 px at ~55 m.
+   [edge-budget.md](edge-budget.md) §1 assumes 60° across 1920 px and puts 10 px at
+   ~110 m. Analog is a **4× shorter detection range for the same pixel count**, on the
+   footage the user cares about most, and this experiment's 0.5–2.5 s confirmation latency
+   has to be bought out of a budget that is 4× smaller than the one in the document.
+   Raised as its own todo.
+
+- **O4 `overlay_exp016.mp4`, frames 641–964**, drawn at the over-budget **z\* = 6**, because
+  at the frozen z\* = 60 nothing confirms and there would be nothing to watch. Stills
+  `still_720/750/780/800/860/925/962.png`.
+  - At **720** the label is **19×18 px** — the stretch starts far smaller than its 43 px
+    median. The target is a speck **against the tree canopy**, not against sky: invisible
+    in the picture at 4× magnification and black in the `win_b5_e4` panel. Nothing tracks
+    it.
+  - At **750** (50×35 px) it is a faint dark smudge still inside the canopy, still black in
+    the seed map, and a confirmed track does sit on it at **rank #9, z 9.0**.
+  - At **759** the frame carries **115 live hypotheses and 16 simultaneous confirmations** —
+    on the shed, on the terrain, on the overlay glyph blocks — with the drone at **rank #4**.
+    That picture is the 553 false tracks per minute made visible, and it is the reason the
+    bar exists.
+  - The plan asked whether 708–800 would show a confirmed track on the drone. **It does,
+    from frame 742 — but only at a threshold that also confirms sixteen other things.**
+  - **The background is the story on this clip.** EXP-015 reported 708–800 as "long range";
+    what the stills show is that it is also the stretch where the drone is **superimposed
+    on the tree line**. Its differential motion is measured against a ring that is half
+    canopy at one depth and half ground at another.
+
+### Artefacts (all gitignored)
+
+`runs/sofa_o4/exp016_multiframe/` and `runs/sofa_analog/exp016_multiframe/`:
+`collect.pkl`, `verify_z*.pkl` (the ladder), `verify_frozen.pkl`, `longbase.pkl`,
+`overlay_exp016.mp4`, `still_*.png`, `calibrate.log`, `sweep.log`, `ladder.log`,
+`twinveto.log`, `screenfixed.log`, `collect.log`, `finalise*.log`.
