@@ -2702,3 +2702,181 @@ Watched frame by frame, not summarised from the tables.
 `collect.pkl`, `verify_z*.pkl` (the ladder), `verify_frozen.pkl`, `longbase.pkl`,
 `overlay_exp016.mp4`, `still_*.png`, `calibrate.log`, `sweep.log`, `ladder.log`,
 `twinveto.log`, `screenfixed.log`, `collect.log`, `finalise*.log`.
+
+---
+
+## EXP-017 — the EXP-016 motion test on our own field footage, unchanged
+
+- **Date:** 2026-09-23
+- **Question:** the user asked to run the motion algorithm on the FIELD capture. EXP-016
+  built and rejected a multi-frame local-ring differential-motion test on two *goggles*
+  clips — O4 and analog. FIELD is our own airframe's raw camera feed, the footage
+  [research-notes.md](research-notes.md) names as the actual target domain. What does the
+  same code, with no constant re-tuned, do on it?
+- **Model / weights:** none. No learned component. EXP-016's `mf.py`/`collect.py`/
+  `verify.py` verbatim, GLAD's grid-KLT homography plus OpenCV pyramidal Lucas–Kanade.
+- **Data:** `data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4`, 1032×752,
+  3600 frames, 30 fps, 120.0 s. **No labels** — see `data/raw/FIELD/PROVENANCE.md`.
+- **Hardware / cost:** i7-1255U CPU, no GPU. `screenfixed` 148 s, `collect` 1211 s,
+  `verify` 594 s (z\* = 20) and 2299 s (z\* = 6) run in parallel, overlay render ~25 min.
+  ~1.5 h wall clock, all backgrounded.
+- **Scripts (gitignored, throwaway):** `runs/field/exp017_multiframe/clipcfg.py`. Everything
+  else is EXP-016's, run against it by putting the FIELD clip dir first on `PYTHONPATH`:
+
+      PYTHONPATH="runs/field/exp017_multiframe;runs/sofa_o4/exp016_multiframe;runs/sofa_o4/exp015_normalised_motion;." py -3.13 -m verify --zstar 20
+
+  Three small changes landed in EXP-016's shared modules, each defaulting to previous
+  behaviour so both SOFA clips re-import byte-identical (verified: O4 706 empty frames,
+  analog 665, matching EXP-016): `mf.py` accepts `labels=None` and `hud=None`, and takes
+  `drone_ranges` to keep provenance-named episodes out of the screen-fixed calibration
+  set; `draw_video.py` no longer captions a label box or a drone rank it does not have.
+
+### What cannot be concluded, stated before the numbers
+
+**FIELD has no ground truth, so there is no Pd, no precision and no recall here, and
+nothing in this entry may be placed beside EXP-004–009.** Two consequences run through
+everything below:
+
+1. **z\* was not calibrated on this clip.** EXP-016 froze z\* on each clip's empty frames,
+   two-fold, before scoring. That needs labels. The two values used here are *imported*
+   from the SOFA clips (analog's frozen z\* = 20, and z\* = 6, the value O4's overlay was
+   drawn at). **The threshold is borrowed, not earned.**
+2. **"On the target" means "co-located with an EXP-010 GLAD box"**, which PROVENANCE
+   describes as where that detector fired and was right. A track far from one is
+   *unexplained*, not false. PROVENANCE is explicit that a gap may be a stretch the
+   detector missed rather than a stretch with no drone, so every false-alarm rate below is
+   an **upper bound**.
+
+### Result: it acquires in all three episodes, at 38 false tracks/min
+
+At the imported z\* = 20, over 3600 frames: **112,732 hypotheses born, 97 confirmed
+tracks.** Requiring a track to sit within 30 px of a GLAD box on **at least half of the
+frames the two overlap, over at least 10 frames** — sustained association, not one lucky
+pass — gives **8 tracks on the target, in all three episodes**:
+
+| Confirmed | Ended | Frames near a GLAD box | Seed size | z |
+| --- | --- | --- | --- | --- |
+| 8 | 45 | 11 / 16 | 16.0 | 28.0 |
+| 1100 | 1325 | **183 / 185** | 39.0 | 19.8 |
+| 1278 | 1322 | 45 / 45 | 33.0 | 28.4 |
+| 1360 | 1622 | 137 / 146 | 86.0 | 111.8 |
+| 3166 | 3176 | 11 / 11 | 26.0 | 23.1 |
+| 3166 | 3203 | 38 / 38 | 21.0 | 10.9 |
+| 3482 | 3567 | 86 / 86 | 22.0 | 42.7 |
+| 3508 | 3567 | 60 / 60 | 86.0 | 31.2 |
+
+This is the thing EXP-016 could not get on either goggles clip. On O4 the drone's maximum
+z over 708–800 was 13.9 against a budget-mandated z\* of 60, a 4× gap; here a track on the
+target reaches z = 111.8 and holds for 262 frames. **A caution against over-reading one
+row:** a track confirmed at frame 10 that lived 1344 frames passes within 7.4 px of a GLAD
+box once and is *not* in the table — it is clutter that happened to start near the target.
+The sustained criterion is what separates the two, and a one-pass criterion would have
+reported 12 tracks instead of 8.
+
+Against the 5 false tracks/min budget EXP-016 set, counting every confirmation outside the
+three episodes as false:
+
+| z\* | Confirmed tracks | On target | False (83.5 s of believed-empty) | Rate |
+| --- | --- | --- | --- | --- |
+| 20 | 97 | 8 | 53 | **38.1/min** |
+| 6 | 315 | 9 | 185 | 132.9/min |
+
+**z\* = 6 buys nothing.** It triples the false rate and adds one target track. z\* = 20 is
+the better of the two operating points and is what the overlay is drawn at.
+
+### Why it does better here: the clip is easier for the flow stage
+
+The background-flow stage, which everything downstream rests on, is markedly healthier on
+FIELD than on either goggles clip:
+
+| | O4 `first_catch` | analog `catch_2` | **FIELD** |
+| --- | --- | --- | --- |
+| Usable grid points | 0.489 | 0.389 | **0.661** |
+| Forward–backward failure | 0.461 | 0.492 | **0.338** |
+| Masked out | 0.092 | 0.182 | **0.006** |
+
+No HUD to mask and no analog grain to break KLT. **A good part of what EXP-016 measured as
+a failure of the algorithm was a property of goggles recordings**, not of air-to-air
+geometry. That does not overturn EXP-016's verdict on those clips — it narrows what the
+verdict was about.
+
+The screen-fixed map bears this out: on FIELD it covers **0.5% of the frame** (O4 and
+analog mask burned-in overlays), and it is two blobs in the top corners at y 12–97, warp
+and lens-edge residue rather than scene content, peaking at frac 0.09 against the 0.05
+threshold. **No EXP-010 GLAD detection anywhere in the clip falls inside it** (lowest
+detection y = 95), so it is not hiding the target.
+
+### The false alarms are concentrated in time, and the driver is host angular rate
+
+This is the finding worth carrying forward. The 53 false tracks are spread evenly across
+the frame — 21% top third, 42% middle, 38% bottom — so there is no spatial structure of the
+kind EXP-016 found (analog: 57% at the sky/tree-line boundary; O4: 59% within 30 px of an
+overlay). **In time they are not spread at all.** 50 of 53 fall in frames 1800–2699:
+
+| Block | Median background image motion |
+| --- | --- |
+| 0–1799 | 1.1 – 3.3 px/frame |
+| **1800–2699** | **5.4 – 7.8 px/frame** |
+| 2700–3599 | 1.7 – 4.5 px/frame |
+
+Frames 2000–2600 are a hard banking manoeuvre — horizon at ~45°, a near-vertical look-down
+at 2300 with lens flare, rolling back by 2600. The *residual* after the homography stays
+small throughout (0.16–0.25 px), so the homography is still fitting; what changes is raw
+image motion against an 11 px KLT window, and the hypothesis tracker's differential vectors
+become unreliable before the background model does.
+
+Splitting there:
+
+| | Duration | False tracks | Rate |
+| --- | --- | --- | --- |
+| Hard manoeuvre 1800–2699 | 30.0 s | 50 | 100.0/min |
+| Rest of the believed-empty clip | 53.5 s | 3 | **3.4/min** |
+
+**3.4/min is inside EXP-016's 5/min budget, while acquiring the target in all three
+episodes.** That is the first time any configuration of this branch has been under budget
+and acquiring at the same time.
+
+**This number must not be quoted as a result.** The 1800–2699 boundary was chosen *after
+looking at where the false tracks fell*, on this clip's own frames — in-sample, post-hoc,
+and exactly the kind of split that manufactures a good number from noise. What makes it
+worth recording rather than discarding is that it has an independent mechanism (background
+image motion, measured separately and 3–5× higher in that window) and that the mechanism
+corresponds to a signal **available on the aircraft from the IMU without looking at the
+video at all**. It is a hypothesis with a proposed test, not a measurement.
+
+### Reading
+
+Three clips have now been read with the same unchanged code, and they fail differently:
+O4 on its burned-in overlay, analog on depth discontinuity at the horizon, FIELD on host
+angular rate. **Only the third is a property of the flight rather than of the recording
+chain**, and it is the only one of the three that is both detectable without the video and
+plausibly fixable by gating rather than by a better detector.
+
+EXP-016's "do not build stage 2" stands — nothing here is a calibrated result, and the
+only under-budget number in this entry is in-sample. But its stated reason for stopping was
+that *the evidence base, not the algorithm, was the binding constraint*, and this entry is
+evidence that the two goggles clips were not representative of the domain the project
+actually targets.
+
+### Next
+
+1. **Label a FIELD episode.** This is now the cheapest high-value labelling in the project,
+   ahead of a second analog clip: FIELD is the target domain, it carries **83.5 s** of
+   believed-empty footage against 22–23 s on either SOFA clip, and every number above turns
+   into a real one the moment labels exist — z\* calibrated on this clip's own empty frames,
+   a true Pd per episode, and a false-alarm rate that is not an upper bound. Episode 3
+   (3140–3600, 15.4 s, ~18 px falling to ~6 px) is the most informative.
+2. **Test the angular-rate hypothesis out-of-sample**, which does not need labels: derive
+   background image motion per frame from `collect.pkl` alone, gate confirmations above a
+   threshold chosen on *one* clip, and read the false-alarm rate on another. If it holds,
+   it is an IMU gate on the aircraft, not an algorithm change.
+3. **Do not re-tune constants on FIELD** before either of the above. Every pixel constant
+   here is EXP-016's, scaled by 1032/1440 = 0.717, and that is what makes the three clips
+   comparable at all.
+
+### Artefacts (all gitignored)
+
+`runs/field/exp017_multiframe/`: `clipcfg.py`, `collect.pkl` (128 MB), `collect_fb.pkl`,
+`screen_fixed_frac.npy`, `verify_z20.pkl`, `verify_z6.pkl`, `overlay_exp017.mp4`
+(frames 1–3600 at z\* = 20), `screenfixed.log`, `collect.log`, `verify_z20.log`,
+`verify_z6.log`, `draw.log`.

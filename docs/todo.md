@@ -15,6 +15,34 @@ dates, not priorities.
 
 ## Open
 
+- [ ] 2026-09-23 — [data] **Label a FIELD episode with `/annotate` — now ahead of the second
+  analog clip.** EXP-017 ran EXP-016's motion test unchanged on
+  `data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4` and it **acquired the target
+  in all three PROVENANCE episodes** — 8 tracks sustained-co-located with EXP-010 GLAD
+  boxes, one holding 183 of 185 overlapping frames — which neither goggles clip managed.
+  None of it is a *result*, because FIELD has no ground truth: z\* was imported from the
+  analog clip rather than calibrated, "on target" means "near a box another detector drew",
+  and the false-alarm rate is an upper bound. Labels convert every one of those into a real
+  number. FIELD also carries **83.5 s** of believed-empty footage against 22–23 s on either
+  SOFA clip, which is the count EXP-016 said was the binding constraint. Start with
+  **episode 3 (frames 3140–3600, 15.4 s)**, where the target falls from ~18 px to ~6 px —
+  the most informative span in the clip. Episodes 1 (2–180) and 2 (1101–1553) next.
+  **Caveat carried from PROVENANCE:** the episode bounds come from where a detector fired,
+  so the gaps are *not* verified empty and labelling must judge them rather than assume.
+
+- [ ] 2026-09-23 — [algo] **Test the host-angular-rate false-alarm hypothesis out-of-sample.**
+  EXP-017's false alarms have no spatial structure (21/42/38% across the frame thirds) but
+  are concentrated almost entirely in time: **50 of 53 fall in frames 1800–2699**, the one
+  hard banking manoeuvre in the clip, where median background image motion is 5.4–7.8
+  px/frame against 1.1–3.3 elsewhere. The homography still fits there (residual 0.16–0.25
+  px); what breaks is raw motion against an 11 px KLT window. Excluding that window the rate
+  is **3.4/min, inside the 5/min budget, while still acquiring** — but that split was chosen
+  after seeing where the false tracks fell, on this clip's own frames, so **it is in-sample
+  and must not be quoted**. The test that would make it real needs no labels: derive
+  per-frame background motion from `collect.pkl`, pick a gate threshold on **one** clip, read
+  the false-alarm rate on **another**. If it holds it is an IMU gate on the aircraft, not an
+  algorithm change — hand the flight-side half to `deploy-agent`.
+
 ### Analog `catch 2`: a confirmed target passage
 
 - [ ] 2026-09-18 — [data] **Label `catch_2` frames ~510–585 with `/annotate`.** The drone closes from a speck to ~25 px against sky, and GLAD boxed it once (EXP-014). Until this is labelled, the 1-in-75 figure is eyeballed. Then try `--invert` on the passage as the cheap probe of the appearance prior.
@@ -31,6 +59,11 @@ dates, not priorities.
   so this comes before more O4 labelling. Pick a clip with a **long-range span against the
   horizon and one against ground** — EXP-016 found those two backgrounds behave completely
   differently (49% coverage against sky, 0% against terrain).
+  *(Reprioritised 2026-09-23 by EXP-017: **labelling a FIELD episode comes first.** FIELD is
+  the target domain, carries 83.5 s of believed-empty footage against this clip's 22 s, and
+  is the one clip where the motion test actually acquires. This item stays open — analog
+  remains the user's priority for deployment — but it is no longer the cheapest thing that
+  could change the motion branch's verdict.)*
 
 ### EXP-012: measure whether the O4 fixes actually work
 
@@ -172,6 +205,13 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-17 — [data] **Annotate the FIELD capture's three target episodes** — *now the critical path: EXP-011 exhausted what unlabelled footage can answer, and both surviving questions (the ground-clutter false-alarm rate, and recall on our own camera) are measurements.* — frames ~2–180, ~1101–1553 and ~3140–3600 of `captured_raw_20260616_040253_004.mp4`, roughly 1,100 frames. This is the cheapest real score available to the project: EXP-010 is already keyed at `data/processed/FIELD/images/test/`, so labels there turn **an existing JSONL into AP, precision and recall with no second inference pass**. It is also the only way to measure **recall** on our own camera, which EXP-010 leaves unmeasured and which is the number the edge budget actually needs. Two warnings: the episodes' bounds come from where the *detector* fired, so annotating only those frames would score a set chosen by the thing being scored — extend each episode outward until the target is genuinely absent. And **do not eyeball full frames**: a 14×11 px drone at frame 1350 was missed by eye and caught by the detector.
 
 ## Done
+
+- [x] 2026-09-23 — [algo] **Ran EXP-016's motion test unchanged on our own FIELD footage (EXP-017), and it acquires where the goggles clips did not.** User request. No constant re-tuned: EXP-016's `mf.py`/`collect.py`/`verify.py` run against a new `clipcfg.py`, every pixel parameter scaled by 1032/1440 = 0.717. Three defaults-preserving changes in the shared modules (`labels=None`, `hud=None`, `drone_ranges`); both SOFA clips re-import byte-identical, verified against the ledger's own frame counts.
+  - **It acquires in all three PROVENANCE episodes** at the imported z\* = 20: 97 confirmed tracks over 3600 frames, **8 sustained-co-located with EXP-010 GLAD boxes** (≥50% of overlapping frames, ≥10 frames), one holding **183 of 185**. On O4 the drone's peak z was 13.9 against a required z\* of 60; here a target track reaches **z = 111.8** and holds 262 frames.
+  - **The clip is genuinely easier for the flow stage**, which is most of the story: usable grid points **0.661** vs 0.489 (O4) and 0.389 (analog), FB failure **0.338** vs 0.461/0.492, masked **0.6%** vs 9.2%/18.2%. No HUD, no analog grain. Part of what EXP-016 measured as algorithm failure was a property of **goggles recordings**.
+  - **False alarms are concentrated in time, not space** — 50 of 53 in the single hard banking manoeuvre (frames 1800–2699), where background image motion is 5.4–7.8 px/frame against 1.1–3.3 elsewhere. New failure mode: **host angular rate**, unlike O4 (overlay) and analog (horizon depth). It is the only one of the three detectable from the IMU without the video.
+  - **Nothing here is a calibrated result and the entry says so first, before the numbers.** No labels ⇒ no Pd, no precision, no recall; z\* borrowed from the analog clip; "on target" means near a box another detector drew; the false-alarm rate is an upper bound; and the 3.4/min under-budget figure comes from an in-sample post-hoc split. **EXP-016's "do not build stage 2" stands.**
+  - Overlay video `runs/field/exp017_multiframe/overlay_exp017.mp4`, frames 1–3600 at z\* = 20. Two follow-ups filed: label a FIELD episode (now ahead of the second analog clip), and test the angular-rate gate out-of-sample.
 
 - [x] 2026-09-23 — [algo] **Stage 1 of the multi-frame motion plan: built it, ran it on both clips, and it does not pass (EXP-016).** Seed the top 200 `win_b5_e4` peaks per frame, then verify each over time by its motion relative to its own **25–120 px ring** — the 3–5 px parallax that swamps a whole-frame map is shared by the surroundings and cancels — with sequential confirmation (k_min 3, k_max 15 = the user's 0.5 s ceiling), the overlay veto, and a **speed cap derived in physical units** (0.6 m airframe, 30 m/s, doubled for closing ⇒ 3.33 × apparent size px/frame, camera-independent). z\* calibrated on empty frames only, two-fold, frozen per clip before any drone frame was scored. Analog `catch_2` carried equal weight to O4 `first_catch` throughout.
   - **Every pre-set pass bar fails.** O4: never confirms on the drone at the frozen z\* = 60 (bar: by frame 760), 0% coverage of 708–800 (bar: 50%), top-10 **0.24** (bar: ≥ 0.30). Analog: first on-drone confirmation **+76 frames** (bar: 30), **15%** span coverage (bar: 40%), at 2.7 false tracks/min.
