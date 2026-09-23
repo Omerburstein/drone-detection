@@ -2510,7 +2510,10 @@ ladder:
 | 30 | 17.8 | 5.1 | 2 | 1 |
 
 It cuts the false rate 5–8× and would reach the budget at z\* ≈ 25 — but the **on-drone
-confirmed tracks score a median 0.76 on the same test**, above the veto. O4's HUD is a
+confirmed tracks score a median 0.76 on the same test**, above the veto. **On analog the
+same measurement comes back 0.25 median, 0.68 max**, comfortably under it, and the veto
+costs no on-drone track at any z\*. The test is safe where there is a character grid and
+unsafe where there is not, which is the distinction to carry forward. O4's HUD is a
 digital overlay with no MAX7456 character grid, so "one character column away" is not a
 meaningful distance there and the test fires on scene texture. The missing veto is real,
 the available veto is not the one to use, and that is a prerequisite this experiment
