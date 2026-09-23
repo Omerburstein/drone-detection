@@ -106,6 +106,31 @@ lab). **NPS-Drones is not on this list** — fixed-wing targets.
 - `Javvanny/yolov8m_flying_objects_detection` — drones *and* birds, so it gives bird
   discrimination out of the box.
 
+## 2b. The target domain is our own footage
+
+Stated by the user, 2026-09-23: deployment video is not known exactly, but it will look
+like **our** captures, because the airframe that carries the camera is the one doing the
+catching. That settles a question the ledger kept running into from the side, and it
+re-orders everything below.
+
+- **Our clips are the benchmark of record.** ARD-MAV and ARD100 are a **pretraining corpus
+  and a harness check**, not the thing to optimise. EXP-004's 0.99/0.89 on ARD-MAV says
+  our evaluation code is right; it does not say a detector will work on an intercept.
+- **The published assumptions do not hold here, and each gap is measured.** Single-plane
+  compensation vs 3–5 px parallax from low fast flight over close ground (EXP-012b);
+  bright targets vs our 98.5% dark ones (EXP-012); clean video vs burned-in OSD and our
+  own propellers (EXP-014, EXP-016); 1080p pixel constants vs analog's 960×720 at 120°.
+- **So labelled footage from our cameras is the critical path**, ahead of any architecture
+  choice. A learned model trained on public data alone inherits the wrong priors; the
+  same model fine-tuned on our labels does not.
+- **Analog first.** It is the link the user cares most about and the harder case: 8 px per
+  degree, so a 0.6 m target is 10 px at ~27 m, and grain makes tracking fail twice as
+  often as on O4 (EXP-016).
+- **What this does not license:** our clips are six O4 and nine analog, two of them
+  labelled, all from one site. Tuning a threshold on them and reporting it as a result is
+  the in-sample trap EXP-016 called on itself. Diversity of background, range and light is
+  now a capture requirement, not a nice-to-have.
+
 ## 3. Plan
 
 1. **Feasibility check (runs on this laptop).** Pull `YOLOv8s_EO_Drone_Detection` and
