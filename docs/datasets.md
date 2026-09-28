@@ -71,7 +71,7 @@ set. *(Exact container unverified — it is only visible post-DUA.)*
 | SynDroneVision / SimD3 | ✅ | ✅ | ✅ | Synthetic |
 | **FIELD** (ours) | ✅ | ✅ | ✅ | **Our own capture — no labels, so no score** |
 | **SOFA-O4** (ours) | ✅ | ✅ | ✅ | **Our own intercept trials — `first_catch` hand-labelled (2026-09-18); other five unlabelled** |
-| **SOFA-ANALOG** (ours) | ✅ | ✅ | ✅ | **Same trials, analog FPV link — `catch_2` hand-labelled (2026-09-22); other eight unlabelled** |
+| **SOFA-ANALOG** (ours) | ✅ | ✅ | ✅ | **Same trials, analog FPV link — `catch_2` and `catch_4` hand-labelled; other seven unlabelled** |
 
 ---
 
@@ -218,11 +218,14 @@ EXP-013 in [experiments.md](experiments.md). **There is no processed copy.** Run
 raw mp4 uncropped, so labels are in raw-frame pixels. Only the outputs live under
 `data/processed/SOFA-ANALOG/`.
 
-## Labels — `catch_2` only
+## Labels — `catch_2` and `catch_4`
 
-Labelled 2026-09-22 in the annotator. Labels are at `data/processed/SOFA-ANALOG/labels/test/`,
-judged frames in `data/processed/SOFA-ANALOG/verified.jsonl`, and the session in
-`data/processed/SOFA-ANALOG/annotations/catch_2.json`.
+Labelled in the annotator: `catch_2` on 2026-09-22, `catch_4` on 2026-09-28. Labels are at
+`data/processed/SOFA-ANALOG/labels/test/`, judged frames in
+`data/processed/SOFA-ANALOG/verified.jsonl` (both clips, keyed by stem), and the sessions in
+`data/processed/SOFA-ANALOG/annotations/<stem>.json`.
+
+### `catch_2`
 
 | | |
 | --- | --- |
@@ -233,7 +236,24 @@ judged frames in `data/processed/SOFA-ANALOG/verified.jsonl`, and the session in
 | Proposed by the follower | **159**. 75 of them scored below 0.8, and 3 below 0.6 (lowest are frames 547, 720, 649 at 0.55–0.60) |
 | Box size (longest side) | median **37 px**, from 18 to 80 px |
 
-The follower's boxes were reviewed at playback speed only. The mp4 is long-GOP, so labelling
+### `catch_4`
+
+| | |
+| --- | --- |
+| Frames judged | **326 / 326**, the whole clip |
+| Boxes | **82**, in three spans: 209–234, 236–259, 264–295 |
+| Confirmed empty | **244**, frames 1–208 before the drone appears, 296–326 after, plus single-frame gaps at 235 and 260–263 |
+| Placed by hand | **34** boxes (and 5 hand-marked empties) |
+| Proposed by the follower | **48**, but **40 of them scored below 0.8 and 19 below 0.6** — much worse than `catch_2`. Lowest are frames 246, 222, 251, 288, 257 at 0.46–0.49 |
+| Box size (longest side) | median **66 px**, from 40 to 163 px |
+
+**`catch_4`'s tracked boxes are the weakest of the three clips labelled so far** — 40% of them
+below 0.6, against 2% on `catch_2`. The target grows from 40 to 163 px across 87 frames, and
+the follower tracks by correlation at a fixed box size, so a target that changes scale this
+fast is exactly what it handles worst. Treat these boxes as provisional until someone steps
+through 209–295 frame by frame.
+
+The follower's boxes were reviewed at playback speed only. The mp4s are long-GOP, so labelling
 was done by playing through, not by seeking.
 
 ---
