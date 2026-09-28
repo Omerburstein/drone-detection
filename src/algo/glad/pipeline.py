@@ -103,6 +103,9 @@ def search_region(x: float, y: float, half: int, width: int,
     return int(region_x), int(region_y), int(region_w), int(region_h)
 
 
+GLAD_CONFIDENCE = 1.0  # GLAD emits no score; see StepResult.as_detections
+
+
 @dataclass(frozen=True)
 class StepResult:
     """One frame's outcome: the box if there was one, and the branch that found it."""

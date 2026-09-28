@@ -20,7 +20,7 @@ import numpy as np
 
 from ..algo.deployment import PolicyChoice
 from ..algo.detections import Detections
-from .overlay import INSET_MARGIN, fit_zoom
+from .overlay import INSET_MARGIN, centre_window, fit_zoom
 
 WINDOW = "drone-detection - live"
 
@@ -111,8 +111,7 @@ def _draw_inset(canvas: np.ndarray, source: np.ndarray, dets: Detections) -> Non
 
     box = dets.boxes[0]
     cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
-    x0 = int(min(max(cx - span / 2, 0), width - span))
-    y0 = int(min(max(cy - span / 2, 0), height - span))
+    x0, y0 = centre_window(cx, cy, span, width, height)
     crop = source[y0:y0 + span, x0:x0 + span]
     if crop.size == 0:
         return

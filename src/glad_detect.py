@@ -72,7 +72,7 @@ import cv2
 
 from .errors import UsageError
 from .algo.glad.motion import PROFILES
-from .algo.glad.pipeline import GladPipeline
+from .algo.glad.pipeline import GLAD_CONFIDENCE, GladPipeline
 from .algo.glad.scaling import NATIVE, ScaledPipeline, parse_scale
 from .algo.glad.vendor import GLAD_DIR
 from .algo.glad.yolo import PAD_STYLES
@@ -81,11 +81,10 @@ from .data.hud_mask import load_mask
 from .data.datasets import SPECS, spec_for
 from .data.sources import resolve_video
 from .algo.sampling import BURST, EVERY, NTH, Schedule, build_schedule
-from .output.recording import RunRecorder
+from .output.recording import RunRecorder, print_branches
 
 # GLAD emits no confidence -- see `StepResult.as_detections`. Every box is
 # recorded at the same value, which is a single operating point, not a ranking.
-GLAD_CONFIDENCE = 1.0
 PROGRESS_EVERY = 250
 
 
@@ -278,18 +277,6 @@ def run_video(pipeline: GladPipeline | ScaledPipeline, video: Path, stem: str,
     finally:
         capture.release()
     return decoded, processed
-
-
-def print_branches(branches: Counter) -> None:
-    """Report which branch produced each frame's outcome.
-
-    This is the paper's ablation table measured on our own run: how much of the
-    recall is appearance and how much is motion.
-    """
-    total = max(sum(branches.values()), 1)
-    print("\nBranch that handled each frame:")
-    for branch, count in branches.most_common():
-        print(f"  {branch:<14} {count:>7}  {100 * count / total:5.1f}%")
 
 
 def print_duty_cycle(decoded: int, processed: int, schedule: Schedule) -> None:

@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 
 from src.data import live
-from src.data.live import HdmiCapture, Replay, SourceError, open_source
+from src.data.live import HdmiCapture, Replay, SourceError, open_feed
 
 WIDTH, HEIGHT = 64, 48
 
@@ -222,15 +222,15 @@ class TestOpenSource:
     """One flag serves the capture card that will exist and the file that does."""
 
     def test_a_digit_is_a_capture_device(self):
-        assert isinstance(open_source("0"), HdmiCapture)
-        assert open_source("2").index == 2
+        assert isinstance(open_feed("0"), HdmiCapture)
+        assert open_feed("2").index == 2
 
     def test_anything_else_is_a_recording(self):
-        source = open_source("data/raw/ARD-MAV/videos/phantom05.mp4")
+        source = open_feed("data/raw/ARD-MAV/videos/phantom05.mp4")
         assert isinstance(source, Replay)
         assert source.path.name == "phantom05.mp4"
 
     def test_realtime_and_loop_reach_the_replay(self):
-        source = open_source("f.mp4", realtime=False, loop=True)
+        source = open_feed("f.mp4", realtime=False, loop=True)
         assert source.realtime is False
         assert source.loop is True

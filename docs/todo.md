@@ -31,7 +31,7 @@ dates, not priorities.
   - [x] S5 — `UsageError`: library modules stop calling `sys.exit`, so they are callable
         from a notebook as this file promises
   - [x] S6 — split `eval/metrics.py` into `matching.py` + `metrics.py`
-  - [ ] S7 — `print_branches`/`GLAD_CONFIDENCE` shared; `live.open_source` → `open_feed`
+  - [x] S7 — `print_branches`/`GLAD_CONFIDENCE` shared; `live.open_source` → `open_feed`
   - [ ] S8 — `seed_track.py` split into a tracking library + a thin CLI. **Gated:** five
         open labelling items run `/annotate` through these files. Ask before starting.
 

@@ -177,6 +177,20 @@ def _draw_frame_boxes(canvas: np.ndarray, frame: EvalFrame, verdict: Verdict,
                   _pred_label(i, frame, verdict) if labels else "", below=True)
 
 
+def centre_window(cx: float, cy: float, span: int,
+                  width: int, height: int) -> tuple[int, int]:
+    """Top-left of a `span`-sided square centred on `(cx, cy)`, kept in frame.
+
+    The clamp is the whole content: a target near an edge would otherwise put
+    the window partly outside the picture, and the crop would come back the
+    wrong size or empty. Shared with the live view's inset, which magnifies a
+    different thing for a different reason but needs the same square.
+    """
+    x0 = int(min(max(cx - span / 2, 0), width - span))
+    y0 = int(min(max(cy - span / 2, 0), height - span))
+    return x0, y0
+
+
 def crop_window(frame: EvalFrame, shape: tuple[int, int],
                 span: int) -> tuple[int, int, int]:
     """Square source window for the inset: `(x0, y0, span)`, clamped to the frame.
@@ -194,8 +208,7 @@ def crop_window(frame: EvalFrame, shape: tuple[int, int],
         cx, cy = float(centres[:, 0].mean()), float(centres[:, 1].mean())
     else:
         cx, cy = width / 2, height / 2
-    x0 = int(min(max(cx - span / 2, 0), width - span))
-    y0 = int(min(max(cy - span / 2, 0), height - span))
+    x0, y0 = centre_window(cx, cy, span, width, height)
     return x0, y0, span
 
 

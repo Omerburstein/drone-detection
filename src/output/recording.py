@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Any, Self
 
@@ -12,6 +13,21 @@ from ..algo.detections import Detections
 BBOX_DECIMALS = 1  # sub-pixel precision is noise at these target sizes
 CONF_DECIMALS = 4
 MIN_ELAPSED = 1e-9  # seconds; floor for rate division on a run too short to time
+
+
+def print_branches(branches: Counter) -> None:
+    """Report which branch produced each processed frame.
+
+    This is the paper's ablation table measured on our own run: how much of the
+    recall is appearance and how much is motion. Here rather than in a CLI
+    because `src.glad_detect` and `src.live_detect` both print it, and they used
+    to hold byte-identical copies -- a drift in rounding or column width would
+    have desynced the ledger's tables from what the tools actually print.
+    """
+    total = max(sum(branches.values()), 1)
+    print("\nBranch that handled each frame:")
+    for branch, count in branches.most_common():
+        print(f"  {branch:<14} {count:>7}  {100 * count / total:5.1f}%")
 
 
 class RunRecorder:

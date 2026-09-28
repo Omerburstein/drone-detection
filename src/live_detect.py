@@ -52,15 +52,16 @@ from pathlib import Path
 from .errors import UsageError
 from .algo.deployment import (BURST_PAIRS, FULL_RATE, HALF_RATE, PolicyChoice,
                               choose_policy)
-from .algo.glad.pipeline import GladPipeline
+from .algo.glad.pipeline import GLAD_CONFIDENCE, GladPipeline
 from .algo.glad.vendor import GLAD_DIR
 from .algo.glad.yolo import PAD_STYLES
-from .data.live import NATIVE_HEIGHT, NATIVE_WIDTH, SourceError, open_source
+from .data.live import (NATIVE_HEIGHT, NATIVE_WIDTH, PairSource, SourceError,
+                        open_feed)
 from .algo.sampling import Bursts, EveryNth, Schedule
 from .output import live_view
+from .output.recording import print_branches
 from .output.live_view import LiveStatus
 
-GLAD_CONFIDENCE = 1.0  # GLAD emits no score; see StepResult.as_detections
 WARMUP_PAIRS = 3  # discarded: the first torch call is far slower than the rest
 BENCHMARK_PAIRS = 6  # timed, after the warm-up
 
@@ -112,7 +113,7 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def measure_throughput(pipeline: GladPipeline, source) -> float:
+def measure_throughput(pipeline: GladPipeline, source: PairSource) -> float:
     """Sustained frames per second, after discarding the warm-up passes.
 
     Timed over feed pairs rather than a file read on demand, so it includes the
@@ -162,7 +163,7 @@ def forced_policy(name: str, measured_fps: float, source_fps: float) -> PolicyCh
                         measured_fps, source_fps, required)
 
 
-def report_policy(policy: PolicyChoice, source, label: str) -> None:
+def report_policy(policy: PolicyChoice, source: PairSource, label: str) -> None:
     """Print the choice and its consequences before anything is displayed."""
     width, height = source.frame_size
     print(f"\nSource: {label} -- {width}x{height} at {policy.source_fps:.0f} fps")
@@ -185,7 +186,7 @@ def report_policy(policy: PolicyChoice, source, label: str) -> None:
                   f"{policy.closing_distance(speed):.0f} m in that time")
 
 
-def run_loop(pipeline: GladPipeline, source, policy: PolicyChoice,
+def run_loop(pipeline: GladPipeline, source: PairSource, policy: PolicyChoice,
              max_width: int) -> Counter:
     """Drive the pipeline from the feed and draw every processed frame."""
     branches: Counter = Counter()
@@ -234,14 +235,6 @@ def run_loop(pipeline: GladPipeline, source, policy: PolicyChoice,
             return branches
 
 
-def print_branches(branches: Counter) -> None:
-    """Which branch produced each processed frame, as `src.glad_detect` reports."""
-    total = max(sum(branches.values()), 1)
-    print("\nBranch that handled each frame:")
-    for branch, count in branches.most_common():
-        print(f"  {branch:<14} {count:>7}  {100 * count / total:5.1f}%")
-
-
 def main(argv: list[str] | None = None) -> None:
     """Open the feed, choose a policy, and show what the detector finds.
 
@@ -273,7 +266,7 @@ def _run(argv: list[str] | None) -> None:
 
     branches: Counter = Counter()
     try:
-        with open_source(args.source, realtime=not args.no_realtime,
+        with open_feed(args.source, realtime=not args.no_realtime,
                          loop=args.loop, width=args.width,
                          height=args.height) as source:
             source_fps = args.source_fps or source.source_fps

@@ -131,11 +131,15 @@ class _PairBuffer:
             return self._count
 
 
-class _ThreadedSource:
+class _ThreadedSource(PairSource):
     """Shared machinery: a producer thread feeding a `_PairBuffer`.
 
     Subclasses supply `_open`, which returns the `VideoCapture` and sets the
     geometry, and `_pace`, which decides how fast to read.
+
+    Declares `PairSource` rather than merely satisfying it: the protocol was
+    written for exactly this and nothing claimed it, so a subclass that dropped
+    `pair` would have failed at the call site instead of the definition.
     """
 
     def __init__(self) -> None:
@@ -359,7 +363,7 @@ class Replay(_ThreadedSource):
             self._pace()
 
 
-def open_source(spec: str, realtime: bool = True, loop: bool = False,
+def open_feed(spec: str, realtime: bool = True, loop: bool = False,
                 width: int = NATIVE_WIDTH,
                 height: int = NATIVE_HEIGHT) -> _ThreadedSource:
     """Build the feed named by `--source`: a device index, or a path to footage.

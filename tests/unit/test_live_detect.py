@@ -1,9 +1,9 @@
 """Unit tests for `src.live_detect`'s reporting.
 
-`live_detect` is the only detection CLI with no test at all, and its
-`print_branches` is byte-identical to `glad_detect`'s -- its own docstring says
-it reports "as `src.glad_detect` reports". That duplication is about to be
-collapsed into one shared function, so these tests pin what both currently print.
+`live_detect` is the only detection CLI with no test at all. Its
+`print_branches` used to be a byte-identical copy of `glad_detect`'s -- its
+docstring even said it reported "as `src.glad_detect` reports". Both now import
+one function from `src.output.recording`, and these tests pin what it prints.
 
 The branch mix is not decoration. It is the paper's ablation measured on our own
 run: how much of the recall is appearance and how much is motion. If the shared
@@ -22,6 +22,8 @@ from collections import Counter
 import pytest
 
 from src import glad_detect, live_detect
+from src.algo.glad import pipeline
+from src.output import recording
 
 
 @pytest.fixture(params=["live_detect", "glad_detect"])
@@ -58,22 +60,20 @@ class TestPrintBranches:
         print_branches(Counter())
         assert "Branch that handled each frame:" in capsys.readouterr().out
 
-    def test_the_two_clis_print_identical_tables(self, capsys):
-        """The reason the shared version is safe: they already agree exactly."""
-        branches = Counter({"global mod": 7, "track": 3, "global miss": 2})
-
-        live_detect.print_branches(branches)
-        from_live = capsys.readouterr().out
-        glad_detect.print_branches(branches)
-        from_glad = capsys.readouterr().out
-
-        assert from_live == from_glad
+    def test_both_clis_use_one_function(self):
+        """Stronger than comparing their output: there is only one function now,
+        so the two tables cannot drift apart at all."""
+        assert live_detect.print_branches is glad_detect.print_branches
+        assert live_detect.print_branches is recording.print_branches
 
 
 class TestGladConfidence:
 
-    def test_both_clis_agree_on_the_placeholder_score(self):
+    def test_both_clis_take_the_constant_from_the_pipeline(self):
         """GLAD emits no score, so both stamp the same constant into the JSONL.
-        If these drifted, two runs of the same pipeline would record different
-        confidences and `--conf` filtering would mean different things."""
-        assert live_detect.GLAD_CONFIDENCE == glad_detect.GLAD_CONFIDENCE == 1.0
+        It now lives beside `StepResult.as_detections`, the method that consumes
+        it and whose docstring explains why it exists, rather than being declared
+        twice -- two runs of the same pipeline recording different confidences
+        would make `--conf` filtering mean different things."""
+        assert (live_detect.GLAD_CONFIDENCE is glad_detect.GLAD_CONFIDENCE
+                is pipeline.GLAD_CONFIDENCE == 1.0)
