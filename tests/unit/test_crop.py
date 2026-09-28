@@ -13,6 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from src.errors import UsageError
 from src.data.crop import Crop
 
 O4 = "540,0,1440,1080"  # the real one: a 2520x1080 goggles capture
@@ -107,12 +108,12 @@ class TestResolveVideo:
     def test_a_missing_stem_exits_with_what_is_there(self, tmp_path):
         from src.data.sources import resolve_video
         (tmp_path / "first_catch.avi").write_bytes(b"")
-        with pytest.raises(SystemExit) as excinfo:
+        with pytest.raises(UsageError) as excinfo:
             resolve_video(tmp_path, "second_catch")
         assert "second_catch" in str(excinfo.value)
 
     def test_does_not_match_a_non_video_suffix(self, tmp_path):
         from src.data.sources import resolve_video
         (tmp_path / "clip.txt").write_bytes(b"")
-        with pytest.raises(SystemExit):
+        with pytest.raises(UsageError):
             resolve_video(tmp_path, "clip")

@@ -9,17 +9,17 @@ carry, so `data/processed/SOFA-O4/videos/` holds `.avi`. A stem that exists in
 both containers must keep resolving to the `.mp4`, or ARD-MAV and ARD100 silently
 start reading a different file than the one every recorded run used.
 
-**The exact exit messages.** These are characterization tests, written ahead of
-the change that turns these `sys.exit` calls into a raised `UsageError` so the
-module is callable from a notebook. They assert today's behaviour -- a
-`SystemExit` carrying a particular string -- so that change has to prove it
-preserved what the user sees rather than merely still passing.
+**The exact messages.** These began as characterization tests against the
+`sys.exit` calls this module used to make, written so the change to a raised
+`UsageError` had to prove it preserved what the user sees. The message
+assertions are unchanged from that pass; only the exception type moved.
 """
 
 from __future__ import annotations
 
 import pytest
 
+from src.errors import UsageError
 from src.data.sources import IMAGES, VIDEO, resolve_sources, resolve_video
 
 
@@ -56,27 +56,27 @@ class TestResolveVideo:
 
     def test_ignores_a_matching_stem_that_is_not_a_video(self, tmp_path):
         touch(tmp_path, "clip.txt", "clip.json")
-        with pytest.raises(SystemExit):
+        with pytest.raises(UsageError):
             resolve_video(tmp_path, "clip")
 
-    def test_exits_listing_what_it_did_find(self, tmp_path):
+    def test_raises_listing_what_it_did_find(self, tmp_path):
         """The listing is the whole value of the message: the cause is nearly
         always a typo in --video-names, and the fix is visible in the list."""
         touch(tmp_path, "clip.txt")
-        with pytest.raises(SystemExit) as caught:
+        with pytest.raises(UsageError) as caught:
             resolve_video(tmp_path, "clip")
         message = str(caught.value)
         assert "No video named 'clip'" in message
         assert "found: clip.txt" in message
 
-    def test_exits_saying_so_when_the_directory_is_missing(self, tmp_path):
-        with pytest.raises(SystemExit) as caught:
+    def test_raises_saying_so_when_the_directory_is_missing(self, tmp_path):
+        with pytest.raises(UsageError) as caught:
             resolve_video(tmp_path / "nope", "clip")
         assert "directory empty or missing" in str(caught.value)
 
-    def test_exits_saying_so_when_the_directory_holds_nothing_matching(self, tmp_path):
+    def test_raises_saying_so_when_the_directory_holds_nothing_matching(self, tmp_path):
         touch(tmp_path, "other.mp4")
-        with pytest.raises(SystemExit) as caught:
+        with pytest.raises(UsageError) as caught:
             resolve_video(tmp_path, "clip")
         assert "directory empty or missing" in str(caught.value)
 
@@ -118,15 +118,15 @@ class TestResolveSources:
         _kind, found = resolve_sources(tmp_path)
         assert [p.name for p in found] == ["frame.jpg"]
 
-    def test_exits_on_a_directory_with_no_images(self, tmp_path):
+    def test_raises_on_a_directory_with_no_images(self, tmp_path):
         touch(tmp_path, "labels.txt")
-        with pytest.raises(SystemExit) as caught:
+        with pytest.raises(UsageError) as caught:
             resolve_sources(tmp_path)
         assert "No images found under" in str(caught.value)
 
-    def test_exits_on_an_unrecognised_suffix(self, tmp_path):
+    def test_raises_on_an_unrecognised_suffix(self, tmp_path):
         path = tmp_path / "notes.pdf"
         path.write_bytes(b"")
-        with pytest.raises(SystemExit) as caught:
+        with pytest.raises(UsageError) as caught:
             resolve_sources(path)
         assert "Unrecognised source type" in str(caught.value)

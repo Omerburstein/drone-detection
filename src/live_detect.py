@@ -49,6 +49,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
+from .errors import UsageError
 from .algo.deployment import (BURST_PAIRS, FULL_RATE, HALF_RATE, PolicyChoice,
                               choose_policy)
 from .algo.glad.pipeline import GladPipeline
@@ -241,9 +242,21 @@ def print_branches(branches: Counter) -> None:
         print(f"  {branch:<14} {count:>7}  {100 * count / total:5.1f}%")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    """Open the feed, choose a policy, and show what the detector finds.
+
+    Wraps the run so a `UsageError` raised below becomes the same one-line
+    message and exit code it always was, rather than a traceback.
+    """
+    try:
+        _run(argv)
+    except UsageError as exc:
+        sys.exit(str(exc))
+
+
+def _run(argv: list[str] | None) -> None:
     """Open the feed, choose a policy, and show what the detector finds."""
-    args = build_parser().parse_args()
+    args = build_parser().parse_args(argv)
 
     # Checked before the checkpoints load, so a headless OpenCV is reported in a
     # second rather than after a 40-second model load.

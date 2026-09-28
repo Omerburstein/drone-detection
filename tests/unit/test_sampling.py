@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.errors import UsageError
 from src.algo.sampling import BURST, EVERY, NTH, Bursts, EveryNth, Schedule, build_schedule
 
 
@@ -90,11 +91,11 @@ class TestBursts:
     def test_rejects_a_burst_too_short_to_detect(self):
         # A one-frame burst is all cold starts: `GladPipeline.step` returns an
         # empty result for the frame after a reset, so it could never detect.
-        with pytest.raises(SystemExit):
+        with pytest.raises(UsageError):
             Bursts(1, 30)
 
     def test_rejects_bursts_that_run_together(self):
-        with pytest.raises(SystemExit):
+        with pytest.raises(UsageError):
             Bursts(5, 5)
 
 
@@ -113,9 +114,9 @@ class TestBuildSchedule:
         assert build_schedule(BURST, 3, 2, 60) == Bursts(2, 60)
 
     def test_rejects_an_unknown_mode(self):
-        with pytest.raises(SystemExit):
+        with pytest.raises(UsageError):
             build_schedule("stride", 2, 2, 60)
 
     def test_rejects_a_nonsense_rate(self):
-        with pytest.raises(SystemExit):
+        with pytest.raises(UsageError):
             build_schedule(NTH, 0, 2, 60)

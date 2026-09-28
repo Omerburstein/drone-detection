@@ -27,8 +27,9 @@ Frame indices are **one-based**, matching the label numbering that
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
+
+from ..errors import UsageError
 
 EVERY = "every"
 NTH = "nth"
@@ -117,10 +118,10 @@ class Bursts(Schedule):
     def __post_init__(self) -> None:
         """Reject a schedule that is not actually duty-cycled."""
         if self.length < 2:
-            sys.exit("--burst-length must be at least 2: the first frame after a "
+            raise UsageError("--burst-length must be at least 2: the first frame after a "
                      "reset has nothing to difference against and can never detect.")
         if self.period <= self.length:
-            sys.exit(f"--burst-period ({self.period}) must exceed --burst-length "
+            raise UsageError(f"--burst-period ({self.period}) must exceed --burst-length "
                      f"({self.length}), otherwise the bursts run together and the "
                      f"schedule is just every frame.")
 
@@ -154,8 +155,8 @@ def build_schedule(mode: str, nth: int, burst_length: int, burst_period: int) ->
         return Schedule()
     if mode == NTH:
         if nth < 1:
-            sys.exit("--sample-n must be at least 1.")
+            raise UsageError("--sample-n must be at least 1.")
         return EveryNth(nth)
     if mode == BURST:
         return Bursts(burst_length, burst_period)
-    sys.exit(f"Unknown --sample {mode!r}. Known: {EVERY}, {NTH}, {BURST}")
+    raise UsageError(f"Unknown --sample {mode!r}. Known: {EVERY}, {NTH}, {BURST}")

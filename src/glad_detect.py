@@ -70,6 +70,7 @@ from pathlib import Path
 
 import cv2
 
+from .errors import UsageError
 from .algo.glad.motion import PROFILES
 from .algo.glad.pipeline import GladPipeline
 from .algo.glad.scaling import NATIVE, ScaledPipeline, parse_scale
@@ -303,9 +304,21 @@ def print_duty_cycle(decoded: int, processed: int, schedule: Schedule) -> None:
     print(f"  {processed}/{decoded} frames processed ({share:.2f}% duty cycle)")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    """Load the pipeline once and run it over every video in the split.
+
+    Wraps the run so a `UsageError` raised below becomes the same one-line
+    message and exit code it always was, rather than a traceback.
+    """
+    try:
+        _run(argv)
+    except UsageError as exc:
+        sys.exit(str(exc))
+
+
+def _run(argv: list[str] | None) -> None:
     """Load the pipeline once and run it over every video in the split."""
-    args = build_parser().parse_args()
+    args = build_parser().parse_args(argv)
     spec = spec_for(args.dataset)
     args.videos = args.videos or spec.videos_dir
     args.labels = args.labels or spec.out / "labels" / args.split

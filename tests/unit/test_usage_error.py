@@ -20,6 +20,8 @@ import pytest
 
 from src import alarm_eval, cross_eval
 from src.errors import UsageError
+from src.algo.sampling import build_schedule
+from src.data.sources import resolve_sources
 from src.eval.conditions import load_conditions
 from src.eval.labels import load_label_file
 from src.eval.tables import parse_edges
@@ -47,6 +49,23 @@ class TestLibrariesRaiseRatherThanExit:
     def test_edges_on_a_non_number(self):
         with pytest.raises(UsageError, match="comma-separated numbers"):
             parse_edges("0,eight,16")
+
+    def test_sources_on_an_unrecognised_suffix(self, tmp_path):
+        path = tmp_path / "notes.pdf"
+        path.write_bytes(b"")
+        with pytest.raises(UsageError, match="Unrecognised source type"):
+            resolve_sources(path)
+
+    def test_sampling_on_an_unknown_mode(self):
+        with pytest.raises(UsageError, match="Unknown --sample"):
+            build_schedule("sideways", 2, 2, 30)
+
+    def test_sampling_on_a_burst_too_short_to_difference(self):
+        """Two frames is the floor: the motion branches difference the current
+        frame against the previous one, so a burst of one has nothing to
+        difference against."""
+        with pytest.raises(UsageError, match="at least 2"):
+            build_schedule("burst", 2, 1, 30)
 
     def test_the_error_is_not_a_systemexit(self, tmp_path):
         """SystemExit inherits from BaseException, so a bare `except Exception`

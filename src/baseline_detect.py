@@ -28,9 +28,11 @@ Examples
 from __future__ import annotations
 
 import argparse
+import sys
 from contextlib import closing
 from pathlib import Path
 
+from .errors import UsageError
 from .algo.config import InferenceConfig
 from .algo.detector import detect_frame, load_model
 from .data.frames import FrameSource, open_source
@@ -84,9 +86,21 @@ def run(source: FrameSource, sink: AnnotationSink, recorder: RunRecorder,
             recorder.print_progress(frame.progress_label)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    """Parse arguments, run the detector over the source, and report.
+
+    Wraps the run so a `UsageError` raised below becomes the same one-line
+    message and exit code it always was, rather than a traceback.
+    """
+    try:
+        _run(argv)
+    except UsageError as exc:
+        sys.exit(str(exc))
+
+
+def _run(argv: list[str] | None) -> None:
     """Parse arguments, run the detector over the source, and report."""
-    args = build_parser().parse_args()
+    args = build_parser().parse_args(argv)
 
     kind, paths = resolve_sources(args.source)
     args.out.mkdir(parents=True, exist_ok=True)
