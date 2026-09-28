@@ -44,46 +44,23 @@ This machine is **CPU-only**: i7-1255U, 16 GB RAM, Intel Iris Xe, no CUDA
 
 ## Architecture
 
-The `src` package splits along the same data/model boundary the two agents own,
-so dataset work and model work do not collide:
+The `src` package splits along the same data/model boundary the agents own, so
+dataset work and model work do not collide. Four packages, each owning one decision:
 
 ```
-src/data/     frames.py     FrameSource -> Frame; video decode, striding, budgets
-              sources.py    classify --source as video or images; resolve_video by stem
-              crop.py       Crop; the picture region of a frame that is not all picture
-              seed_track.py CLI: one hand-placed box -> a labelled segment
-              annotate.py   CLI: the annotation window -- draw, correct, box follows
-              annotation.py per-frame verdicts, how they spread, save/resume/export
-              box_edit.py   grabbing, dragging and zooming a box, in frame pixels
-              hud_mask.py   CLI: where a burned-in overlay lives, as a mask
-src/algo/     config.py     InferenceConfig
-              masking.py    rejecting boxes that landed on a burned-in overlay
-              glad/motion.py  MOD2 ported so its absolute-pixel constants can move
-              detector.py   load_model, detect_frame, detect_tiled
-              tiling.py     tile_origins, crop_grid, merge_boxes
-              detections.py Detections
-src/output/   recording.py  RunRecorder (JSONL + counters)
-              annotate.py   AnnotationSink -> VideoSink / ImageDirSink / NullSink
-              video.py      LazyVideoWriter: an mp4 sized by its first frame
-              overlay.py    ground truth + prediction on one frame, coloured by outcome
-              contact.py    many detections cropped onto one sheet, grouped by branch
-src/eval/     labels.py     EvalFrame; ground truth paired with recorded preds
-              metrics.py    matching, AP, the Metrics record
-              conditions.py Axis; grouping frames by capture conditions
-              report.py     the printed metric block
-              results.py    the append-only results log (settings + metrics)
-              records.py    the per-object dump: one row per tp / fp / fn
-              curves.py     binning that dump into precision/recall vs size
-              crosscut.py   that dump cut by size *and* condition at once
-              alarms.py     false alarms binned by distance from the nearest target
-src/baseline_detect.py      CLI: inference — parser, run loop, wiring
-src/evaluate.py             CLI: scoring a recorded run against labels
-src/plot_eval.py            CLI: precision-against-size figure from a dump
-src/cross_eval.py           CLI: Pd and false alarms per (size x condition) cell
-src/alarm_eval.py           CLI: false alarms by distance from the nearest drone
-src/render_video.py         CLI: a scored run drawn back onto its source video
-src/crops.py                CLI: every detection cropped onto one contact sheet
+src/data/    getting pixels and labels in: source classification, video decode and
+             striding, crops, HUD masks, the annotation tools, dataset preparation
+src/algo/    the detection path: configuration, tiling, masking, duty-cycle
+             schedules, and `glad/` -- the ported GLAD pipeline and its motion module
+src/output/  everything a run emits: the JSONL record, annotated video and stills,
+             the scored overlay, the contact sheet, the live window
+src/eval/    scoring a recorded run against labels, and every cut taken from it:
+             matching, AP, the per-object dump, size curves, cross-cuts, alarms
 ```
+
+CLI entry points are the top-level `src/*.py` modules, one reference page each under
+`docs/`. Run `py -3.13 -m src.<name> --help` for the current parameters -- that, and
+the doc, rather than a file list here, which goes stale.
 
 **`src/data/` is source code, not a dataset.** The gitignore rules for `data/`,
 `weights/` and `runs/` are anchored with a leading slash for exactly this reason —
