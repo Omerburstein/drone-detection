@@ -31,6 +31,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from .errors import UsageError
 from .eval.crosscut import (Cell, SIZE_EDGES, cell_rows, cross_cut, pooled,
                             select)
 from .eval.curves import load_dump
@@ -100,6 +101,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Print the cross-cut for every dump given, and optionally write it out.
+
+    Wraps the run so a `UsageError` raised anywhere below -- including inside
+    `parse_args`, where the `--edges` parser runs -- becomes the same one-line
+    message and exit code it always was, rather than a traceback.
+    """
+    try:
+        _run(argv)
+    except UsageError as exc:
+        sys.exit(str(exc))
+
+
+def _run(argv: list[str] | None) -> None:
     """Print the cross-cut for every dump given, and optionally write it out."""
     args = build_parser().parse_args(argv)
 

@@ -17,10 +17,10 @@ sequence).
 from __future__ import annotations
 
 import json
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..errors import UsageError
 from .labels import EvalFrame
 
 UNKNOWN = "uncategorised"
@@ -68,10 +68,10 @@ def _axis_from_spec(name: str, spec: dict) -> Axis:
     """Build one axis from its `conditions.json` entry."""
     labels = spec.get("labels")
     if not isinstance(labels, dict):
-        sys.exit(f"conditions: axis {name!r} has no 'labels' object")
+        raise UsageError(f"conditions: axis {name!r} has no 'labels' object")
     level = spec.get("level", VIDEO)
     if level not in (VIDEO, FRAME):
-        sys.exit(f"conditions: axis {name!r} has level {level!r}, expected "
+        raise UsageError(f"conditions: axis {name!r} has level {level!r}, expected "
                  f"{VIDEO!r} or {FRAME!r}")
     return Axis(name=name, level=level, labels=labels,
                 order=tuple(spec.get("order", ())),
@@ -87,7 +87,7 @@ def load_conditions(path: Path) -> list[Axis]:
     an older processed tree stays scoreable without being regenerated.
     """
     if not path.exists():
-        sys.exit(f"No conditions file at {path}")
+        raise UsageError(f"No conditions file at {path}")
     data = json.loads(path.read_text(encoding="utf-8"))
 
     axes = data.get("axes")
@@ -98,7 +98,7 @@ def load_conditions(path: Path) -> list[Axis]:
     if isinstance(legacy, dict):
         return [Axis(name=LEGACY_KEY, level=VIDEO, labels=legacy)]
 
-    sys.exit(f"{path}: expected an 'axes' object, or a '{LEGACY_KEY}' map "
+    raise UsageError(f"{path}: expected an 'axes' object, or a '{LEGACY_KEY}' map "
              f"of video -> category")
 
 

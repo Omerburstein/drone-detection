@@ -13,6 +13,7 @@ import json
 import numpy as np
 import pytest
 
+from src.errors import UsageError
 from src.eval.labels import load_frames, load_label_file, read_keys, yolo_to_xyxy
 
 
@@ -73,7 +74,7 @@ class TestLoadLabelFile:
         """A malformed label must stop the run, not silently score against garbage."""
         path = tmp_path / "bad.txt"
         path.write_text("0 0.5 0.5\n")
-        with pytest.raises(SystemExit):
+        with pytest.raises(UsageError):
             load_label_file(path)
 
 
@@ -112,7 +113,7 @@ class TestLoadFrames:
     def test_video_records_without_frame_size_fail_loudly(self, tmp_path):
         """The JSONL carries no dimensions, so guessing would corrupt every box."""
         pred, labels = self._write_run(tmp_path, [{"frame": 0, "detections": []}])
-        with pytest.raises(SystemExit):
+        with pytest.raises(UsageError):
             load_frames(pred, labels, frame_size=None)
 
     def test_unlabelled_prediction_yields_an_empty_ground_truth(self, tmp_path):

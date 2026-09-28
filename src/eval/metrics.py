@@ -13,11 +13,11 @@ thresholds 0.50:0.05:0.95.
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass, field, replace
 
 import numpy as np
 
+from ..errors import UsageError
 from .conditions import LEGACY_KEY, Axis, as_axes, group_by_axis
 from .labels import EvalFrame
 
@@ -471,7 +471,7 @@ def _score(frames: list[EvalFrame], primary: float | MatchCriterion,
     primary = as_criterion(primary)
     n_gt = sum(len(f.gt_boxes) for f in frames)
     if n_gt == 0:
-        sys.exit("No ground-truth boxes found -- check --labels points at the right split.")
+        raise UsageError("No ground-truth boxes found -- check --labels points at the right split.")
 
     criteria, sweep_is_map = _ap_criteria(primary, iou_sweep)
     aps = _sweep_ap(frames, n_gt, criteria)

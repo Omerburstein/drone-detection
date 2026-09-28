@@ -29,6 +29,7 @@ Example
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -37,6 +38,7 @@ import numpy as np
 matplotlib.use("Agg")  # no display on this machine, and none wanted in a script
 import matplotlib.pyplot as plt  # noqa: E402  (must follow the backend choice)
 
+from .errors import UsageError
 from .eval.tables import parse_dump_spec, write_rows
 from .eval.curves import (Curve, SIZE_EDGES, curve_rows,  # noqa: E402
                           loc_error_by_size, load_dump, precision_by_size,
@@ -200,9 +202,22 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    """Load each dump, bin it, and render the figure.
+
+    Wraps the run so a `UsageError` raised anywhere below -- including inside
+    `parse_args`, where the `--edges` parser runs -- becomes the same one-line
+    message and exit code it always was, rather than a traceback.
+    """
+    try:
+        _run(argv)
+    except UsageError as exc:
+        sys.exit(str(exc))
+
+
+def _run(argv: list[str] | None) -> None:
     """Load each dump, bin it, and render the figure."""
-    args = build_parser().parse_args()
+    args = build_parser().parse_args(argv)
 
     precision, recall, offsets = {}, {}, {}
     for label, path in args.dump:

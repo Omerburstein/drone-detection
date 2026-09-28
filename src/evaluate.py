@@ -43,6 +43,7 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
+from .errors import UsageError
 from .eval.conditions import load_conditions
 from .eval.labels import load_frames, read_keys
 from .eval.metrics import CENTER, IOU, MatchCriterion, evaluate
@@ -110,9 +111,22 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    """Load predictions and labels, score them, and report.
+
+    Wraps the run so a `UsageError` raised anywhere below -- including inside
+    `parse_args`, where the `--edges` parser runs -- becomes the same one-line
+    message and exit code it always was, rather than a traceback.
+    """
+    try:
+        _run(argv)
+    except UsageError as exc:
+        sys.exit(str(exc))
+
+
+def _run(argv: list[str] | None) -> None:
     """Load predictions and labels, score them, and report."""
-    args = build_parser().parse_args()
+    args = build_parser().parse_args(argv)
     if not args.labels.is_dir():
         sys.exit(f"--labels must be a directory, got {args.labels}")
 

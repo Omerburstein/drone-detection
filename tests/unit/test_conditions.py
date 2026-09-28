@@ -13,6 +13,7 @@ import json
 
 import pytest
 
+from src.errors import UsageError
 from src.eval.conditions import (UNKNOWN, Axis, as_axes, group_by_axis,
                                  group_by_condition, load_conditions, video_of)
 from src.eval.metrics import evaluate, f1_score
@@ -100,19 +101,19 @@ class TestLoadConditions:
         assert len(load_conditions(path)) == 2
 
     def test_missing_file_fails_loudly(self, tmp_path):
-        with pytest.raises(SystemExit):
+        with pytest.raises(UsageError):
             load_conditions(tmp_path / "absent.json")
 
     def test_wrong_shape_fails_loudly(self, tmp_path):
         path = tmp_path / "conditions.json"
         path.write_text(json.dumps({"categories": {}}))
-        with pytest.raises(SystemExit):
+        with pytest.raises(UsageError):
             load_conditions(path)
 
     def test_axis_without_labels_fails_loudly(self, tmp_path):
         path = tmp_path / "conditions.json"
         path.write_text(json.dumps({"axes": {"lighting": {"level": "frame"}}}))
-        with pytest.raises(SystemExit):
+        with pytest.raises(UsageError):
             load_conditions(path)
 
     def test_unknown_level_fails_loudly(self, tmp_path):
@@ -120,7 +121,7 @@ class TestLoadConditions:
         path = tmp_path / "conditions.json"
         path.write_text(json.dumps(
             {"axes": {"lighting": {"level": "framewise", "labels": {}}}}))
-        with pytest.raises(SystemExit):
+        with pytest.raises(UsageError):
             load_conditions(path)
 
 

@@ -18,8 +18,9 @@ or a checkpoint present.
 from __future__ import annotations
 
 import csv
-import sys
 from pathlib import Path
+
+from ..errors import UsageError
 
 
 def rounded(value: float) -> float | None:
@@ -87,7 +88,7 @@ def parse_edges(spec: str) -> tuple[float, ...]:
     try:
         edges = tuple(float(part) for part in spec.split(",") if part.strip())
     except ValueError:
-        sys.exit(f"--edges: expected comma-separated numbers, got {spec!r}")
+        raise UsageError(f"--edges: expected comma-separated numbers, got {spec!r}")
     if len(edges) < 2 or list(edges) != sorted(edges):
-        sys.exit(f"--edges: need at least two edges in increasing order, got {spec!r}")
+        raise UsageError(f"--edges: need at least two edges in increasing order, got {spec!r}")
     return edges

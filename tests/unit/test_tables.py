@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from src.errors import UsageError
 from src.eval import vocabulary
 from src.eval.tables import parse_dump_spec, parse_edges, rounded, write_rows
 
@@ -112,17 +113,17 @@ class TestParseEdges:
         assert parse_edges("0, 8, 16,") == (0.0, 8.0, 16.0)
 
     def test_rejects_non_numbers(self):
-        with pytest.raises(SystemExit, match="comma-separated numbers"):
+        with pytest.raises(UsageError, match="comma-separated numbers"):
             parse_edges("0,eight,16")
 
     def test_rejects_an_unsorted_ladder(self):
         """`0,16,8` is a typo. Sorting it silently would produce a table whose
         bands are not the ones that were asked for."""
-        with pytest.raises(SystemExit, match="increasing order"):
+        with pytest.raises(UsageError, match="increasing order"):
             parse_edges("0,16,8")
 
     def test_rejects_a_single_edge(self):
-        with pytest.raises(SystemExit, match="at least two edges"):
+        with pytest.raises(UsageError, match="at least two edges"):
             parse_edges("8")
 
 

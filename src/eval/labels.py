@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,6 +12,7 @@ import numpy as np
 from PIL import Image
 
 from ..algo.detections import Detections
+from ..errors import UsageError
 
 LABEL_FIELDS = 5  # `<cls> <cx> <cy> <w> <h>` per YOLO label line
 
@@ -64,7 +64,7 @@ def load_label_file(path: Path) -> tuple[np.ndarray, np.ndarray]:
         if not parts:
             continue
         if len(parts) < LABEL_FIELDS:
-            sys.exit(f"{path}:{line_no}: expected '<cls> <cx> <cy> <w> <h>', got {line!r}")
+            raise UsageError(f"{path}:{line_no}: expected '<cls> <cx> <cy> <w> <h>', got {line!r}")
         classes.append(int(float(parts[0])))
         rows.append([float(v) for v in parts[1:LABEL_FIELDS]])
     return np.array(rows).reshape(-1, 4), np.array(classes, dtype=int)
@@ -80,14 +80,14 @@ def _resolve_size(record: dict[str, Any],
     """
     if "image" not in record:
         if not frame_size:
-            sys.exit("Video-keyed predictions need --frame-size W H.")
+            raise UsageError("Video-keyed predictions need --frame-size W H.")
         return str(record["frame"]), *frame_size
 
     image_path = Path(record["image"])
     if frame_size:
         return image_path.stem, *frame_size
     if not image_path.exists():
-        sys.exit(f"Cannot determine size for {image_path} (missing). "
+        raise UsageError(f"Cannot determine size for {image_path} (missing). "
                  f"Pass --frame-size W H.")
     with Image.open(image_path) as img:
         width, height = img.size
