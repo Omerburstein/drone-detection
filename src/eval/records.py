@@ -40,7 +40,7 @@ from .metrics import (MatchCriterion, as_criterion, box_size, iou_matrix,
                       match_frame, nearest_target)
 from .labels import EvalFrame
 
-TP, FP, FN = "tp", "fp", "fn"
+from .vocabulary import FN, FP, TP
 
 # Columns every row carries, in the order they are written. Fixed first so a
 # reader can rely on the left of the table regardless of which axes a run had.

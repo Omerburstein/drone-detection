@@ -30,6 +30,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .tables import rounded as _rounded
+
 # Bin edges in pixels, on sqrt(w*h). Fine where this project lives -- ARD-MAV is
 # 64.8% under 16 px -- and coarse above 32 px, where there is little data and
 # nothing interesting happens. The open top bin catches oversized false alarms,
@@ -226,11 +228,6 @@ def recall_by_size(rows: list[dict[str, str]],
                                   np.array([r["outcome"] == "tp" for r in targets]),
                                   edges)
     return Curve("recall", "gt_size", edges, values, hits, total)
-
-
-def _rounded(value: float) -> float | None:
-    """A number for the CSV, or None where the bin had nothing to compute from."""
-    return None if np.isnan(value) else round(float(value), 4)
 
 
 def _payload(curve: Curve | ErrorCurve, i: int) -> dict[str, object]:

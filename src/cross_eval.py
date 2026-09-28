@@ -28,13 +28,13 @@ Example
 from __future__ import annotations
 
 import argparse
-import csv
 import sys
 from pathlib import Path
 
 from .eval.crosscut import (Cell, SIZE_EDGES, cell_rows, cross_cut, pooled,
                             select)
 from .eval.curves import load_dump
+from .eval.tables import parse_dump_spec, parse_edges, write_rows
 
 ABSENT = "-"  # column filler where a cell has nothing to compute the number from
 SPARSE = "*"  # marker on a cell holding too few targets to read as a measurement
@@ -78,28 +78,6 @@ def _print_table(series: str, cells: list[Cell], axis: str) -> None:
               f"{ABSENT:>8}{ABSENT:>8}")
 
 
-def _parse_dump(spec: str) -> tuple[str, Path]:
-    """`name=path`, or a bare path named after its parent run directory."""
-    name, _, path = spec.partition("=")
-    return (name, Path(path)) if path else (Path(name).parent.name or name,
-                                            Path(name))
-
-
-def _parse_edges(spec: str) -> tuple[float, ...]:
-    """A comma-separated edge list in pixels; `inf` closes the top bin.
-
-    Edges are the band boundaries, so `0,8,inf` is the two-band cut this CLI
-    exists for and the default is the same ladder `curves.py` plots on.
-    """
-    try:
-        edges = tuple(float(part) for part in spec.split(",") if part.strip())
-    except ValueError:
-        sys.exit(f"--edges: expected comma-separated numbers, got {spec!r}")
-    if len(edges) < 2 or list(edges) != sorted(edges):
-        sys.exit(f"--edges: need at least two edges in increasing order, got {spec!r}")
-    return edges
-
-
 def build_parser() -> argparse.ArgumentParser:
     """The command line for the cross-cut table."""
     parser = argparse.ArgumentParser(
@@ -113,7 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="keep only these size bands, e.g. '<8'; repeatable")
     parser.add_argument("--condition", action="append", default=[], metavar="LABEL",
                         help="keep only these condition labels, e.g. complex")
-    parser.add_argument("--edges", type=_parse_edges, default=SIZE_EDGES,
+    parser.add_argument("--edges", type=parse_edges, default=SIZE_EDGES,
                         help="band edges in px, comma-separated (default: the "
                              "curves.py ladder)")
     parser.add_argument("--csv", type=Path,
@@ -127,7 +105,7 @@ def main(argv: list[str] | None = None) -> None:
 
     tables: dict[str, list[Cell]] = {}
     for spec in args.dump:
-        name, path = _parse_dump(spec)
+        name, path = parse_dump_spec(spec)
         if not path.is_file():
             sys.exit(f"No dump at {path}")
         rows = load_dump(path)
@@ -147,12 +125,8 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.csv:
         rows = cell_rows(tables, args.axis)
-        args.csv.parent.mkdir(parents=True, exist_ok=True)
-        with args.csv.open("w", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-            writer.writeheader()
-            writer.writerows(rows)
-        print(f"  wrote {len(rows)} rows to {args.csv}\n")
+        written = write_rows(args.csv, rows)
+        print(f"  wrote {written} rows to {args.csv}\n")
 
 
 if __name__ == "__main__":

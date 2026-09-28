@@ -39,12 +39,12 @@ import numpy as np
 
 from .curves import MIN_RELIABLE, SIZE_EDGES, bin_index, bin_labels
 from .metrics import f1_score
+from .tables import rounded as _rounded
+from .vocabulary import FN, FP, TP
 
 NO_TARGET = "no target"     # frame the detector fired on with nothing to find
 MIXED = "mixed sizes"       # frame whose targets straddle a band edge
 UNKNOWN = "uncategorised"   # frame the axis does not label
-
-TP, FP, FN = "tp", "fp", "fn"
 
 
 @dataclass(frozen=True)
@@ -268,7 +268,3 @@ def cell_rows(cells: dict[str, list[Cell]], axis: str) -> list[dict[str, object]
         for cell in series_cells
     ]
 
-
-def _rounded(value: float) -> float | None:
-    """A number for the CSV, or None where the cell had nothing to compute from."""
-    return None if value != value else round(float(value), 4)

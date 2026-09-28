@@ -43,6 +43,7 @@ import numpy as np
 from .crosscut import group_frames, number
 from .curves import bin_index, bin_labels
 from .metrics import box_size, nearest_target
+from .tables import rounded as _rounded
 
 FP = "fp"
 TARGET_OUTCOMES = ("tp", "fn")
@@ -260,7 +261,3 @@ def table_rows(tables: dict[str, AlarmTable]) -> list[dict[str, object]]:
         })
     return rows
 
-
-def _rounded(value: float) -> float | None:
-    """A number for the CSV, or None where the bin had nothing to compute from."""
-    return None if value != value else round(float(value), 4)

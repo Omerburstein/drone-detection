@@ -23,7 +23,7 @@ dates, not priorities.
   separate `tiling.py` test item in the backlog.
   - [x] S1 — CLAUDE.md describes packages, not files; tiling test filed
   - [x] S2 — characterization tests: `data/sources.py`, `plot_eval` CLI, `live_detect`
-  - [ ] S3 — `eval/tables.py` + `eval/vocabulary.py`: one dump parser, one CSV writer,
+  - [x] S3 — `eval/tables.py` + `eval/vocabulary.py`: one dump parser, one CSV writer,
         one `rounded`, one set of outcome labels
   - [ ] S3b — one `NO_TARGET` across `scene_stats`/`crosscut`/`alarms`, plus the
         `conditions.json` migration (1,412 values in two tracked files)

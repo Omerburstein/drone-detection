@@ -29,7 +29,6 @@ Example
 from __future__ import annotations
 
 import argparse
-import csv
 from pathlib import Path
 
 import matplotlib
@@ -38,6 +37,7 @@ import numpy as np
 matplotlib.use("Agg")  # no display on this machine, and none wanted in a script
 import matplotlib.pyplot as plt  # noqa: E402  (must follow the backend choice)
 
+from .eval.tables import parse_dump_spec, write_rows
 from .eval.curves import (Curve, SIZE_EDGES, curve_rows,  # noqa: E402
                           loc_error_by_size, load_dump, precision_by_size,
                           recall_by_size)
@@ -161,28 +161,21 @@ def render(curves: dict[str, Curve], out: Path, title: str,
 
 def write_curve_data(path: Path, curves: dict[str, Curve]) -> int:
     """Write the plotted numbers as CSV; return the row count."""
-    rows = curve_rows(curves)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
-    return len(rows)
+    return write_rows(path, curve_rows(curves))
 
 
 def parse_dump_arg(spec: str) -> tuple[str, Path]:
     """`LABEL=path/to/matches.csv` -> (label, path).
 
-    The label is what the legend says, so it has to come from the caller: only
-    they know whether a given dump was the centre-matched scoring or the strict
-    one, and mislabelling those two is the specific error this project keeps
-    warning about.
+    The label is required here where the sibling CLIs infer one, because it goes
+    into a figure legend that outlives the command: only the caller knows whether
+    a dump was the centre-matched scoring or the strict one, and mislabelling
+    those two is the specific error this project keeps warning about.
     """
-    if "=" not in spec:
-        raise argparse.ArgumentTypeError(
-            f"expected LABEL=PATH, got {spec!r} (e.g. 'centre@1x=runs/x/matches.csv')")
-    label, path = spec.split("=", 1)
-    return label.strip(), Path(path.strip())
+    try:
+        return parse_dump_spec(spec, require_label=True)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def build_parser() -> argparse.ArgumentParser:

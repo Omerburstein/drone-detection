@@ -22,13 +22,13 @@ Example
 from __future__ import annotations
 
 import argparse
-import csv
 import sys
 from pathlib import Path
 
 from .eval.alarms import (DEFAULT_EDGES, NO_TARGET, PX, REL, AlarmTable, alarms,
                           bin_alarms, by_group, table_rows)
 from .eval.curves import load_dump
+from .eval.tables import parse_dump_spec, parse_edges, write_rows
 
 UNITS = {REL: "target sizes from the nearest drone",
          PX: "pixels from the nearest drone"}
@@ -62,24 +62,6 @@ def _print_table(series: str, table: AlarmTable) -> None:
               f"{'':>8}   {_bar(share)}")
 
 
-def _parse_dump(spec: str) -> tuple[str, Path]:
-    """`name=path`, or a bare path named after its parent run directory."""
-    name, _, path = spec.partition("=")
-    return (name, Path(path)) if path else (Path(name).parent.name or name,
-                                            Path(name))
-
-
-def _parse_edges(spec: str) -> tuple[float, ...]:
-    """A comma-separated edge list; `inf` closes the top bin."""
-    try:
-        edges = tuple(float(part) for part in spec.split(",") if part.strip())
-    except ValueError:
-        sys.exit(f"--edges: expected comma-separated numbers, got {spec!r}")
-    if len(edges) < 2 or list(edges) != sorted(edges):
-        sys.exit(f"--edges: need at least two edges in increasing order, got {spec!r}")
-    return edges
-
-
 def build_parser() -> argparse.ArgumentParser:
     """The command line for the alarm-distance table."""
     parser = argparse.ArgumentParser(
@@ -89,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--unit", choices=(REL, PX), default=REL,
                         help="bin in multiples of the target's own size (default) "
                              "or in pixels")
-    parser.add_argument("--edges", type=_parse_edges,
+    parser.add_argument("--edges", type=parse_edges,
                         help="bin edges, comma-separated; defaults to the ladder "
                              "for the chosen --unit")
     parser.add_argument("--group", metavar="COLUMN",
@@ -107,7 +89,7 @@ def main(argv: list[str] | None = None) -> None:
 
     tables: dict[str, AlarmTable] = {}
     for spec in args.dump:
-        name, path = _parse_dump(spec)
+        name, path = parse_dump_spec(spec)
         if not path.is_file():
             sys.exit(f"No dump at {path}")
         rows = load_dump(path)
@@ -133,12 +115,8 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.csv:
         rows = table_rows(tables)
-        args.csv.parent.mkdir(parents=True, exist_ok=True)
-        with args.csv.open("w", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-            writer.writeheader()
-            writer.writerows(rows)
-        print(f"  wrote {len(rows)} rows to {args.csv}\n")
+        written = write_rows(args.csv, rows)
+        print(f"  wrote {written} rows to {args.csv}\n")
 
 
 if __name__ == "__main__":
