@@ -131,6 +131,31 @@ follower gives up, rather than on every frame.
 
 Saved on `s`, on quit, and every 30 s while there are unsaved changes. The write is atomic.
 
+### Three states, and why "I couldn't find it" is not `x`
+
+A frame is a box, a confirmed negative (`x`), or **unjudged**. `x` is a claim that no target
+is there, and that is how `src.evaluate` reads it: a detection on an `x` frame is a false
+alarm. So `x` on a frame where the drone was present but invisible to you penalises the
+detector for being right.
+
+`c` returns a frame to unjudged. Those frames stay out of `verified.jsonl` and are scored
+neither way, which is where "I don't know" belongs.
+
+| What you see | Verdict |
+| --- | --- |
+| Clear sky, target plainly absent — before launch, after it leaves | `x`. These negatives are what makes precision measurable |
+| Suspect it is there but cannot localise it — a few pixels, behind an OSD glyph, motion-smeared | `c`, leave it unjudged |
+| Can localise it at all | A box; a loose box beats an `x` |
+
+Do not clear liberally: dropping every hard frame biases the set easy, and the metrics then
+describe only frames where the target was findable. Note it in the ledger if a clip needed
+many cleared frames.
+
+**Carried negatives deserve a second look.** `x` propagates as you play, so a long negative
+span comes from one keypress plus playback at 30 fps. Head and tail spans are usually safe.
+The **gaps between box spans** are not: the target was in frame seconds earlier, and "left the
+frame" and "shrank below what I could see at speed" look identical there.
+
 > **The session owns its stem.** On export, label files and `verified.jsonl` rows for this
 > stem that the session doesn't hold are **deleted**. That's what makes deleting a box
 > actually delete it, but it also means you shouldn't mix `seed_track` and `annotate` on
