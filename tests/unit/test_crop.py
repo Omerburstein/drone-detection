@@ -117,3 +117,36 @@ class TestResolveVideo:
         (tmp_path / "clip.txt").write_bytes(b"")
         with pytest.raises(UsageError):
             resolve_video(tmp_path, "clip")
+
+
+class TestSized:
+    """`sized` replaced the same check-then-resize written out in three CLIs.
+
+    The resize half is the part worth pinning: every number a run reports is
+    expressed in the frame the *detector* saw, so a crop that silently failed to
+    take effect would produce boxes measured against the wrong frame size and
+    nothing downstream would notice.
+    """
+
+    def test_returns_the_crop_size_not_the_sources(self):
+        assert Crop.parse(O4).sized(2520, 1080, "goggles.mp4") == (1440, 1080)
+
+    def test_accepts_a_crop_that_exactly_fills_the_frame(self):
+        assert Crop(0, 0, 640, 480).sized(640, 480, "clip.mp4") == (640, 480)
+
+    def test_rejects_a_crop_that_runs_off_the_right(self):
+        with pytest.raises(UsageError, match="does not fit"):
+            Crop(540, 0, 1440, 1080).sized(1920, 1080, "clip.mp4")
+
+    def test_rejects_a_crop_that_runs_off_the_bottom(self):
+        with pytest.raises(UsageError, match="does not fit"):
+            Crop(0, 600, 640, 600).sized(640, 1080, "clip.mp4")
+
+    def test_the_message_names_both_rectangles(self):
+        """The crop is usually right and the video wrong, so the message has to
+        say what it did not fit -- otherwise the user re-checks the flag."""
+        with pytest.raises(UsageError) as caught:
+            Crop.parse(O4).sized(1920, 1080, "wrong_clip.mp4")
+        message = str(caught.value)
+        assert "1440x1080 at (540, 0)" in message
+        assert "wrong_clip.mp4" in message and "1920x1080" in message

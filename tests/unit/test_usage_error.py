@@ -25,6 +25,7 @@ from src.data.sources import resolve_sources
 from src.eval.conditions import load_conditions
 from src.eval.labels import load_label_file
 from src.eval.tables import parse_edges
+from src.output.video import open_video
 
 
 class TestLibrariesRaiseRatherThanExit:
@@ -59,6 +60,14 @@ class TestLibrariesRaiseRatherThanExit:
     def test_sampling_on_an_unknown_mode(self):
         with pytest.raises(UsageError, match="Unknown --sample"):
             build_schedule("sideways", 2, 2, 30)
+
+    def test_open_video_on_a_file_that_is_not_a_video(self, tmp_path):
+        """Reached by src.render_video and src.crops, which both open a recorded
+        run's source before anything else."""
+        path = tmp_path / "not_a_video.mp4"
+        path.write_bytes(b"not an mp4")
+        with pytest.raises(UsageError, match="Could not open"):
+            open_video(path)
 
     def test_sampling_on_a_burst_too_short_to_difference(self):
         """Two frames is the floor: the motion branches difference the current

@@ -28,7 +28,7 @@ dates, not priorities.
   - [x] S3b — one `NO_TARGET` across `scene_stats`/`crosscut`/`alarms`, plus the
         `conditions.json` migration (1,412 values in two tracked files)
   - [x] S4 — `data/sampling.py` → `algo/sampling.py`, fixing the algo→data inversion
-  - [ ] S5 — `UsageError`: library modules stop calling `sys.exit`, so they are callable
+  - [x] S5 — `UsageError`: library modules stop calling `sys.exit`, so they are callable
         from a notebook as this file promises
   - [ ] S6 — split `eval/metrics.py` into `matching.py` + `metrics.py`
   - [ ] S7 — `print_branches`/`GLAD_CONFIDENCE` shared; `live.open_source` → `open_feed`

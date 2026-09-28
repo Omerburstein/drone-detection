@@ -38,6 +38,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from .errors import UsageError
 from .data.crop import Crop
 from .eval.labels import load_frames
 from .output.contact import Layout, cell, group_sort_key, sheet
@@ -173,9 +174,21 @@ def render(picks: list[tuple], video: Path, crop: Crop | None,
     return cells
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    """Build one contact sheet.
+
+    Wraps the run so a `UsageError` raised below becomes the same one-line
+    message and exit code it always was, rather than a traceback.
+    """
+    try:
+        _run(argv)
+    except UsageError as exc:
+        sys.exit(str(exc))
+
+
+def _run(argv: list[str] | None) -> None:
     """Build one contact sheet."""
-    args = build_parser().parse_args()
+    args = build_parser().parse_args(argv)
     prefix = args.key_prefix or args.video.stem
 
     # The geometry comes from the video rather than from the processed stills,
@@ -183,10 +196,7 @@ def main() -> None:
     capture, width, height, _ = open_video(args.video)
     capture.release()
     if args.crop is not None:
-        if not args.crop.fits((height, width)):
-            sys.exit(f"--crop {args.crop.label} does not fit {args.video.name} "
-                     f"({width}x{height})")
-        width, height = args.crop.width, args.crop.height
+        width, height = args.crop.sized(width, height, args.video.name)
 
     # Labels are never read: this renders predictions only, which is the whole
     # point on footage nobody has annotated. An empty path makes every lookup

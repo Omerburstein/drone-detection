@@ -40,6 +40,7 @@ import sys
 from pathlib import Path
 
 
+from .errors import UsageError
 from .data.crop import Crop
 from .eval.labels import load_frames
 from .eval.metrics import CENTER, IOU, MatchCriterion
@@ -118,12 +119,9 @@ def render(args: argparse.Namespace) -> tuple[int, int]:
     """Write the overlay video; return (frames rendered, frames skipped)."""
     capture, width, height, source_fps = open_video(args.video)
     if args.crop is not None:
-        if not args.crop.fits((height, width)):
-            sys.exit(f"--crop {args.crop.label} does not fit {args.video.name} "
-                     f"({width}x{height})")
         # The labels and the frame size must describe the frame the detector
         # saw, not the one on disk.
-        width, height = args.crop.width, args.crop.height
+        width, height = args.crop.sized(width, height, args.video.name)
     prefix = args.key_prefix or args.video.stem
 
     # With no labels every lookup misses and `load_label_file` returns an empty
@@ -167,9 +165,21 @@ def render(args: argparse.Namespace) -> tuple[int, int]:
     return rendered, skipped
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    """Render one video's overlay and report what was drawn.
+
+    Wraps the run so a `UsageError` raised below becomes the same one-line
+    message and exit code it always was, rather than a traceback.
+    """
+    try:
+        _run(argv)
+    except UsageError as exc:
+        sys.exit(str(exc))
+
+
+def _run(argv: list[str] | None) -> None:
     """Render one video's overlay and report what was drawn."""
-    args = build_parser().parse_args()
+    args = build_parser().parse_args(argv)
     if args.no_labels:
         if args.labels is not None:
             sys.exit("--no-labels and --labels are mutually exclusive.")

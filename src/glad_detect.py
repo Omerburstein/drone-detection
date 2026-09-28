@@ -230,11 +230,10 @@ def run_video(pipeline: GladPipeline | ScaledPipeline, video: Path, stem: str,
     if not capture.isOpened():
         sys.exit(f"Could not open {video}")
     if args.crop is not None:
-        shape = (int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-                 int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)))
-        if not args.crop.fits(shape):
-            sys.exit(f"--crop {args.crop.label} does not fit {video.name} "
-                     f"({shape[1]}x{shape[0]})")
+        # Validation only: this loop crops each frame rather than tracking a
+        # frame size of its own.
+        args.crop.sized(int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                        int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)), video.name)
 
     pipeline.reset()
     frame_index = decoded = processed = 0

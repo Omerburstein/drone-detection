@@ -21,6 +21,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from ..errors import UsageError
+
 CROP_FIELDS = 4
 
 
@@ -65,6 +67,22 @@ class Crop:
         """Does this rectangle lie inside a frame of `(height, width)`?"""
         height, width = shape
         return self.x + self.width <= width and self.y + self.height <= height
+
+    def sized(self, width: int, height: int, source: str) -> tuple[int, int]:
+        """Check this rectangle fits `width x height`, and return the cropped size.
+
+        Three CLIs ran the same check-then-resize by hand: --crop is validated
+        against the source, then the frame size every later number is expressed
+        in becomes the crop's, not the file's. Here instead, beside `fits` and
+        `apply`, so the rectangle validates itself.
+
+        Raises `UsageError` naming both rectangles -- the crop is usually right
+        and the video wrong, so the message has to say what it did not fit.
+        """
+        if not self.fits((height, width)):
+            raise UsageError(f"--crop {self.label} does not fit {source} "
+                             f"({width}x{height})")
+        return self.width, self.height
 
     def apply(self, frame: np.ndarray) -> np.ndarray:
         """The cropped region, as a view into `frame`.
