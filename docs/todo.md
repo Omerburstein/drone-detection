@@ -15,6 +15,26 @@ dates, not priorities.
 
 ## Open
 
+- [ ] 2026-09-28 — [algo] **Restructure `src/` — staged, in progress.** De-duplication,
+  layer-boundary fixes, shared interfaces and file splits. Plan agreed 2026-09-28; each
+  stage is its own commit so the work can stop after any of them. The baseline-YOLO chain
+  (`baseline_detect.py`, `algo/detector.py`, `algo/tiling.py`, `algo/config.py`,
+  `data/frames.py`, `output/annotate.py`) is **deliberately out of scope** — hence the
+  separate `tiling.py` test item in the backlog.
+  - [x] S1 — CLAUDE.md describes packages, not files; tiling test filed
+  - [x] S2 — characterization tests: `data/sources.py`, `plot_eval` CLI, `live_detect`
+  - [ ] S3 — `eval/tables.py` + `eval/vocabulary.py`: one dump parser, one CSV writer,
+        one `rounded`, one set of outcome labels
+  - [ ] S3b — one `NO_TARGET` across `scene_stats`/`crosscut`/`alarms`, plus the
+        `conditions.json` migration (1,412 values in two tracked files)
+  - [ ] S4 — `data/sampling.py` → `algo/sampling.py`, fixing the algo→data inversion
+  - [ ] S5 — `UsageError`: library modules stop calling `sys.exit`, so they are callable
+        from a notebook as this file promises
+  - [ ] S6 — split `eval/metrics.py` into `matching.py` + `metrics.py`
+  - [ ] S7 — `print_branches`/`GLAD_CONFIDENCE` shared; `live.open_source` → `open_feed`
+  - [ ] S8 — `seed_track.py` split into a tracking library + a thin CLI. **Gated:** five
+        open labelling items run `/annotate` through these files. Ask before starting.
+
 - [ ] 2026-09-23 — [data] **Label a FIELD episode with `/annotate` — now ahead of the second
   analog clip.** EXP-017 ran EXP-016's motion test unchanged on
   `data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4` and it **acquired the target
