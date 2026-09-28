@@ -83,7 +83,7 @@ window, so the target doesn't walk out of view during playback.
 **Correlation against the box you drew, plus a constant-velocity motion prior.** Each step
 predicts where the target has gone from its last displacement, then searches a window of
 `--search` target sizes around that prediction for the best match to your box's
-appearance. The tracker core is `seed_track.TemplateTracker`, with its pinned-template
+appearance. The tracker core is `template_track.TemplateTracker`, with its pinned-template
 default (`seed_track.md` records why blending is a trap).
 
 The follower does not use frame differencing. A difference image tells you *something*

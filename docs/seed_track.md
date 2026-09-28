@@ -1,5 +1,12 @@
 # `src.data.seed_track` — reference
 
+> **Where the code lives (2026-09-28).** This CLI used to be the tracking library too,
+> which is why `annotate.py` imported it. Split since: `src/data/template_track.py` holds
+> `TemplateTracker`, the `DEFAULT_*` constants and `search_window`; `src/data/labels_io.py`
+> holds `to_yolo`, `yolo_line`, `write_labels` and `write_verified`. `seed_track.py` is now
+> the command line, the seek-avoiding scan, `track_segment` and the review sheet. Nothing
+> about the interface below changed.
+
 Turns one hand-placed box into a labelled segment, so footage nobody annotated can be
 scored. Built for our own clips — `data/raw/FIELD/` and `data/raw/SOFA-O4/` — which have
 no ground truth and therefore no precision, recall or AP.

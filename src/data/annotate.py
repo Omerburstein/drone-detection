@@ -9,7 +9,7 @@ playback stops and says so.
 Frames confirmed to hold no drone are marked with `x` and the negative carries
 forward as you play, so a target-free span is labelled by watching it.
 
-Writes the same two things `src.data.seed_track` does -- YOLO labels and
+Writes the same two things `src.data.seed_track` does, through `src.data.labels_io` -- YOLO labels and
 `verified.jsonl` for `src.evaluate --keys-from` -- plus a session file that
 lets you stop and resume. See docs/annotate.md for every key and parameter.
 
@@ -36,7 +36,7 @@ import numpy as np
 from .annotation import CARRIED, HUMAN, Follower, Session, Verdict
 from .box_edit import (MIN_SIZE, Box, Viewport, clamp_box, drag,
                                from_corners, hit_test)
-from .seed_track import DEFAULT_MIN_SCORE, DEFAULT_SEARCH
+from .template_track import DEFAULT_MIN_SCORE, DEFAULT_SEARCH
 
 WINDOW = "annotate"
 BAR = 50                  # status strip under the picture, in window pixels

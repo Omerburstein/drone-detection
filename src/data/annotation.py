@@ -5,7 +5,7 @@ rules that decide what lands in a label file are testable without a display.
 
 **A verdict is one of two things** -- a box, or "confirmed: no target here".
 A frame with no verdict was never adjudicated and is never scored. That is the
-same three-way split `src.data.seed_track` draws between label files and
+same three-way split `src.data.labels_io` draws between label files and
 `verified.jsonl`, and for the same reason: counting an unlooked-at frame as a
 negative invents precision nobody measured.
 
@@ -36,8 +36,9 @@ import cv2
 import numpy as np
 
 from .box_edit import Box
-from .seed_track import (DEFAULT_MIN_SCORE, DEFAULT_SCALES,
-                                 DEFAULT_SEARCH, TemplateTracker, to_yolo)
+from .labels_io import yolo_line
+from .template_track import (DEFAULT_MIN_SCORE, DEFAULT_SCALES, DEFAULT_SEARCH,
+                             TemplateTracker)
 
 HUMAN = "human"      # drawn, moved, resized or declared by the user
 TRACKED = "tracked"  # a box the follower proposed
@@ -97,7 +98,7 @@ class Follower:
     target looks like, and the velocity prior (`predict`) supplies the motion.
 
     The template is the **last box the user placed**, never a tracked one: this
-    is `seed_track`'s pinned-template finding (with blending, a track that
+    is `template_track`'s pinned-template finding (with blending, a track that
     slipped onto terrain matched it at 0.99). Every correction re-seeds it, so
     the appearance stays current exactly as fast as the user corrects.
     """
@@ -303,7 +304,7 @@ class Session:
     # export -------------------------------------------------------------
 
     def export(self, labels_out: Path, verified_out: Path, images_dir: Path) -> None:
-        """Write YOLO labels and `verified.jsonl`, in `seed_track`'s formats.
+        """Write YOLO labels and `verified.jsonl`, in `labels_io`'s formats.
 
         **The session is authoritative for its stem.** Label files for this
         stem that the session does not hold a box for are deleted, and this
@@ -318,9 +319,8 @@ class Session:
             if own.match(path.stem) and int(path.stem.rsplit("_", 1)[1]) not in boxed:
                 path.unlink()
         for frame, verdict in boxed.items():
-            cx, cy, w, h = to_yolo(verdict.box, self.width, self.height)
             (labels_out / f"{self.key(frame)}.txt").write_text(
-                f"0 {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n", encoding="utf-8")
+                yolo_line(verdict.box, self.width, self.height), encoding="utf-8")
 
         rows: dict[str, dict] = {}
         if verified_out.exists():

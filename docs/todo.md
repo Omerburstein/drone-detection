@@ -32,8 +32,8 @@ dates, not priorities.
         from a notebook as this file promises
   - [x] S6 — split `eval/metrics.py` into `matching.py` + `metrics.py`
   - [x] S7 — `print_branches`/`GLAD_CONFIDENCE` shared; `live.open_source` → `open_feed`
-  - [ ] S8 — `seed_track.py` split into a tracking library + a thin CLI. **Gated:** five
-        open labelling items run `/annotate` through these files. Ask before starting.
+  - [x] S8 — `seed_track.py` split into `template_track.py` + `labels_io.py` + a thin
+        CLI. Gate lifted 2026-09-28 (no labelling in progress, no other sessions).
 
 - [ ] 2026-09-23 — [data] **Label a FIELD episode with `/annotate` — now ahead of the second
   analog clip.** EXP-017 ran EXP-016's motion test unchanged on
