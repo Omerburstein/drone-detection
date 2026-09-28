@@ -20,7 +20,7 @@ different algorithm.
 `nth` lowers the rate of an otherwise contiguous stream, `burst` differences
 inside a short contiguous run and sleeps between runs -- so what it costs is
 detection opportunity rather than the motion branch itself. See
-`src.data.sampling` for the two failure modes that buys, and section 3 of
+`src.algo.sampling` for the two failure modes that buys, and section 3 of
 `docs/edge-budget.md` for why this is a separate lever from striding.
 
 **Frames are recorded, not just detections.** Output is keyed by the processed
@@ -79,7 +79,7 @@ from .data.crop import Crop
 from .data.hud_mask import load_mask
 from .data.datasets import SPECS, spec_for
 from .data.sources import resolve_video
-from .data.sampling import BURST, EVERY, NTH, Schedule, build_schedule
+from .algo.sampling import BURST, EVERY, NTH, Schedule, build_schedule
 from .output.recording import RunRecorder
 
 # GLAD emits no confidence -- see `StepResult.as_detections`. Every box is
@@ -193,7 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
                          "source rate; 'burst' processes a short contiguous run of "
                          "frames and sleeps between runs, resetting the pipeline each "
                          "time so the motion branches never difference across a gap. "
-                         "**Not a stride** -- see src.data.sampling.")
+                         "**Not a stride** -- see src.algo.sampling.")
     ap.add_argument("--sample-n", type=int, default=2, metavar="N",
                     help="For --sample nth: process every Nth frame (default 2, i.e. "
                          "15 fps from a 30 fps source).")

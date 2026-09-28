@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.data.sampling import BURST, EVERY, NTH, Bursts, EveryNth, Schedule, build_schedule
+from src.algo.sampling import BURST, EVERY, NTH, Bursts, EveryNth, Schedule, build_schedule
 
 
 def processed(schedule: Schedule, last: int) -> list[int]:

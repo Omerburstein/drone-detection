@@ -38,7 +38,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..data.sampling import Bursts, EveryNth, Schedule
+from .sampling import Bursts, EveryNth, Schedule
 
 FULL_RATE = "full rate"
 HALF_RATE = "half rate"

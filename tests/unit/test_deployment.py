@@ -12,7 +12,7 @@ import pytest
 
 from src.algo.deployment import (BURST_DETECTION_RATE, BURST_PAIRS, FULL_RATE,
                                  HALF_RATE, RETENTION, choose_policy)
-from src.data.sampling import Bursts, EveryNth, Schedule
+from src.algo.sampling import Bursts, EveryNth, Schedule
 
 SOURCE = 30.0
 

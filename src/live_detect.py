@@ -55,7 +55,7 @@ from .algo.glad.pipeline import GladPipeline
 from .algo.glad.vendor import GLAD_DIR
 from .algo.glad.yolo import PAD_STYLES
 from .data.live import NATIVE_HEIGHT, NATIVE_WIDTH, SourceError, open_source
-from .data.sampling import Bursts, EveryNth, Schedule
+from .algo.sampling import Bursts, EveryNth, Schedule
 from .output import live_view
 from .output.live_view import LiveStatus
 

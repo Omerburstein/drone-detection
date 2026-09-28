@@ -26,7 +26,7 @@ from src import glad_detect
 from src.algo.glad.pipeline import GLOBAL_YOLO, StepResult
 from src.algo.glad.scaling import ScaledPipeline
 from src.data.crop import Crop
-from src.data.sampling import Bursts, EveryNth, Schedule
+from src.algo.sampling import Bursts, EveryNth, Schedule
 from src.output.recording import RunRecorder
 
 TOTAL_FRAMES = 12
