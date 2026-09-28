@@ -16,8 +16,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.eval.metrics import (CENTER, IOU, MatchCriterion, as_criterion, box_size,
-                              center_distance, evaluate, match_frame)
+from src.eval.matching import (CENTER, IOU, MatchCriterion, as_criterion,
+                               box_size, center_distance, match_frame)
+from src.eval.metrics import evaluate
 
 
 def box(cx: float, cy: float, size: float) -> list[float]:

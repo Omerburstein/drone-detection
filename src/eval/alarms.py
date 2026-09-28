@@ -42,7 +42,7 @@ import numpy as np
 
 from .crosscut import group_frames, number
 from .curves import bin_index, bin_labels
-from .metrics import box_size, nearest_target
+from .matching import box_size, nearest_target
 from .tables import rounded as _rounded
 from .vocabulary import NO_TARGET
 

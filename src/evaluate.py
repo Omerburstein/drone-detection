@@ -46,7 +46,8 @@ from pathlib import Path
 from .errors import UsageError
 from .eval.conditions import load_conditions
 from .eval.labels import load_frames, read_keys
-from .eval.metrics import CENTER, IOU, MatchCriterion, evaluate
+from .eval.metrics import evaluate
+from .eval.matching import CENTER, IOU, criterion_from_args
 from .eval.report import report
 from .eval.records import write_dump
 from .eval.results import EvalSettings, append_result
@@ -130,8 +131,7 @@ def _run(argv: list[str] | None) -> None:
     if not args.labels.is_dir():
         sys.exit(f"--labels must be a directory, got {args.labels}")
 
-    criterion = (MatchCriterion(IOU, args.iou) if args.match == IOU
-                 else MatchCriterion(CENTER, args.match_tol))
+    criterion = criterion_from_args(args)
 
     key_filter = None
     if args.keys_from:

@@ -11,12 +11,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.eval.metrics import (
-    average_precision,
-    evaluate,
-    iou_matrix,
-    match_frame,
-)
+from src.eval.matching import iou_matrix, match_frame
+from src.eval.metrics import average_precision, evaluate
 
 
 class TestIouMatrix:

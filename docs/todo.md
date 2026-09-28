@@ -30,7 +30,7 @@ dates, not priorities.
   - [x] S4 — `data/sampling.py` → `algo/sampling.py`, fixing the algo→data inversion
   - [x] S5 — `UsageError`: library modules stop calling `sys.exit`, so they are callable
         from a notebook as this file promises
-  - [ ] S6 — split `eval/metrics.py` into `matching.py` + `metrics.py`
+  - [x] S6 — split `eval/metrics.py` into `matching.py` + `metrics.py`
   - [ ] S7 — `print_branches`/`GLAD_CONFIDENCE` shared; `live.open_source` → `open_feed`
   - [ ] S8 — `seed_track.py` split into a tracking library + a thin CLI. **Gated:** five
         open labelling items run `/annotate` through these files. Ask before starting.
@@ -496,7 +496,7 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
   `src/eval/alarms.py` + CLI `src/alarm_eval.py`, documented in
   [alarm_eval.md](alarm_eval.md); `nearest_gt_dist` / `nearest_gt_dist_rel` /
   `nearest_gt_size` added to the dump in `src/eval/records.py`, computed by the new
-  `metrics.nearest_target`. Separates the two failures `far` pools: a box on the drone
+  `matching.nearest_target` (then in `metrics`). Separates the two failures `far` pools: a box on the drone
   versus a box on a rooftop. Zero cost — dumps written before the columns landed are
   re-derived from the frame's own rows, so no run needed re-scoring. Result in
   [experiments.md](experiments.md): **all 3,470 alarms IoU@0.50 adds over centre matching

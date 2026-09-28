@@ -43,7 +43,7 @@ from pathlib import Path
 from .errors import UsageError
 from .data.crop import Crop
 from .eval.labels import load_frames
-from .eval.metrics import CENTER, IOU, MatchCriterion
+from .eval.matching import CENTER, IOU, criterion_from_args
 from .output.overlay import Style, render_frame
 from .output.video import LazyVideoWriter, open_video
 
@@ -101,18 +101,6 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Stop after N rendered frames — a contiguous prefix, for "
                          "checking the overlay without decoding the whole video.")
     return ap
-
-
-def criterion_from_args(args: argparse.Namespace) -> MatchCriterion | None:
-    """The matching rule the two --match choices select, as in src.evaluate.
-
-    `None` under --no-labels: with no ground truth there is nothing to match,
-    and the renderer draws the boxes without judging them.
-    """
-    if args.no_labels:
-        return None
-    return (MatchCriterion(IOU, args.iou) if args.match == IOU
-            else MatchCriterion(CENTER, args.match_tol))
 
 
 def render(args: argparse.Namespace) -> tuple[int, int]:

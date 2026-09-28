@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.eval.metrics import CENTER, IOU, MatchCriterion
+from src.eval.matching import CENTER, IOU, MatchCriterion
 from src.output import overlay
 from src.output.overlay import (Style, View, crop_window, fit_zoom, judge,
                                 render_frame)

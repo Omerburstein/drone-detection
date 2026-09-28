@@ -96,14 +96,21 @@ Load-bearing points:
   alarm has no target and therefore no target size, so it inherits the band of the frame
   it fired in; that is what makes a cell's `far` mean what `far` means in the metric
   block. Frames whose targets straddle a band go to `mixed sizes`, not into one of them.
-- `metrics.nearest_target` — the closest ground-truth box to a prediction, **ignoring
+- `matching.nearest_target` — the closest ground-truth box to a prediction, **ignoring
   what matched what**. A false alarm has no matched target and so no `center_dist`; this
   is the only geometry it has. `records` writes it into the dump and `alarms` re-derives
   it for dumps predating those columns — both call this, so they cannot drift.
-- `MatchCriterion` — the one place a match is decided. `records`, `curves` and the
-  `overlay` renderer call `match_frame`, they do not reimplement it, so neither a dump's
-  `outcome` nor the colour of a box on a rendered video can disagree with the metric
-  block it explains.
+- `MatchCriterion` — in `eval/matching.py`, the one place a match is decided. `records`,
+  `curves` and the `overlay` renderer call `match_frame`, they do not reimplement it, so
+  neither a dump's `outcome` nor the colour of a box on a rendered video can disagree
+  with the metric block it explains. There is **no re-export from `metrics`**: a second
+  import path for this symbol is exactly the ambiguity it exists to prevent.
+  `matching.criterion_from_args` builds it for both CLIs that take `--match`, so a
+  criterion cannot be assembled two ways — the flags stay local to each parser, since
+  two help strings cannot disagree about a number but two builders can.
+- `eval/matching.py` vs `eval/metrics.py` — matching decides *which prediction claims
+  which target*; metrics counts and averages the result. The split is what lets
+  `output/overlay.py` colour a box by its outcome without importing the AP machinery.
 
 `src/evaluate.py` is the second CLI: it reads a run's JSONL and scores it against
 labels. It shares the package but not the inference path — `src/eval/` imports only

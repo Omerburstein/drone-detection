@@ -36,8 +36,8 @@ from typing import Any, Iterator
 import numpy as np
 
 from .conditions import Axis, video_of
-from .metrics import (MatchCriterion, as_criterion, box_size, iou_matrix,
-                      match_frame, nearest_target)
+from .matching import (MatchCriterion, as_criterion, box_size, iou_matrix,
+                       match_frame, nearest_target)
 from .labels import EvalFrame
 
 from .vocabulary import FN, FP, TP

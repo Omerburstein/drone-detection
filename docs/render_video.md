@@ -9,7 +9,7 @@ py -3.13 -m src.render_video --video <mp4> --pred <detections.jsonl> \
 ```
 
 Nothing is re-inferred. Boxes come from a run's persisted `detections.jsonl` and the
-match outcome from `src.eval.metrics.match_frame` — the same function `src.eval.records`
+match outcome from `src.eval.matching.match_frame` — the same function `src.eval.records`
 and `src.eval.curves` call — so **the video cannot disagree with the numbers in the
 ledger**, and rendering costs a video decode rather than an inference pass. Re-render the
 same run under a different `--match` and you are looking at the same detections judged by

@@ -16,7 +16,8 @@ import pytest
 from src.algo.detections import Detections
 from src.eval.conditions import Axis
 from src.eval.labels import EvalFrame
-from src.eval.metrics import CENTER, IOU, MatchCriterion, evaluate
+from src.eval.metrics import evaluate
+from src.eval.matching import CENTER, IOU, MatchCriterion
 from src.eval.records import BASE_COLUMNS, columns, frame_rows, write_dump
 
 

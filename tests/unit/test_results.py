@@ -19,7 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from src.eval.metrics import CENTER, IOU, MatchCriterion, evaluate
+from src.eval.metrics import evaluate
+from src.eval.matching import CENTER, IOU, MatchCriterion
 from src.eval.results import SCHEMA, EvalSettings, append_result, load_results
 from src.evaluate import build_parser
 

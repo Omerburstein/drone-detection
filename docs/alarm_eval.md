@@ -86,7 +86,7 @@ prediction row — see [evaluate.md](evaluate.md#the-per-object-dump). Dumps wri
 2026-08-20 predate those columns, and this CLI **re-derives the distance from the frame's
 own rows** in that case: every target appears exactly once, as a `tp` or an `fn`, so a
 frame's full ground truth is recoverable from the dump alone. Both paths call
-`metrics.nearest_target`, so they agree to the dump's 4-decimal rounding —
+`matching.nearest_target`, so they agree to the dump's 4-decimal rounding —
 `tests/unit/test_records.py` pins that.
 
 That fallback is why every run already in the ledger could be tabled without re-scoring.

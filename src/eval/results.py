@@ -24,7 +24,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .metrics import IOU, MatchCriterion, Metrics
+from .metrics import Metrics
+from .matching import IOU, MatchCriterion
 
 # Bumped only if a field is removed or repurposed. Readers can then reject what
 # they cannot interpret rather than silently mis-reading an older line.

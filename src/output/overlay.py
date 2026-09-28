@@ -28,7 +28,7 @@ import cv2
 import numpy as np
 
 from ..eval.labels import EvalFrame
-from ..eval.metrics import MatchCriterion, as_criterion, match_frame
+from ..eval.matching import MatchCriterion, as_criterion, match_frame
 
 # BGR, matching the caption legend below.
 GT_COLOUR = (90, 220, 90)  # green: where the drone actually is
