@@ -13,6 +13,10 @@ without pulling a dependency chain along. That is what lets a producer outside
 
 from __future__ import annotations
 
+NO_TARGET = "no target"     # frame holding nothing to find
+MIXED = "mixed sizes"       # frame whose targets straddle a size-band edge
+UNKNOWN = "uncategorised"   # frame the condition axis does not label
+
 TP = "tp"   # a prediction that claimed a target
 FP = "fp"   # a prediction that claimed nothing -- a false alarm
 FN = "fn"   # a target no prediction claimed

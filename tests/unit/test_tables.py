@@ -140,3 +140,67 @@ class TestVocabulary:
         assert records.TP is crosscut.TP is vocabulary.TP
         assert records.FP is crosscut.FP is vocabulary.FP
         assert records.FN is crosscut.FN is vocabulary.FN
+
+    def test_one_no_target_label_across_producer_and_consumers(self):
+        """`scene_stats` (which writes conditions.json), `crosscut` (the cross-cut
+        table) and `alarms` (the orphan row) all mean the same thing by this, and
+        used to spell it three ways: `no_target`, `no target`, `no target in
+        frame`. A reader comparing a cross-cut against a conditions axis had to
+        know which was which."""
+        from src.data import scene_stats
+        from src.eval import alarms, crosscut
+        assert (scene_stats.NO_TARGET is crosscut.NO_TARGET
+                is alarms.NO_TARGET is vocabulary.NO_TARGET == "no target")
+
+    def test_the_label_matches_the_house_style_of_its_own_axis(self):
+        """Its siblings in the conditions vocabulary are `invisible (<5)`,
+        `near (<2x)` and `mixed sizes` -- all spaced. `no_target` was the only
+        underscore in the set."""
+        assert "_" not in vocabulary.NO_TARGET
+        assert "_" not in vocabulary.MIXED
+
+
+CONDITIONS = [Path("data/processed/ARD-MAV/conditions.json"),
+              Path("data/processed/ARD100/conditions.json")]
+
+
+class TestMigratedConditions:
+    """The two tracked `conditions.json` files were rewritten when the label was
+    unified. These guard the rewrite: 1,412 values changed, and a partial
+    migration would leave frames labelled with a string nothing now produces --
+    they would silently drop out of every `--conditions` breakdown rather than
+    raising."""
+
+    @pytest.mark.parametrize("path", CONDITIONS, ids=lambda p: p.parent.name)
+    def test_no_frame_keeps_the_old_spelling(self, path):
+        if not path.is_file():
+            pytest.skip(f"{path} not checked out")
+        assert "no_target" not in path.read_text(encoding="utf-8")
+
+    @pytest.mark.parametrize("path", CONDITIONS, ids=lambda p: p.parent.name)
+    def test_the_axis_order_lists_the_new_label(self, path):
+        """`order` drives the row order of the printed breakdown. If it kept the
+        old spelling while the frames carried the new one, the label would sort
+        as an unknown extra rather than in its declared place."""
+        if not path.is_file():
+            pytest.skip(f"{path} not checked out")
+        import json
+        axes = json.loads(path.read_text(encoding="utf-8"))["axes"]
+        for name, body in axes.items():
+            labels = set(body.get("labels", {}).values())
+            if vocabulary.NO_TARGET in labels and "order" in body:
+                assert vocabulary.NO_TARGET in body["order"], name
+
+    @pytest.mark.parametrize("path", CONDITIONS, ids=lambda p: p.parent.name)
+    def test_every_frame_label_is_declared_in_its_axis_order(self, path):
+        """The property the migration had to preserve, checked end to end rather
+        than by counting the diff."""
+        if not path.is_file():
+            pytest.skip(f"{path} not checked out")
+        import json
+        axes = json.loads(path.read_text(encoding="utf-8"))["axes"]
+        for name, body in axes.items():
+            if "order" not in body:
+                continue
+            used = set(body.get("labels", {}).values())
+            assert used <= set(body["order"]), f"{name}: {used - set(body['order'])}"

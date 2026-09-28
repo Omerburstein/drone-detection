@@ -39,6 +39,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from ..eval.vocabulary import NO_TARGET
+
 # The background ring extends to this multiple of the box, so "background" means
 # the clutter immediately around the target rather than the whole frame. A drone
 # against a bright sky and the same drone against a roofline are different
@@ -51,7 +53,6 @@ CLIP_HI, CLIP_LO = 250, 8  # grey levels counted as blown / crushed
 # 0.0-0.2% the cleanly exposed ARD-MAV videos sit at.
 BACKLIT_CLIP_FRACTION = 0.02
 BACKLIT = "backlit"
-NO_TARGET = "no_target"
 
 # Grey levels of target-vs-background separation.
 LIGHTING_BUCKETS = (

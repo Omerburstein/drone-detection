@@ -97,7 +97,7 @@ class TestAlarmEvalCli:
     def test_total_counts_every_alarm_including_the_orphan(self, spread_dump):
         result = run_cli("--dump", str(spread_dump))
         assert "4 false alarms" in result.stdout
-        assert "no target in frame" in result.stdout
+        assert "no target" in result.stdout
 
     def test_pixel_unit_uses_the_other_ladder(self, spread_dump):
         result = run_cli("--dump", str(spread_dump), "--unit", "px")
@@ -137,7 +137,7 @@ class TestAlarmEvalCli:
         rows = list(csv.DictReader(out.open(encoding="utf-8")))
         assert sum(int(r["alarms"]) for r in rows) == 4
         assert [r["series"] for r in rows] == ["centre@1x"] * len(rows)
-        orphan = [r for r in rows if r["bin"] == "no target in frame"]
+        orphan = [r for r in rows if r["bin"] == "no target"]
         assert len(orphan) == 1 and orphan[0]["alarms"] == "1"
 
     def test_run_with_no_alarms_is_refused(self, tmp_path):

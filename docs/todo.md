@@ -25,7 +25,7 @@ dates, not priorities.
   - [x] S2 — characterization tests: `data/sources.py`, `plot_eval` CLI, `live_detect`
   - [x] S3 — `eval/tables.py` + `eval/vocabulary.py`: one dump parser, one CSV writer,
         one `rounded`, one set of outcome labels
-  - [ ] S3b — one `NO_TARGET` across `scene_stats`/`crosscut`/`alarms`, plus the
+  - [x] S3b — one `NO_TARGET` across `scene_stats`/`crosscut`/`alarms`, plus the
         `conditions.json` migration (1,412 values in two tracked files)
   - [ ] S4 — `data/sampling.py` → `algo/sampling.py`, fixing the algo→data inversion
   - [ ] S5 — `UsageError`: library modules stop calling `sys.exit`, so they are callable

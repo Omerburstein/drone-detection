@@ -642,6 +642,11 @@ targets (ARD-MAV is one target per frame).
 | no target † | 4 | 0 | — | 1.0000 | — | 1.0000 |
 | **pooled** | 9,582 | 9,578 | 0.9116 | 0.0018 | 0.8284 | 0.0850 |
 
+> **Label note (2026-09-28).** The three spellings of this label -- `no target`,
+> `no target in frame` and `no_target` -- were unified to **`no target`**. Rows above
+> predate that and are left as the runs printed them; a re-run today prints
+> `no target` wherever they say otherwise.
+
 † under 30 targets — a ratio, not a measurement.
 
 **The sub-8 px band across all three backgrounds**, centre@1×:
@@ -780,6 +785,11 @@ frame. New CLI [`src.alarm_eval`](alarm_eval.md) over `src/eval/alarms.py`.
 | no target in frame | 18 | 9.6% | 18 | 0.5% |
 | **total** | **188** | | **3,658** | |
 
+> **Label note (2026-09-28).** The three spellings of this label -- `no target`,
+> `no target in frame` and `no_target` -- were unified to **`no target`**. Rows above
+> predate that and are left as the runs printed them; a re-run today prints
+> `no target` wherever they say otherwise.
+
 **The same run in pixels** (`--unit px`, `runs/exp004_glad/alarm_distance_px.csv`).
 Median alarm distance is **100.2 px** under centre matching and **2.2 px** under
 IoU@0.50.
@@ -796,6 +806,11 @@ IoU@0.50.
 | ≥500 | 4 | 2.1% | 90.4% | 4 | 0.1% | 99.5% |
 | no target in frame | 18 | 9.6% | | 18 | 0.5% | |
 | **total** | **188** | | | **3,658** | | |
+
+> **Label note (2026-09-28).** The three spellings of this label -- `no target`,
+> `no target in frame` and `no_target` -- were unified to **`no target`**. Rows above
+> predate that and are left as the runs printed them; a re-run today prints
+> `no target` wherever they say otherwise.
 
 **Read the two unit views together — they disagree in an informative way.** In target
 sizes the two criteria are identical from the 1–2 bin outward. In pixels they are not:
@@ -823,6 +838,11 @@ both are available — but the relative one is what a criterion argument should 
 | **≥32** | **476 (78.2%)** | **2,127 (64.7%)** | **7,332 (64.7%)** |
 | no target in frame | 6 | 39 | 92 |
 | **total** | **609** | **3,287** | **11,325** |
+
+> **Label note (2026-09-28).** The three spellings of this label -- `no target`,
+> `no target in frame` and `no_target` -- were unified to **`no target`**. Rows above
+> predate that and are left as the runs printed them; a re-run today prints
+> `no target` wherever they say otherwise.
 | median distance, px | 868 | 683 | 622 |
 | median distance, target sizes | 55.9 | 45.6 | 45.5 |
 

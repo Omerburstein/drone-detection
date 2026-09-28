@@ -57,7 +57,7 @@ The first bin means different things under the two criteria, and this is worth s
   **second** box on an already-claimed target, since a first one would have matched. It
   is a duplicate, not a hallucination.
 
-**`no target in frame` is a separate row, not the top bin.** An alarm on a frame that
+**`no target` is a separate row, not the top bin.** An alarm on a frame that
 held nothing has no distance at all, and sweeping it into `>=32` would manufacture
 evidence of long-range clutter the run never produced. It is counted, shown, and included
 in the share denominator so the column still sums to 100%.

@@ -38,7 +38,7 @@ frame-wide histogram cannot see that.
 | `moderate (15-30)` | 15–30 |
 | `strong (>=30)` | 30 and up |
 | `backlit` | **override** — more than 2% of frame pixels above 250 |
-| `no_target` | frame has no measurable ground-truth box |
+| `no target` | frame has no measurable ground-truth box |
 
 `backlit` overrides the contrast bucket because blown highlights are a distinct optical
 regime rather than a point on the same scale — shooting toward the sun. The 2% threshold
@@ -66,7 +66,7 @@ collapses to **`d ∝ 1/size`**, where size is `sqrt(w × h)` of the ground-trut
 | `mid (2-3x)` | 2–3× |
 | `far (3-5x)` | 3–5× |
 | `very far (>5x)` | beyond 5× |
-| `no_target` | no measurable box |
+| `no target` | no measurable box |
 
 > **This is relative range only, never metres.** The raw ARD-MAV download ships no
 > camera intrinsics, so `f_px` is unknown; assuming a 60°/90°/120° horizontal field of

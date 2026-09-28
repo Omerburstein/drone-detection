@@ -44,6 +44,7 @@ from .crosscut import group_frames, number
 from .curves import bin_index, bin_labels
 from .metrics import box_size, nearest_target
 from .tables import rounded as _rounded
+from .vocabulary import NO_TARGET
 
 FP = "fp"
 TARGET_OUTCOMES = ("tp", "fn")
@@ -60,8 +61,6 @@ REL_EDGES = (0.0, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, float("inf"))
 PX_EDGES = (0.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, float("inf"))
 
 DEFAULT_EDGES = {REL: REL_EDGES, PX: PX_EDGES}
-
-NO_TARGET = "no target in frame"
 
 
 @dataclass(frozen=True)

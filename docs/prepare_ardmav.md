@@ -211,6 +211,11 @@ pixels blown.
 | invisible (<5) | 2,752 | 8.0% |
 | no_target | 307 | 0.9% |
 
+> **Label note (2026-09-28).** The three spellings of this label -- `no target`,
+> `no target in frame` and `no_target` -- were unified to **`no target`**. Rows above
+> predate that and are left as the runs printed them; a re-run today prints
+> `no target` wherever they say otherwise.
+
 M4b is meant to change exactly one variable, the video content — and exposure regime is
 part of content, so this is not a protocol break. But it does mean a recall drop against
 EXP-004 **cannot be read as "GLAD fails on unseen video" without controlling for it.**
