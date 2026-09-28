@@ -15,26 +15,6 @@ dates, not priorities.
 
 ## Open
 
-- [ ] 2026-09-28 — [algo] **Restructure `src/` — staged, in progress.** De-duplication,
-  layer-boundary fixes, shared interfaces and file splits. Plan agreed 2026-09-28; each
-  stage is its own commit so the work can stop after any of them. The baseline-YOLO chain
-  (`baseline_detect.py`, `algo/detector.py`, `algo/tiling.py`, `algo/config.py`,
-  `data/frames.py`, `output/annotate.py`) is **deliberately out of scope** — hence the
-  separate `tiling.py` test item in the backlog.
-  - [x] S1 — CLAUDE.md describes packages, not files; tiling test filed
-  - [x] S2 — characterization tests: `data/sources.py`, `plot_eval` CLI, `live_detect`
-  - [x] S3 — `eval/tables.py` + `eval/vocabulary.py`: one dump parser, one CSV writer,
-        one `rounded`, one set of outcome labels
-  - [x] S3b — one `NO_TARGET` across `scene_stats`/`crosscut`/`alarms`, plus the
-        `conditions.json` migration (1,412 values in two tracked files)
-  - [x] S4 — `data/sampling.py` → `algo/sampling.py`, fixing the algo→data inversion
-  - [x] S5 — `UsageError`: library modules stop calling `sys.exit`, so they are callable
-        from a notebook as this file promises
-  - [x] S6 — split `eval/metrics.py` into `matching.py` + `metrics.py`
-  - [x] S7 — `print_branches`/`GLAD_CONFIDENCE` shared; `live.open_source` → `open_feed`
-  - [x] S8 — `seed_track.py` split into `template_track.py` + `labels_io.py` + a thin
-        CLI. Gate lifted 2026-09-28 (no labelling in progress, no other sessions).
-
 - [ ] 2026-09-23 — [data] **Label a FIELD episode with `/annotate` — now ahead of the second
   analog clip.** EXP-017 ran EXP-016's motion test unchanged on
   `data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4` and it **acquired the target
@@ -226,6 +206,26 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-17 — [data] **Annotate the FIELD capture's three target episodes** — *now the critical path: EXP-011 exhausted what unlabelled footage can answer, and both surviving questions (the ground-clutter false-alarm rate, and recall on our own camera) are measurements.* — frames ~2–180, ~1101–1553 and ~3140–3600 of `captured_raw_20260616_040253_004.mp4`, roughly 1,100 frames. This is the cheapest real score available to the project: EXP-010 is already keyed at `data/processed/FIELD/images/test/`, so labels there turn **an existing JSONL into AP, precision and recall with no second inference pass**. It is also the only way to measure **recall** on our own camera, which EXP-010 leaves unmeasured and which is the number the edge budget actually needs. Two warnings: the episodes' bounds come from where the *detector* fired, so annotating only those frames would score a set chosen by the thing being scored — extend each episode outward until the target is genuinely absent. And **do not eyeball full frames**: a 14×11 px drone at frame 1350 was missed by eye and caught by the detector.
 
 ## Done
+
+- [x] 2026-09-28 — [algo] **Restructured `src/` — eight stages, all landed.** De-duplication,
+  layer-boundary fixes, shared interfaces and file splits. Plan agreed 2026-09-28; each
+  stage is its own commit so the work can stop after any of them. The baseline-YOLO chain
+  (`baseline_detect.py`, `algo/detector.py`, `algo/tiling.py`, `algo/config.py`,
+  `data/frames.py`, `output/annotate.py`) is **deliberately out of scope** — hence the
+  separate `tiling.py` test item in the backlog.
+  - [x] S1 — CLAUDE.md describes packages, not files; tiling test filed
+  - [x] S2 — characterization tests: `data/sources.py`, `plot_eval` CLI, `live_detect`
+  - [x] S3 — `eval/tables.py` + `eval/vocabulary.py`: one dump parser, one CSV writer,
+        one `rounded`, one set of outcome labels
+  - [x] S3b — one `NO_TARGET` across `scene_stats`/`crosscut`/`alarms`, plus the
+        `conditions.json` migration (1,412 values in two tracked files)
+  - [x] S4 — `data/sampling.py` → `algo/sampling.py`, fixing the algo→data inversion
+  - [x] S5 — `UsageError`: library modules stop calling `sys.exit`, so they are callable
+        from a notebook as this file promises
+  - [x] S6 — split `eval/metrics.py` into `matching.py` + `metrics.py`
+  - [x] S7 — `print_branches`/`GLAD_CONFIDENCE` shared; `live.open_source` → `open_feed`
+  - [x] S8 — `seed_track.py` split into `template_track.py` + `labels_io.py` + a thin
+        CLI. Gate lifted 2026-09-28 (no labelling in progress, no other sessions).
 
 - [x] 2026-09-23 — [algo] **Ran EXP-016's motion test unchanged on our own FIELD footage (EXP-017), and it acquires where the goggles clips did not.** User request. No constant re-tuned: EXP-016's `mf.py`/`collect.py`/`verify.py` run against a new `clipcfg.py`, every pixel parameter scaled by 1032/1440 = 0.717. Three defaults-preserving changes in the shared modules (`labels=None`, `hud=None`, `drone_ranges`); both SOFA clips re-import byte-identical, verified against the ledger's own frame counts.
   - **It acquires in all three PROVENANCE episodes** at the imported z\* = 20: 97 confirmed tracks over 3600 frames, **8 sustained-co-located with EXP-010 GLAD boxes** (≥50% of overlapping frames, ≥10 frames), one holding **183 of 185**. On O4 the drone's peak z was 13.9 against a required z\* of 60; here a target track reaches **z = 111.8** and holds 262 frames.
