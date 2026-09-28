@@ -71,7 +71,7 @@ set. *(Exact container unverified — it is only visible post-DUA.)*
 | SynDroneVision / SimD3 | ✅ | ✅ | ✅ | Synthetic |
 | **FIELD** (ours) | ✅ | ✅ | ✅ | **Our own capture — no labels, so no score** |
 | **SOFA-O4** (ours) | ✅ | ✅ | ✅ | **Our own intercept trials — `first_catch` hand-labelled (2026-09-18); other five unlabelled** |
-| **SOFA-ANALOG** (ours) | ✅ | ✅ | ✅ | **Same trials, analog FPV link — `catch_2` and `catch_4` hand-labelled; other seven unlabelled** |
+| **SOFA-ANALOG** (ours) | ✅ | ✅ | ✅ | **Same trials, analog FPV link — `catch_2`, `catch_4` and `catch_5` hand-labelled; other six unlabelled** |
 
 ---
 
@@ -218,9 +218,9 @@ EXP-013 in [experiments.md](experiments.md). **There is no processed copy.** Run
 raw mp4 uncropped, so labels are in raw-frame pixels. Only the outputs live under
 `data/processed/SOFA-ANALOG/`.
 
-## Labels — `catch_2` and `catch_4`
+## Labels — `catch_2`, `catch_4` and `catch_5`
 
-Labelled in the annotator: `catch_2` on 2026-09-22, `catch_4` on 2026-09-28. Labels are at
+Labelled in the annotator: `catch_2` on 2026-09-22, `catch_4` and `catch_5` on 2026-09-28. Labels are at
 `data/processed/SOFA-ANALOG/labels/test/`, judged frames in
 `data/processed/SOFA-ANALOG/verified.jsonl` (both clips, keyed by stem), and the sessions in
 `data/processed/SOFA-ANALOG/annotations/<stem>.json`.
@@ -252,6 +252,21 @@ below 0.6, against 2% on `catch_2`. The target grows from 40 to 163 px across 87
 the follower tracks by correlation at a fixed box size, so a target that changes scale this
 fast is exactly what it handles worst. Treat these boxes as provisional until someone steps
 through 209–295 frame by frame.
+
+### `catch_5`
+
+| | |
+| --- | --- |
+| Frames judged | **465 / 465**, the whole clip |
+| Boxes | **188**, in six spans: 119–162, 164–190, 194–198, 246–277, 313–314, 317–394 |
+| Confirmed empty | **277**, frames 1–118 before the drone appears, 395–465 after, and four gaps between spans — the longest 199–245 and 278–312 |
+| Placed by hand | **53** boxes (and 7 hand-marked empties) |
+| Proposed by the follower | **135**. 87 scored below 0.8 and 13 below 0.6 (lowest are frames 186, 180, 189, 190, 390 at 0.45–0.49) |
+| Box size (longest side) | median **47 px**, from 21 to 132 px |
+
+The weak frames cluster at the **ends of two spans**: 180–190, just before the drone drops out
+at 191, and 390–391, just before it leaves at 395. The follower degrades as the target exits
+rather than across the span, so checking the last few frames of each span covers most of it.
 
 The follower's boxes were reviewed at playback speed only. The mp4s are long-GOP, so labelling
 was done by playing through, not by seeking.
