@@ -33,10 +33,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from src.data.annotation import CARRIED, HUMAN, Follower, Session, Verdict
-from src.data.box_edit import (MIN_SIZE, Box, Viewport, clamp_box, drag,
+from .annotation import CARRIED, HUMAN, Follower, Session, Verdict
+from .box_edit import (MIN_SIZE, Box, Viewport, clamp_box, drag,
                                from_corners, hit_test)
-from src.data.seed_track import DEFAULT_MIN_SCORE, DEFAULT_SEARCH
+from .seed_track import DEFAULT_MIN_SCORE, DEFAULT_SEARCH
 
 WINDOW = "annotate"
 BAR = 50                  # status strip under the picture, in window pixels

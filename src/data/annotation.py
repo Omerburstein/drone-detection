@@ -35,8 +35,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from src.data.box_edit import Box
-from src.data.seed_track import (DEFAULT_MIN_SCORE, DEFAULT_SCALES,
+from .box_edit import Box
+from .seed_track import (DEFAULT_MIN_SCORE, DEFAULT_SCALES,
                                  DEFAULT_SEARCH, TemplateTracker, to_yolo)
 
 HUMAN = "human"      # drawn, moved, resized or declared by the user
