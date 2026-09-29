@@ -2900,3 +2900,111 @@ actually targets.
 `screen_fixed_frac.npy`, `verify_z20.pkl`, `verify_z6.pkl`, `overlay_exp017.mp4`
 (frames 1–3600 at z\* = 20), `screenfixed.log`, `collect.log`, `verify_z20.log`,
 `verify_z6.log`, `draw.log`.
+
+---
+
+## EXP-018 — is there any fisheye to correct, and does stage 1 care?
+
+- **Date:** 2026-09-29
+- **Question:** the motion-first rebuild's stage 1 splits each frame into sky and scene as
+  a two-level depth prior. Does correcting the lens first change that split? And, before
+  that can be asked at all: **is there a radial distortion in this footage to correct?**
+  `docs/todo.md`'s fisheye item has been open since 2026-09-17 with its premise withdrawn
+  and never settled either way.
+- **Model / weights:** none. No learned component.
+- **Data:** `data/processed/SOFA-O4/videos/first_catch.avi` (1440×1080, 964 frames) and
+  `data/raw/SOFA-ANALOG/videos/catch_2.mp4` (960×720). 40 frames sampled evenly from each;
+  35 and 29 respectively had a horizon crossing ≥55% of the frame width.
+- **Hardware / cost:** i7-1255U CPU. ~6 min per clip per lambda swept over images; the
+  coordinate-only sweeps are seconds.
+- **Scripts (gitignored):** `runs/sofa_o4/exp017_motion_first/undistort.py` (division
+  model, both directions, plus `py -3.13 -m undistort` self-check) and `check_fisheye.py`.
+
+      PYTHONPATH="runs/sofa_o4/exp017_motion_first;runs/sofa_o4/exp015_normalised_motion;." \
+          py -3.13 -m check_fisheye --frames 40 --range 1.2 --lam=-0.20
+
+  **Numbering clash, recorded rather than renamed:** `runs/sofa_o4/exp017_motion_first/`
+  and `runs/sofa_analog/exp017_motion_first/` were created in a different session that did
+  not know EXP-017 was already taken by the FIELD run above. The directory name stays as
+  it is — paths are cited in that run's own README — but EXP-017 in this ledger means
+  FIELD, and the motion-first build is **not yet in this ledger at all**; its README is
+  currently its only record.
+
+### Method, and the control that makes it readable
+
+Stage 1 already emits a horizon (lowest sky row per column). A horizon is the only plumb
+line this footage offers, but a tree line has real relief, so **a bow is not by itself
+evidence of a lens.** The discriminator is that a lens bows a line by an amount set by the
+line's distance from the optical axis — pinned to image coordinates, zero when the line
+runs through the axis — while terrain is pinned to the scene.
+
+Each frame's horizon gets a MAD-trimmed quadratic fit; `sag` is the bow at mid-span
+(exactly `-a` with x normalised to [-1, 1]) and the fit residual RMS measures the tree
+line's own roughness. A **positive control** bends a synthetic straight horizon at each
+real frame's own height and span by a known lambda and requires the sweep to recover it —
+without it, "found nothing" and "cannot find anything" are the same output.
+
+    positive control, both clips: injected lambda -0.160, recovered -0.160, residual |sag| 0.000 px
+
+### Result: the two airframes give opposite answers
+
+| | O4 (digital link) | analog (CVBS) |
+| --- | ---: | ---: |
+| frames with a fittable horizon | 35 of 40 | 29 of 40 |
+| median \|sag\| | 159.5 px | 38.7 px |
+| median fit residual (tree relief) | 40.1 px | 13.7 px |
+| sag vs horizon height, r | +0.547 | +0.621 |
+| sag crosses zero at row | **325** (axis is 540) | **368** (axis is 360) |
+| best lambda | none — runs to +1.2 and still falling | **-0.60**, a clean interior minimum |
+| mean \|sag\| at best lambda | 149.7 → 72.9 px (absurd lambda) | 43.4 → **26.7** px |
+
+**O4 has no radial signature.** The zero crossing misses the optical axis by 215 px, the
+sweep never finds an interior minimum over ±1.2 and wants *pincushion* — the opposite of a
+fisheye — and the decisive frames settle it directly: **11 frames whose horizon runs
+within 30 px of the optical centre bow by a median 209 px**, where a radial model demands
+zero. Rendering one confirms it by eye: tall near trees at both frame edges, distant tree
+line low in the middle. The bow is scene structure. This is consistent with the O4 air
+unit dewarping before the link, and it closes the fisheye item for O4.
+
+**Analog does have one.** The zero crossing lands 8 px from the optical axis, and the
+sweep has a real bowl bottoming at lambda = -0.60 (26.7 px against 43.4 px uncorrected).
+Resampled, the horizon's median \|sag\| falls **38.7 → 14.2 px** against a tree-line
+residual of 11.5 px — i.e. as straight as this plumb line can show. Caveat, stated: only
+**one** analog frame has its horizon near the optical axis, so the direct refutation that
+settles O4 has no power here and the evidence is the regression and the bowl.
+
+### But stage 1 does not benefit, on either clip
+
+| lambda | FOV retained | sky fraction (like for like) | horizon \|sag\| | split IoU vs old |
+| --- | ---: | ---: | ---: | ---: |
+| O4, -0.20 | 80.0% | 30.93% → 30.38% | 159.5 → 145.3 | **0.989** |
+| analog, -0.60 | **59.3%** | 28.48% → 25.13% | 38.7 → 14.2 | **0.885** |
+
+**Undistortion is a bijection on pixels, so it relocates the sky boundary and cannot
+relabel it.** Stage 1 is a per-pixel appearance decision — texture, luminance, blue excess,
+each against a percentile of the frame's own distribution — and a pixel that looked like
+tree still looks like tree at its new coordinates. The IoU against the old split carried
+through the same remap is 0.989 on O4; what little it moves is resampling at the boundary,
+not a better decision. Sky fraction is flat or slightly **down**, and on analog the
+correction costs **40.7% of the field of view**, which on a shallow-elevation target is
+exactly the picture one cannot afford to throw away.
+
+**One measurement was wrong before it was right, and the correction matters.** The first
+pass reported "remap keeps 100.0% of the frame" and a sky fraction *rising* 28.0% → 30.6%.
+Both were artefacts: `undistort_maps`'s `inside` flag answers which *destination* pixels
+have a source, and for a barrel correction the answer is always all of them, because that
+map zooms in. The discarded picture is at the *source* edges and only the forward map sees
+it. So a 20% crop was being reported as "keeps 100%", and the sky fraction rose only
+because the crop removed ground. Compared over the retained field of view it does not rise.
+
+### What this settles, and what it does not
+
+- **Fisheye undistortion is not a stage-1 lever on either clip.** Closed.
+- **No undistorted copy was written to `data/processed/`**, though the user authorised one
+  on 2026-09-22. On O4 there is nothing to undo; on analog the only honest lambda costs
+  41% of the frame on a fixed canvas. If analog undistortion is ever wanted, it should
+  expand the canvas rather than crop, trading centre resolution for field of view.
+- **Untested: whether analog's lambda = -0.60 helps stage 2.** That is where a radial error
+  actually bites — the homography, the epipole and the parallax residual all assume a
+  pinhole camera, and `undistort_points` corrects coordinates with no resampling and no
+  FOV loss at all. EXP-018 did not measure it. It is the open question this leaves.

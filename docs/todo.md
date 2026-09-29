@@ -129,11 +129,30 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
     neither. Segmenting the ring by flow magnitude, or rejecting a bimodal ring, is the
     named fix.
 
+- [ ] 2026-09-29 — [algo] **Does analog's lambda = -0.60 help stage 2?** Narrowed from the
+  fisheye item below, which EXP-018 closed for stage 1. A radial error bites where a
+  *pinhole camera is assumed* — the grid-KLT homography, the epipole, the parallax
+  residual — not where a per-pixel appearance threshold is applied. `undistort_points`
+  corrects coordinates with no resampling and **no field-of-view loss at all**, so on
+  analog this is nearly free to try: undistort the KLT correspondences before fitting the
+  homography and re-measure the residual and the epipole's anisotropy. O4 needs no such
+  test; it has no radial signature.
+
 - [ ] 2026-09-17 — [algo] **Fisheye undistortion before differencing.** *Premise withdrawn
   2026-09-22 by EXP-012b:* the residual after the homography is ~1 px median and 3–7 px
   p90, below the drone's 4–22 px differential motion, so compensation error is not what
   hides the target. Undistortion might still cut the ~115 terrain candidates per frame.
   Low priority until the ranking item above is done.
+  **Settled for stage 1 on 2026-09-29 by EXP-018, and the two airframes differ.** O4 has
+  **no radial signature at all**: 11 frames whose horizon runs within 30 px of the optical
+  axis — where a radial model demands zero bow — bow by a median 209 px, and the plumb-line
+  sweep never finds an interior minimum over ±1.2, wanting *pincushion*. The bow is near
+  trees at the frame edges against a distant tree line in the middle. Analog **does** have
+  one, lambda = -0.60, which straightens the horizon from 38.7 px of sag to 14.2 px against
+  a 11.5 px tree-line residual. **Neither helps stage 1**, because undistortion is a
+  bijection on pixels: it relocates the sky boundary and cannot relabel it (split IoU 0.989
+  on O4 against the old split carried through the same remap), while costing 20-41% of the
+  field of view on a fixed canvas. No undistorted copy was written to `data/processed/`.
   **Superseded within this item:** `motion_compensate`'s 50 px flow-rejection cap is *not*
   binding on this footage — measured flow is under 50 everywhere — so porting it is no
   longer a priority.
