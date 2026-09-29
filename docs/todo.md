@@ -15,6 +15,37 @@ dates, not priorities.
 
 ## Open
 
+- [ ] 2026-09-29 — [algo] **Redefine stage 1 as far/near, not sky/ground.** EXP-019 measured
+  it: `skyline.split` puts the labelled airborne drone in `scene` in **257 of 257** O4
+  frames and **158 of 224** analog frames. The user's correction stands — "the drone is in
+  the sky, just shallow one (for me tree line is sky as well)" — and this is it with a
+  number. The rule separates *blue sky* from everything (texture + luminance + blue excess,
+  each on a per-frame percentile), while what the ring test needs is a **depth** split, and
+  a distant tree line is far. A parallax-magnitude rule is the obvious replacement, since
+  the residual field stage 2 already computes is exactly a depth signal. Second defect on
+  the same module: analog finds **no sky at all in 75 of 360 frames**, so anything gated on
+  stage 1 would refuse on a fifth of that clip. **Belongs with the skyline session** — tell
+  them before they verify the current boundary, or they will be checking a definition
+  already known to be wrong.
+
+- [ ] 2026-09-29 — [algo] **Fit the epipole once per window, not once per frame pair.**
+  EXP-019 measured the focus of expansion hopping **126.8 px (O4) and 98.9 px (analog)**
+  between consecutive frames, where a real FOE drifts smoothly with the manoeuvre. It is
+  noise, not a bad estimator: EXP-012b put the post-homography residual at ~1 px median, so
+  each point's direction is tracking noise, and a RANSAC fit over the same points was
+  **worse** (median jump 454.7 px against least squares' 93.9 px, answers 282 px apart) —
+  the signature of noise-limited rather than outlier-limited data. Accumulating over the
+  k <= 15 window should cut it as sqrt(k), and the tracker needs that window anyway. This is
+  the largest single thing limiting the direction test, which currently runs at only
+  **x1.74 chance on O4 and x1.40 on analog** against a `2*asin(0.35)/pi = 22.8%` floor.
+
+- [ ] 2026-09-29 — [algo] **The HUD mask leaves the gaps between glyph boxes open.**
+  Visible on O4 frame 946 in EXP-019's overlay: candidates survive in the spaces between
+  `4.04v` and between `24.3V`/`19 Mbps`, because the mask covers each glyph box and the
+  dilation does not close the gaps, while the glyph edges leak difference energy into them.
+  Small, but it is false-alarm load in a region known to be worthless, and it is cheap to
+  fix by closing the mask across a text block rather than dilating each glyph.
+
 - [ ] 2026-09-23 — [data] **Label a FIELD episode with `/annotate` — now ahead of the second
   analog clip.** EXP-017 ran EXP-016's motion test unchanged on
   `data/raw/FIELD/videos/captured_raw_20260616_040253_004.mp4` and it **acquired the target
@@ -128,6 +159,13 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
     sky/tree-line boundary, where the ring straddles two depths and its median describes
     neither. Segmenting the ring by flow magnitude, or rejecting a bimodal ring, is the
     named fix.
+    **Deprioritised 2026-09-29 by EXP-019**, which drew stage 1 and stage 2 on the same
+    frames and asked where the surviving candidates sit. The sky/scene boundary band is
+    7.0% of the O4 frame and holds 12.3% of survivors (x1.76), and 8.9% of the analog frame
+    holding 7.9% (x0.89 -- *under*-represented). EXP-016's 57.5% was about **confirmed
+    multi-frame tracks**, so this does not contradict it, but it puts the horizon problem in
+    the accumulation rather than in candidate generation. Fix the tracker and the epipole
+    window first; re-measure this after.
 
 - [ ] 2026-09-29 — [algo] **Does analog's lambda = -0.60 help stage 2?** Narrowed from the
   fisheye item below, which EXP-018 closed for stage 1. A radial error bites where a

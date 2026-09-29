@@ -3008,3 +3008,121 @@ because the crop removed ground. Compared over the retained field of view it doe
   actually bites — the homography, the epipole and the parallax residual all assume a
   pinhole camera, and `undistort_points` corrects coordinates with no resampling and no
   FOV loss at all. EXP-018 did not measure it. It is the open question this leaves.
+
+---
+
+## EXP-019 — stage 1 and stage 2 rendered together, and measured over two spans
+
+- **Date:** 2026-09-29
+- **Question:** the motion-first rebuild has a sky/scene split (stage 1) and an epipolar
+  direction test (stage 2), each checked in isolation. Drawn on the same frame and
+  measured over a whole span, do they hold up, and do the candidates stage 2 fails to
+  reject sit on stage 1's boundary the way EXP-016's confirmed false tracks did?
+- **Model / weights:** none. No learned component.
+- **Data:** `data/processed/SOFA-O4/videos/first_catch.avi` frames 650–964 (315 pairs,
+  257 labelled) and `data/raw/SOFA-ANALOG/videos/catch_2.mp4` frames 441–800 (360 pairs,
+  224 labelled). `tau = 1.661`, EXP-017's frozen threshold budget, unchanged.
+- **Hardware / cost:** i7-1255U CPU. ~7 min per span, both backgrounded.
+- **Scripts (gitignored):** `runs/sofa_o4/exp017_motion_first/overlay_video.py`.
+  `--no-video` prints the report without writing frames.
+
+      PYTHONPATH="runs/sofa_o4/exp017_motion_first;runs/sofa_o4/exp015_normalised_motion;." \
+          py -3.13 -m overlay_video --start 650 --end 964
+
+  Artifacts: `stages_first_catch_650_964.mp4`, `stages_catch_2_441_800.mp4`.
+  See EXP-018 for the EXP-017 directory-numbering clash.
+
+### Stage 1
+
+| | O4 650–964 | analog 441–800 |
+| --- | ---: | ---: |
+| sky fraction, median (p10 / p90) | 21.2% (17.4 / 31.0) | 21.5% (**0.0** / 24.0) |
+| uncertain band | 7.0% of frame | 8.9% of frame |
+| frames with no sky at all | 0 of 315 | **75 of 360** |
+| frame-to-frame sky IoU, median | 0.960 | 0.960 |
+| pairs below 0.90 IoU | 30 of 314 | 56 of 359 |
+| **where the labelled drone is put** | **scene 257, sky 0** | **scene 158, sky 44, uncertain 22** |
+
+**The split calls the airborne target "scene" in 257 of 257 O4 frames and 158 of 224
+analog frames.** The user's correction — "the drone is in the sky, just shallow one (for me
+tree line is sky as well)" — is confirmed with a number: the rule separates *blue sky* from
+everything, while what the ring test needs is **far from near**, and a target at shallow
+elevation against a distant tree line is far. This is a definition error, not a threshold.
+
+**Analog loses the sky entirely in 21% of frames**, so a ring test gated on stage 1 would
+have to refuse on a fifth of that clip. Flicker is secondary: 0.960 median IoU is healthy.
+
+### Stage 2, against a chance baseline that had been missing
+
+| | O4 | analog |
+| --- | ---: | ---: |
+| epipole reported reliable | 297 of 315 | 310 of 360 |
+| epipole anisotropy, median | 0.38 (threshold 0.15) | 0.29 |
+| epipole frame-to-frame jump, median | **126.8 px** (p90 293.4) | **98.9 px** (p90 232.5) |
+| epipole agreement with background (angular) | **34.2%** | **29.4%** |
+| candidates/frame | 87.4 | 47.2 |
+| rejected as epipolar | 32.5% | 22.8% |
+| unjudged (FOE / rotation) | 18.2% | 28.6% |
+| rejection among **judged** candidates | **39.7%** | **31.9%** |
+| the same for **random** directions | 22.8% | 22.8% |
+| **lift over chance** | **×1.74** | **×1.40** |
+| drone survives | 134 of 163 (82%) | 65 of 67 (97%) |
+
+**A candidate whose direction is random is rejected with probability `2·asin(0.35)/π =
+22.8%`,** because the test rejects when |sin| to the epipolar line is under 0.35. Every
+rejection rate must be read against that floor, and EXP-017's step 2 did not do so. Read
+correctly the direction test runs at **1.74× chance on O4 and 1.40× on analog**. It is
+doing something real and it is doing far less than the several-fold predicted in the plan.
+**That prediction is now twice contradicted and should not be restated.**
+
+**The epipole hops 99–127 px between consecutive frames**, where a real focus of expansion
+drifts smoothly with the manoeuvre. This is single-pair noise, not a bad estimator:
+EXP-012b measured the post-homography residual at ~1 px median, and a 1 px residual's
+direction is dominated by tracking noise. A RANSAC fit over the same points (200
+hypotheses, 3 px tolerance, inlier refit) was **worse** — median jump 454.7 px against
+least squares' 93.9 px on frames 700–758, the two answers 282 px apart — which is the
+signature of noise-limited rather than outlier-limited data. The fix is to fit the epipole
+**once per window** rather than per pair, which the tracker needs anyway.
+
+### A metric of ours that was broken, and is now fixed
+
+`geometry.estimate_epipole`'s `inlier_fraction` counted voting lines within a fixed 3 px of
+the solution on `|n · (p − x)|`, the epipole's offset from the line through x along mu.
+**That offset scales with `|p − x|` for a fixed angular error**, so the fixed pixel
+tolerance was only meaningful next to the epipole and read ~0.008 everywhere else — it was
+measuring distance, not agreement. It is now the angular form, the fraction of background
+points within the same 0.35 sin threshold the direction test uses. It is reporting-only and
+was never part of `reliable`, so no earlier verdict in EXP-017 changes.
+
+Read that way the epipole explains **34.2%** of the O4 background and **29.4%** of
+analog's, against the 22.8% a random direction would hit — ×1.50 and ×1.29. That is an
+independent route to the same conclusion as the candidate lift (×1.74 / ×1.40): the
+epipole is real, it is weak, and on analog it is barely locating anything.
+
+### Where the survivors sit — the reason to draw both stages together
+
+| | band's share of frame | survivors in the band |
+| --- | ---: | ---: |
+| O4 | 7.0% | **12.3%** of 13,582 |
+| analog | 8.9% | **7.9%** of 8,264 |
+
+**EXP-016's horizon failure does not appear at the candidate stage.** O4 is 1.76×
+over-represented at the sky/scene boundary; analog is 0.89×, i.e. *under*-represented.
+EXP-016's 57.5% figure was about confirmed **multi-frame tracks**, so these do not
+contradict it — but they locate the horizon problem in the ring test and the accumulation
+rather than in candidate generation, which is an argument for **deprioritising the
+depth-aware ring** relative to the tracker. First evidence either way.
+
+### Two defects the render shows that the tables do not
+
+- **Candidates survive in the gaps between HUD glyph boxes.** The dilated HUD mask covers
+  each glyph but not the space between them, and glyph edges leak difference energy there.
+  Visible on O4 frame 946 around `4.04v` and `24.3V`.
+- **The uncertain band is a 7–9% ribbon**, as `UNCERTAIN_PX = 24 px` dilate/erode
+  specifies — a lot of frame to declare unjudgeable when the target spends its time near
+  that boundary.
+
+### Still standing from EXP-017
+
+`[WARNING] stage-0 masks cover the labelled drone in 55 frames, first at 588` on analog.
+Unchanged, and still the first thing to fix on that clip.
