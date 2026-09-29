@@ -15,6 +15,15 @@ dates, not priorities.
 
 ## Open
 
+- [ ] 2026-09-29 — [algo] **Make the stage-1 uncertain-band policy a per-clip operating
+  point.** EXP-023 measured both settings at matched false-alarm rate and **neither
+  dominates**: refusing the band wins on O4 (40 vs 30 drone frames at 9.35 FA/frame),
+  scoring it wins on analog (60 vs 49 at 3.30 FA/frame). The split is explained — EXP-019
+  put the analog drone inside that band in 22 of 224 frames, so refusing it discards real
+  targets there, while on O4 the band is mostly clutter. Worth ~10 recall points either
+  way, so it must be chosen from the dump per clip rather than frozen in code.
+  `overlay_sky.py --keep-uncertain` is the switch; the CSVs make the re-cut seconds.
+
 - [ ] 2026-09-29 — [algo] **Drop the layered homography; one plane is measurably better.**
   EXP-022 fitted `H_ground` by RANSAC and refitted on the outliers for `H_far`, as the
   motion-first plan specifies, and measured it against a single-plane control on identical
@@ -287,6 +296,24 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-29 — [algo] **Score a HUD mask against labels, not against its coverage percentage.** EXP-020: the tool prints `7.71% of the frame`, which is the wrong number — 13.15% sounded acceptable and was 20% of the ground truth. Add `--labels <dir>` to `src.data.hud_mask` so the build reports how many labelled boxes the mask would veto at `HUD_VETO_FRACTION`, and refuse silently-expensive masks. Cheap: the scoring loop is `overlap_fraction` over YOLO txt files, ~20 lines, and it is the only check that would have caught this.
 
 ## Done
+
+- [x] 2026-09-29 — [algo] **Wire in the depth-aware ring and re-run the sky branch.**
+  Done — **EXP-023**, in a new folder `runs/sofa_o4/exp023_sky_branch/` so EXP-022 stays
+  frozen as the baseline the ledger cites. Videos: `sky_first_catch_650_964.mp4` (315
+  frames) and `sky_catch_2_441_800.mp4` (360). **The whole-ring control reproduces EXP-022
+  to the digit** (48/257 at 14.65 FA/frame; 73/224 at 5.16), which is what makes the rest
+  readable. **The depth-aware ring alone is a recall win on O4** — 48 → 57 frames, because a
+  target beside the horizon no longer has its `sigma_ring` set by the step instead of the
+  sky (synthetic: `c` 8.2 whole-ring → 16.4 label-restricted). **The uncertain-band refusal
+  is what cuts false alarms** (−47% O4, −31% analog) **and it costs 17 and 22 drone frames**;
+  filed above as a per-clip choice. Also answers the size question: `c` is a per-pixel ratio
+  that ignores extent, and `min(core)` was leaking size in *backwards* as a downward-biased
+  order statistic, so `snr = (ring_med − core_mean)·sqrt(n)/sigma` is now recorded beside it
+  (not a clear separation win: 85.9% vs 92.3% clutter-at-p10 on O4, 74.7% vs 71.9% on
+  analog). A minimum-diameter floor **pays on analog and never on O4** — 4 px removes 22.1%
+  of clutter for 4.1% of target on analog, while O4's target and clutter share a 3.1 px
+  median — so `--min-diameter` defaults to off. Each run now writes a per-candidate CSV;
+  every number in the ledger entry after the renders is a re-cut of those, in seconds.
 
 - [x] 2026-09-29 — [algo] **Run stage 2 over a span with an overview video.** Done —
   **EXP-022**. Both branches built and rendered on two clips:

@@ -3428,3 +3428,113 @@ None would have raised an exception; each returns a plausible-looking number.
    rather than one.
 4. **A second test after `c` is not optional**: 77–90% of clutter reaches the target's p10
    contrast, so `c` alone cannot separate target from clutter on either clip.
+
+## EXP-023 — the depth-aware ring, and size as evidence
+
+- **Date:** 2026-09-29
+- **Question:** EXP-022 implemented the depth-aware ring, self-checked it, and then never
+  passed it — the whole run used an undifferentiated ring. Turn it on and measure it. And
+  answer a second question the user raised: why does `c` ignore the blob's *size*, and
+  should small candidates be dropped?
+- **Model / weights:** none.
+- **Data:** the EXP-022 spans unchanged — O4 `first_catch` 650–964 (315 frames, 257
+  labelled) and analog `catch_2` 441–800 (360 frames, 224 labelled). `c >= 6`, cap 4000.
+- **Hardware / cost:** i7-1255U CPU. ~13 min per rendered span, plus four `--no-video`
+  attribution passes.
+- **Scripts (gitignored):** a **new folder**, `runs/sofa_o4/exp023_sky_branch/` (and the
+  analog clipcfg in `runs/sofa_analog/exp023_sky_branch/`). EXP-022's
+  `exp017_motion_first/` is left frozen as the baseline it is cited as.
+  `silhouette.py` (10 synthetic self-checks), `overlay_sky.py`. Artifacts:
+  `sky_first_catch_650_964.mp4`, `sky_catch_2_441_800.mp4`, and
+  `candidates_*.csv` — 2,996 and 1,261 rows, one per kept candidate.
+
+### The control first: the new code reproduces EXP-022 exactly
+
+Run with `--plain-ring`, the whole-ring condition returns **48/257 at 14.65 FA/frame on O4
+and 73/224 at 5.16 on analog** — EXP-022's numbers to the digit. Every comparison below is
+therefore internal to one codebase, not against a remembered figure.
+
+### Two changes, separated, because together they mislead
+
+The first render changed the ring *and* began refusing candidates standing in stage 1's
+`uncertain` band. A 17-frame probe made that look like an 87% false-alarm cut at no cost to
+recall. **It is not.** Four attribution passes over the full spans:
+
+| | O4 FA/frame | O4 recall | analog FA/frame | analog recall |
+| --- | ---: | ---: | ---: | ---: |
+| **A** whole ring (EXP-022) | 14.65 | 48 (18.7%) | 5.16 | 73 (32.6%) |
+| **B** depth ring, band scored | 17.56 | **57 (22.2%)** | 4.79 | 71 (31.7%) |
+| **C** depth ring, band refused | **9.35** | 40 (15.6%) | **3.30** | 49 (21.9%) |
+
+**The depth-aware ring by itself (B vs A) is a recall win on O4** — 48 → 57 frames, +3.5
+points — because a target beside the horizon no longer has its `sigma_ring` set by the step
+instead of by the sky. The synthetic check measures the same effect directly: `c` 8.2 with
+a whole ring, 16.4 with the label-restricted one. On analog it is neutral (73 → 71, and
+slightly fewer false alarms).
+
+**The band refusal is what moves the false-alarm rate, and it is not free.** It cuts FA by
+47% on O4 and 31% on analog while costing 17 and 22 drone frames respectively.
+
+### At matched false-alarm rate, the answer flips between clips
+
+Raising B's threshold until its false-alarm rate equals C's — the only fair comparison,
+computed from the dumps in seconds:
+
+| at equal FA/frame | B (band scored) | C (band refused) | winner |
+| --- | ---: | ---: | :--- |
+| O4, 9.35 FA/frame | 30 frames (c≥9.3) | **40 frames** | **C** |
+| analog, 3.30 FA/frame | **60 frames** (c≥6.8) | 49 frames | **B** |
+
+**Neither policy dominates**, and the split is explained by where each clip's target lives:
+EXP-019 measured the analog drone in the uncertain band in 22 of 224 frames, so refusing the
+band throws real targets away there, while on O4 the band is mostly clutter. This is a
+per-clip operating point to be read off the dump, not a constant to be fixed in code.
+
+### Why `c` ignored size, and what replaced it
+
+`c = (median(ring) − min(core)) / σ_ring` is a **per-pixel** contrast ratio: it uses the
+detected scale only to place the core and ring, never as evidence. Two consequences.
+
+It throws away information — matched-filter SNR goes as `Δ·√N/σ`, so a 12 px blob is ~2×
+the evidence of a 3 px one at equal contrast, and `c` scores them identically (measured on
+the synthetic: 4.5 px and 13.4 px blobs both at `c ≈ 16`).
+
+Worse, **size was already leaking in backwards.** `min(core)` is a minimum over N pixels,
+and the expected minimum drifts downward as N grows, so a larger core inflates `c` from
+noise alone. That is the sub-proportionality EXP-022 recorded — tripling sky noise cut `c`
+by only ~2 instead of 3.
+
+`snr = (median(ring) − mean(core))·√n_core / σ_ring` is now computed alongside: the core's
+*mean*, normalised by the standard error of that mean. Unbiased where `min` is not, and it
+rises with size (56 vs 155 on those same two blobs). **It is not a clear win on separation**
+— clutter reaching the target's p10 is 85.9% for `snr` vs 92.3% for `c` on O4, but 74.7% vs
+71.9% on analog. Worth recording as a column; not worth replacing `c` with yet.
+
+### A minimum size floor: right idea, and only on analog
+
+| floor | analog clutter cut | analog target cut | O4 clutter cut | O4 target cut |
+| ---: | ---: | ---: | ---: | ---: |
+| 3–4 px | **−22.1%** | **−4.1%** | −66.1% | −58.0% |
+| 6 px | −38.6% | −31.5% | −84.8% | −70.0% |
+| 8 px | −48.3% | −90.4% | −94.7% | −90.0% |
+
+**On analog a 4 px floor removes 22% of clutter for 4% of the target** — a real trade. **On
+O4 it never pays**, because target and clutter have the *same* median diameter (3.1 px):
+the O4 target sits at the bottom of the scale ladder, so size carries no information about
+it at all. At 8 px both clips lose ~90% of the target. `--min-diameter` therefore exists,
+is measured, and **defaults to off**.
+
+Two practical notes: the scale ladder is geometric and discrete, so floors only bite at
+ladder steps (3.1, 4.5, 6.2 … px) and 3.5 and 4.0 give identical results; and applied on
+top of condition C on analog, a 3.5 px floor gives 2.57 FA/frame at 46 frames against
+3.30 and 49 — roughly a wash once the threshold is free to move.
+
+### Next
+
+1. **Make the uncertain-band policy a per-clip operating point**, chosen from the dump.
+   Neither setting dominates and the difference is 10 recall points either way.
+2. **Fix stage 1 rather than working around it.** Both the ring restriction and the band
+   refusal are compensations for a split that is `blue sky vs everything` where the branch
+   needs `far vs near`. This is the third experiment to land on the same defect.
+3. **Keep the per-candidate dump.** Every number in this entry after the renders was a
+   re-cut of two CSVs, in seconds. EXP-022 had none and every question cost a 14-minute span.
