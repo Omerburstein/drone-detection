@@ -3201,3 +3201,94 @@ motion or track history, not geometry.
 **And the general lesson:** the tool reports coverage, which is the wrong number.
 13% of the frame sounded acceptable and was 20% of the ground truth. Score a mask against
 labels before a run depends on it.
+
+## EXP-021 — the 5-frame window: persistence works, the direction test's premise does not
+
+- **Date:** 2026-09-29
+- **Question:** EXP-019 left the epipole hopping 99–127 px between consecutive frames and
+  the direction test running at only ×1.74 chance. Both point at the same fix — fit the
+  epipole **once per window** instead of once per pair, and test each candidate's
+  *accumulated* residual rather than one step's. Does that rescue the direction test?
+- **Model / weights:** none. No learned component.
+- **Data:** `data/processed/SOFA-O4/videos/first_catch.avi` frames 650–964, `tau = 1.661`,
+  k = 5 with 4 appearances required, appearance radius 14 px.
+- **Hardware / cost:** i7-1255U CPU, ~8 min for the span.
+- **Scripts (gitignored):** `runs/sofa_o4/exp017_motion_first/window.py` (accumulation,
+  chaining, pooled epipole, persistence; `py -3.13 -m window` self-checks it) and
+  `overlay_window.py` (renderer and report). `overlay_video.py` stays as the single-pair
+  baseline. Artifact: `window5_first_catch_650_964.mp4`.
+
+### The accumulation does mechanically what it was designed to
+
+Over 61 windows on frames 900–960: residual coherence `|Σμ| / Σ|μ|` **0.920** against
+1.000 for pure parallax and 0.447 for a random walk; `|Σμ|` 3.97 px over five steps against
+a per-step 0.93 px; direction anisotropy 0.389 windowed against 0.355 single-pair; and the
+epipole's frame-to-frame jump falls to **40.9 px median** (p90 95.5) over the full span,
+against EXP-019's 126.8 px. Every mechanical claim made for the window holds.
+
+### And it still does not find a parallax field
+
+| model, scored on the same accumulated field | 700–760 | 900–960 |
+| --- | ---: | ---: |
+| **A. uniform shift** — every residual points the same way | **37.2%** | **38.5%** |
+| **B. parallax from a focus of expansion** | 30.3% | 23.8% |
+| chance (`2·asin(0.35)/π`) | 22.8% | 22.8% |
+| `\|μ\|` vs distance to the epipole, correlation | +0.171 | +0.061 |
+
+**A uniform shift outscores a focus of expansion on both sub-spans.** Parallax means
+`μ = γ·(e − x)`, so `|μ|` *must* grow with distance from the epipole; at +0.17 and +0.06 it
+does not. The field is better described as a small near-uniform misalignment left by the
+homography than as depth-induced parallax — equivalently, the epipole is at or near
+infinity, where fitting it as a *point* is meaningless.
+
+**One number in the run's own write-up is span-dependent and was generalised too far.** The
+headline "the pooled epipole is at chance, 22.1%" is a 61-frame sub-span figure; the
+full 315-frame span logged **35.4%** agreement, which is above the 22.8% floor, and
+frames 700–760 gave 30.3%. The *comparative* conclusion — uniform beats FOE on every span
+measured — is what survives, and it is the one the recommendation rests on. The absolute
+claim "explains nothing" holds only on 900–960 and should not be restated unqualified.
+
+### What persistence buys, and what the direction test costs
+
+`first_catch` 900–964, appearance radius 14 px:
+
+| | load/frame | drone kept |
+| --- | ---: | ---: |
+| single-pair, EXP-019 (650–964) | 59.0 | 82% |
+| **persistence alone (≥ 4 of 5)** | **31.2** | **78%** |
+| persistence + direction test | 25.7 | **45%** |
+
+Over the full 650–964 span: 80.6% of 41,876 seeds are dropped as flashes, cutting 132.9
+candidates/frame to 25.8 under persistence alone and 15.1 with the direction test added.
+**Persistence roughly halves the load for ~4 points of recall; the direction test buys 5.5
+more candidates/frame and costs 33 points of recall** — and since its rejections run at
+chance, those drone frames are lost at random. The appearance radius saturates by 14 px
+(8 px → 31% kept, 14 → 45%, 22 → 46%, 32 → 49%), which is why 14 is the O4 default; the
+same physical radius on the 960-wide analog clip is 9 px.
+
+### Three errors the self-test caught before any video ran
+
+Each would have returned a null result indistinguishable from "the idea does not work".
+
+1. **Pooling votes instead of accumulating per point.** Throwing all k pairs' votes into
+   one fit gives k times as many votes of the same poor quality, so directional
+   concentration never improves and the reliability gate still refuses — 5 of 20 pooled
+   windows reliable against 9 of 24 single pairs. Accumulating each point's residual first
+   is different in kind and fixed it.
+2. **The synthetic's noise model was wrong.** It drew fresh noise per pair, but a real
+   frame is measured *once*: its error enters one pair as the current endpoint and the next
+   as the previous one, with opposite sign, so intermediate noise largely cancels under
+   accumulation. Independent draws destroyed that cancellation.
+3. **Selection bias in the comparison.** Estimators were scored only where each called
+   itself reliable, so the per-pair fit was judged only on the windows it found easy.
+   Scoring both on every window reversed the result.
+
+After the fixes, at 0.8 px of tracking noise: per-pair reliable in **1 of 9** windows with
+**121 px** of error; accumulated reliable in **9 of 9** with **5.7 px**. The machinery is
+right; the footage does not contain the field it is designed to exploit.
+
+### Standing recommendation
+
+**Keep persistence, turn the direction test off.** Persistence rests only on "a real thing
+is visible in consecutive frames", needs no geometry, and is the only part of stage 2
+currently earning its cost.

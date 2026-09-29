@@ -28,17 +28,6 @@ dates, not priorities.
   them before they verify the current boundary, or they will be checking a definition
   already known to be wrong.
 
-- [ ] 2026-09-29 — [algo] **Fit the epipole once per window, not once per frame pair.**
-  EXP-019 measured the focus of expansion hopping **126.8 px (O4) and 98.9 px (analog)**
-  between consecutive frames, where a real FOE drifts smoothly with the manoeuvre. It is
-  noise, not a bad estimator: EXP-012b put the post-homography residual at ~1 px median, so
-  each point's direction is tracking noise, and a RANSAC fit over the same points was
-  **worse** (median jump 454.7 px against least squares' 93.9 px, answers 282 px apart) —
-  the signature of noise-limited rather than outlier-limited data. Accumulating over the
-  k <= 15 window should cut it as sqrt(k), and the tracker needs that window anyway. This is
-  the largest single thing limiting the direction test, which currently runs at only
-  **x1.74 chance on O4 and x1.40 on analog** against a `2*asin(0.35)/pi = 22.8%` floor.
-
 - [ ] 2026-09-29 — [algo] **The HUD mask leaves the gaps between glyph boxes open.**
   Visible on O4 frame 946 in EXP-019's overlay: candidates survive in the spaces between
   `4.04v` and between `24.3V`/`19 Mbps`, because the mask covers each glyph box and the
@@ -265,6 +254,23 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-29 — [algo] **Score a HUD mask against labels, not against its coverage percentage.** EXP-020: the tool prints `7.71% of the frame`, which is the wrong number — 13.15% sounded acceptable and was 20% of the ground truth. Add `--labels <dir>` to `src.data.hud_mask` so the build reports how many labelled boxes the mask would veto at `HUD_VETO_FRACTION`, and refuse silently-expensive masks. Cheap: the scoring loop is `overlap_fraction` over YOLO txt files, ~20 lines, and it is the only check that would have caught this.
 
 ## Done
+
+- [x] 2026-09-29 — [algo] **Fit the epipole once per window, not once per frame pair.**
+  Done — **EXP-021**. `runs/sofa_o4/exp017_motion_first/window.py` + `overlay_window.py`,
+  k = 5 with 4 appearances required. **Every mechanical claim for the window holds** —
+  residual coherence 0.920 (pure parallax 1.000, random walk 0.447), anisotropy 0.389 vs
+  0.355, and the epipole's frame-to-frame jump falls to **40.9 px** from EXP-019's 126.8.
+  **And it did not rescue the direction test**, because the field is not the one the test
+  assumes: a *uniform shift* model outscores a focus of expansion on every span measured
+  (37.2% vs 30.3% on 700–760, 38.5% vs 23.8% on 900–960, chance 22.8%), and `|mu|` is
+  essentially uncorrelated with distance from the epipole (+0.17, +0.06) where parallax
+  requires proportionality. **The win is persistence**: 80.6% of seeds dropped as flashes,
+  load 132.9 → 25.8/frame for ~4 points of recall, while adding the direction test costs
+  **33 points of recall** for 5.5 candidates/frame. Direction test off by default.
+  Three errors the synthetic self-test caught before any video ran are written up in the
+  ledger. One caveat recorded there too: the write-up's "epipole at chance (22.1%)" is a
+  61-frame sub-span figure and the full span logged 35.4% — the comparative conclusion
+  survives, the absolute one does not.
 
 - [x] 2026-09-29 — [algo] **The analog HUD mask was deleting a fifth of the ground truth (EXP-020).** It covered 13.15% of the frame while the visible OSD is a fraction of that, because `osd_blocks` fills each block to its **bounding rectangle** — only 14k of its 91k px were ever called OSD. Scored against the 494 labelled boxes: the mask vetoed **100 of them (20.2%)**. The two bottom rectangles alone were 66% of the mask, cost **74 real targets**, and vetoed **zero** false alarms — no EXP-013 detection ever landed below row 274. Cause: `--picture-rows 150:530` read as "the sky is the picture", leaving rows 530–720 open to the fill, but 118 labelled boxes are below row 530. Fix is the parameter, not the code: `--picture-rows 150:720` gives **53,257 px (7.71%)**, **26/494 vetoed**, and a veto set **bit-for-bit identical** on EXP-013, so EXP-014 is untouched. It also closes **47 of the 55 frames** in EXP-017's standing `stage-0 masks cover the labelled drone` warning. Two dead ends recorded so they are not retried: glyph-tight masking (no better, loses 8 vetoes) and a median-OSD-plate residual (distributions overlap completely). [experiments.md](experiments.md) · [hud_mask.md](hud_mask.md#-picture-rows-must-name-all-the-picture-not-just-the-sky)
 
