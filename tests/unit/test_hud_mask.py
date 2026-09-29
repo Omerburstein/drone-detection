@@ -42,6 +42,19 @@ class TestOsdBlocks:
     def test_below_the_fraction_nothing_is_masked(self):
         assert not osd_blocks(frequency(), 0.2, PICTURE).any()
 
+    def test_a_picture_band_reaching_the_bottom_leaves_the_bottom_clear(self):
+        """`TOP:BOTTOM` with BOTTOM at the frame height protects everything below.
+
+        EXP-020: the analog band was declared 150:530, which left rows 530-720
+        outside the picture and so open to the rectangle fill -- 60k px of
+        ground the drone flies over, vetoing 74 labelled targets and no false
+        alarm. Naming the bottom as picture is the whole fix, so it is pinned.
+        """
+        grid = frequency()
+        grid[600:615, 100:400] = 0.10  # a telemetry line low in the picture
+        assert osd_blocks(grid, 0.08, PICTURE)[530:].any()
+        assert not osd_blocks(grid, 0.08, (150, HEIGHT))[150:].any()
+
     def test_distant_blocks_stay_separate(self):
         grid = np.zeros((HEIGHT, WIDTH), dtype=np.float32)
         grid[60:70, 50:80] = 0.5

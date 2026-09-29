@@ -115,6 +115,12 @@ def osd_blocks(frequency: np.ndarray, fraction: float,
     outside `picture_rows`, nearby characters are joined into blocks, and each
     block is filled to its bounding rectangle -- a line of telemetry is a
     rectangle of character cells, not a scatter of glyph pixels.
+
+    **`picture_rows` is every row a target can reach, not the sky.** The fill
+    is deliberately generous, so whatever is left outside is given away. The
+    analog band was first declared 150:530 and the fill took the ground below
+    it -- 60k px, 74 of 494 labelled targets vetoed, and not one false alarm,
+    because no EXP-013 detection ever landed below row 274. See EXP-020.
     """
     top, bottom = picture_rows
     loose = frequency >= fraction
@@ -182,9 +188,10 @@ def build_parser() -> argparse.ArgumentParser:
                          "its rectangle. Off by default.")
     ap.add_argument("--picture-rows", type=parse_rows, default=None,
                     metavar="TOP:BOTTOM",
-                    help="Rows the loose --block-fraction must never touch -- "
-                         "the band where the scene, the moving horizon bar and "
-                         "the target are.")
+                    help="Rows the loose --block-fraction must never touch: "
+                         "every row a *target* can appear in, not just the sky. "
+                         "Everything outside it is treated as disposable, so "
+                         "name all of the picture (EXP-020).")
     return ap
 
 

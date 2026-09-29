@@ -45,7 +45,7 @@ after** — 28,002 px of 1440×1080.
 | `--min-fraction` | 0.35 | Share of samples a pixel must be white in. |
 | `--dilate` | 9 | Dilation, in pixels. |
 | `--block-fraction` | none | A looser threshold for OSD **text blocks**, applied only outside `--picture-rows`. Each block it finds is filled to its bounding rectangle. Off by default. |
-| `--picture-rows` | none | `TOP:BOTTOM` — the rows `--block-fraction` must never touch: the band where the scene, the moving horizon bar and the target are. |
+| `--picture-rows` | none | `TOP:BOTTOM` — the rows `--block-fraction` must never touch: every row a **target** can appear in, not just the sky. Everything outside it is treated as disposable. |
 
 ## Using it
 
@@ -106,15 +106,54 @@ outside `--picture-rows`**, joins nearby characters, and fills each block to its
 ```
 py -3.13 -m src.data.hud_mask --videos data/raw/SOFA-ANALOG/videos
     --out data/processed/SOFA-ANALOG/hud_mask.png
-    --white-level 180 --block-fraction 0.08 --picture-rows 150:530
+    --white-level 180 --block-fraction 0.08 --picture-rows 150:720
 ```
 
-The result is 90,883 px (13.15%): the clock, compass tape, link block, date and battery,
-with the sky from row 150 to row 530 left clear. Against EXP-013's 82 detections it vetoes
-**64**, compared with 0 for the O4-style mask.
+The result is 53,257 px (7.71%): the three top blocks — clock, compass tape and link —
+filled to their rectangles, plus the bottom date strip held at the strict threshold as
+glyphs. Against EXP-013's 82 detections it vetoes **64**, compared with 0 for the
+O4-style mask.
 
 **Every clip under `--videos` must share one resolution.** The analog source folder mixes
 in a 2520×1080 file and a 1280×720 file.
+
+### `--picture-rows` must name *all* the picture, not just the sky
+
+Measured in EXP-020. The band was first declared `150:530`, which reads as "the sky is the
+picture". Rows 530–720 were therefore outside it and open to the rectangle fill, and the
+fill took them: the bottom-left block alone was 468×93 = **43,524 px, 48% of the whole
+mask**, most of it the gaps between separate telemetry fields rather than glyphs.
+
+Scored against the 494 labelled boxes in `data/processed/SOFA-ANALOG/labels`, the cost is
+not cosmetic:
+
+| Region | px | Labelled targets vetoed | EXP-013 detections vetoed |
+| --- | ---: | ---: | ---: |
+| top centre 285×41 | 11,685 | 26 | 34 |
+| top right 183×74 | 13,542 | 0 | 30 |
+| top left 186×30 | 5,580 | 0 | 0 |
+| **bottom left 468×93** | **43,524** | **68** | **0** |
+| **bottom right 378×43** | **16,254** | **6** | **0** |
+
+The two bottom rectangles are two thirds of the mask, delete 74 of 494 real targets, and
+have **never vetoed a single false alarm** — no EXP-013 detection landed below row 274.
+Declaring the band `150:720` drops them and leaves the veto set **bit-for-bit identical**,
+so EXP-014's result is untouched:
+
+| | `150:530` | `150:720` |
+| --- | ---: | ---: |
+| Mask | 90,883 px (13.15%) | **53,257 px (7.71%)** |
+| Labelled targets vetoed | 100 / 494 (20.2%) | **26 / 494 (5.3%)** |
+| EXP-013 detections vetoed | 64 / 82 | 64 / 82 |
+
+The 26 that remain are the top-centre block, which the drone genuinely flies through;
+glyph-tight masking there recovers none of them, because the block's glyphs are dense
+enough that tight and filled are the same mask. That one is a real trade, not waste.
+
+**The general rule:** `--picture-rows` is the band a *target* can appear in, not the band
+the *sky* occupies. Everything outside it is assumed disposable, so anything a drone can
+cross must be inside it. Check a new mask against labels, not against its coverage
+percentage — 13% of the frame sounded acceptable and was 20% of the ground truth.
 
 ## The HUD that moves
 

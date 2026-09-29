@@ -3126,3 +3126,78 @@ depth-aware ring** relative to the tracker. First evidence either way.
 
 `[WARNING] stage-0 masks cover the labelled drone in 55 frames, first at 588` on analog.
 Unchanged, and still the first thing to fix on that clip.
+
+## EXP-020 — the analog HUD mask was eating a fifth of the ground truth
+
+- **Date:** 2026-09-29
+- **Question:** the analog mask covers 13.15% of the frame while the visible OSD is much
+  smaller. Is the difference free, or is it deleting targets?
+- **Data:** `data/raw/SOFA-ANALOG/videos` (9 clips, all 960×720), the 494 labelled boxes in
+  `data/processed/SOFA-ANALOG/labels`, and EXP-013's 82 recorded detections.
+- **Hardware:** i7-1255U CPU. Mask rebuild ~2 min; no inference re-run.
+
+### Where the mask goes
+
+The mask is six filled rectangles. Only 14,130 px of the 90,883 are pixels the loose
+threshold ever called OSD — `osd_blocks` fills each joined block to its **bounding
+rectangle**, so a line of telemetry with gaps between its fields becomes one solid slab.
+Scored per rectangle against the labels and against EXP-013:
+
+| Region | px | Labelled targets vetoed | EXP-013 detections vetoed |
+| --- | ---: | ---: | ---: |
+| top centre 285×41 | 11,685 | 26 | 34 |
+| top right 183×74 | 13,542 | 0 | 30 |
+| top left 186×30 | 5,580 | 0 | 0 |
+| single glyph 18×24 | 298 | 0 | 0 |
+| **bottom left 468×93** | **43,524** | **68** | **0** |
+| **bottom right 378×43** | **16,254** | **6** | **0** |
+
+The two bottom rectangles are **66% of the mask**, veto **74 of 494 real targets**, and
+have never vetoed a single false alarm — no EXP-013 detection landed below row 274.
+
+### The cause, and the fix
+
+`--picture-rows 150:530` read as "the sky is the picture". Rows 530–720 were therefore
+*outside* it and open to the fill, and the fill is deliberately generous. But 118 of the
+494 labelled boxes are below row 530: the drone flies over the ground, not only the sky.
+
+Declaring the band `150:720` is the whole fix — no code change.
+
+| | `150:530` | `150:720` |
+| --- | ---: | ---: |
+| Mask | 90,883 px (13.15%) | **53,257 px (7.71%)** |
+| Labelled targets vetoed | 100 / 494 (20.2%) | **26 / 494 (5.3%)** |
+| EXP-013 detections vetoed | 64 / 82 | 64 / 82 |
+
+The new mask is a strict **subset** of the old one and its veto set is **bit-for-bit
+identical**, so EXP-014 (82 → 8 detections, drone found at frame 547) is untouched.
+
+- **Command:** `py -3.13 -m src.data.hud_mask --videos data/raw/SOFA-ANALOG/videos --out data/processed/SOFA-ANALOG/hud_mask.png --white-level 180 --block-fraction 0.08 --picture-rows 150:720 --preview runs/sofa_analog/exp020_hud_preview.png`
+
+### It also closes most of EXP-017's standing warning
+
+EXP-017 ended on `[WARNING] stage-0 masks cover the labelled drone in 55 frames, first at
+588`. **47 of those 55 are the HUD layer** — `catch_2` frames 689 onward — and the new
+mask covers **0** labelled boxes in that clip. The remainder, including the first at 588,
+come from another stage-0 layer (`ladder_mask` or `prop_mask`) and are still open.
+
+### Two things that did not work, so they are not worth retrying
+
+- **Glyph-tight masking instead of rectangles.** Dilating the loose glyph mask 15×15 gives
+  8.77% and 31 targets lost — no better than the row fix, and it *loses* 8 vetoes in the
+  top-right block. Filling to the rectangle is correct where the rectangle earns it.
+- **A median OSD "plate" to tell a drone-on-glyph from a glyph.** Mean |frame − plate| over
+  the masked pixels: drones-on-OSD score 12.5–26.6, OSD detections 7.5–37.2. The
+  distributions overlap almost completely, and in the wrong direction — the residual is
+  dominated by how much the live scene differs from the median scene, not by the glyph.
+
+### What is left
+
+The 26 remaining losses are all the top-centre block, which the drone genuinely flies
+through. Glyph-tight masking recovers none of them: that block's glyphs are dense enough
+that tight and filled are the same mask. Separating a drone crossing it from the OSD needs
+motion or track history, not geometry.
+
+**And the general lesson:** the tool reports coverage, which is the wrong number.
+13% of the frame sounded acceptable and was 20% of the ground truth. Score a mask against
+labels before a run depends on it.
