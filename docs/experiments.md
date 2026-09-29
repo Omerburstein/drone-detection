@@ -3292,3 +3292,139 @@ right; the footage does not contain the field it is designed to exploit.
 **Keep persistence, turn the direction test off.** Persistence rests only on "a real thing
 is visible in consecutive frames", needs no geometry, and is the only part of stage 2
 currently earning its cost.
+
+## EXP-022 — stage 2, both branches: a sky silhouette detector and a two-plane scene test
+
+- **Date:** 2026-09-29
+- **Question:** run the plan's two-branch stage 2 over a whole span with an overview video.
+  2a: multi-scale negative-polarity blob detection on sky, scored by the IRST local
+  contrast `c = (median(ring) − min(core)) / σ_ring`. 2b: parallax-discounted motion — a
+  layered homography, an epipolar direction rejector, and depth-aware rings.
+- **Model / weights:** none. No learned component in either branch.
+- **Data:** `data/processed/SOFA-O4/videos/first_catch.avi` frames 650–964 (315 frames, 257
+  labelled) and `data/raw/SOFA-ANALOG/videos/catch_2.mp4` frames 441–800 (360 frames, 224
+  labelled). `tau = 1.661`, k = 5 needing 4 appearances, `c >= 6`.
+- **Hardware / cost:** i7-1255U CPU, ~14 min per span, both backgrounded.
+- **Scripts (gitignored):** `runs/sofa_o4/exp017_motion_first/silhouette.py` (2a, 8 synthetic
+  self-checks via `py -3.13 -m silhouette`), `layers.py` (2b, 10 checks via `py -3.13 -m
+  layers`), `overlay_stage2.py` (the renderer and report), `probe_sky.py` (diagnostic).
+  Artifacts: `stage2_first_catch_650_964.mp4` (315 frames, 45 MB),
+  `stage2_catch_2_441_800.mp4` (360 frames, 31 MB).
+
+### Two deviations from the plan, both forced by measurements already in this repo
+
+**The sky branch runs ungated, not on stage-1 sky.** EXP-019 measured `skyline.split`
+putting the labelled airborne target in `scene` in 257 of 257 O4 frames. Gated as the plan
+specifies, 2a scores zero on O4 and the run says nothing about the detector. It therefore
+runs over the whole valid frame with the result cut by stage-1 label.
+
+**The epipolar direction test is off by default.** EXP-021 measured a uniform-shift model
+outscoring a focus of expansion on every span. The plan's claim that this test "kills the
+57.5% of analog false tracks at the horizon" is separately contradicted by EXP-019, which
+located that failure in the tracker rather than in candidate generation. It is still
+implemented and still measured, because this run changes its input — a two-plane residual
+field instead of one.
+
+### The premise holds: the regime inversion is real
+
+σ_ring at random background points, by stage-1 label:
+
+| | O4 sky | O4 scene | analog sky | analog scene |
+| --- | ---: | ---: | ---: | ---: |
+| σ_ring median (grey levels) | **1.48** | **11.86** | **1.48** | **7.41** |
+| inversion | **8.0×** | | **5.0×** | |
+
+**But sky's σ_ring is exactly 1.4826 on both clips — the MAD of a single grey level.** Sky
+is flat to the 8-bit quantiser, so `c` on sky is contrast in units of 1.5 grey levels, not
+in units of a measured noise distribution. The statistic is a usable ranking score; **no
+Gaussian tail argument can be made from it**, and the plan's central claim — "a threshold
+means a false-alarm rate on smooth sky" — does not survive contact with 8-bit video.
+
+### And the false-alarm claim fails by six orders of magnitude
+
+Measured false alarms per frame against the Gaussian rate the same threshold nominally buys:
+
+| threshold | O4 measured | analog measured | Gaussian |
+| --- | ---: | ---: | ---: |
+| `c >= 6` | 14.65/frame | 5.16/frame | 6.5e-05/frame |
+| `c >= 12` | 3.62/frame | 0.37/frame | 1.2e-28/frame |
+| `c >= 20` | 1.39/frame | 0.03/frame | 1.8e-84/frame |
+
+The synthetic control says why this is not a defect in the statistic: on pure Gaussian
+noise sky the **maximum `c` observed anywhere was 1.8**. Everything above it on real
+footage is *structure* — cloud edge, grain, compression blocking, analog chroma crawl — and
+structure does not have a Gaussian tail. `c` ranks; it does not calibrate.
+
+### The sky branch works, on the clip where the target is against sky
+
+| | O4 | analog |
+| --- | ---: | ---: |
+| labelled frames | 257 | 224 |
+| **sky branch (2a)** found the drone | 48 (**18.7%**) | 73 (**32.6%**) |
+| scene branch (2b, persistence) found it | 79 (**30.7%**) | 22 (**9.8%**) |
+| both | 31 (12.1%) | 19 (8.5%) |
+| **either** | **96 (37.4%)** | **76 (33.9%)** |
+| missed by both | 161 (62.6%) | 148 (66.1%) |
+| σ_ring at the target | 7.41 | 5.93 |
+| `c` at the target, median (p10) | 7.4 (6.3) | 9.4 (6.6) |
+| measured target size | 3.1 px | 6.2 px |
+
+**The two branches fail on different frames, which is the only reason to have two.** On O4
+the scene branch is twice the sky branch and `either` adds 6.7 points over it; on analog the
+ranking inverts entirely — the sky branch is 3.3× the scene branch. Neither clip is carried
+by one branch.
+
+**The sky branch's recall is bounded by where the target is, not by the detector.**
+`probe_sky.py` shows the DoG finding the O4 target with a top-50 response in most frames
+while σ_ring at the target runs 12–104 grey levels: the ring sits on tree line, so there is
+nothing for the sky-noise normalisation to normalise by. This is EXP-019's stage-1
+definition error appearing again, now in a second branch's own units.
+
+### What does not work: the second plane
+
+| | O4 two planes | O4 one plane | analog two | analog one |
+| --- | ---: | ---: | ---: | ---: |
+| epipole reliable | 91% | **94%** | 51% | **86%** |
+| agreement with background | 0.294 | **0.309** | 0.246 | **0.277** |
+| corr(\|μ\|, distance to epipole) | 0.104 | **0.135** | 0.104 | **0.174** |
+
+**Fitting two planes makes the residual field *less* parallax-like on both clips, on every
+diagnostic.** This is not a marginal call: on analog the epipole's reliability collapses
+from 86% to 51%. Two distinct planes *are* found (98% of O4 frames, 82% of analog, median
+separation 5.06 and 3.31 px, well clear of the guard), so the failure is not that the
+second plane is imaginary — it is that splitting the points between two fits leaves each
+fit less evidence, and the thing being fitted was never radial to begin with. **EXP-021's
+verdict stands, now reproduced against an internal control on identical frames.**
+
+Persistence reproduces EXP-021 exactly — 80.6% of O4 candidates dropped as flashes, 25.8
+survivors/frame, drone kept in 79 frames — which is the check that this run's scene branch
+is the same one.
+
+### Four defects the self-checks caught before any long run
+
+None would have raised an exception; each returns a plausible-looking number.
+
+1. **σ_ring was measured on a blurred image.** A Gaussian blur divides white noise by
+   ~`2√π·σ_blur`, which drove σ_ring under its floor at every realistic sky noise level.
+   `c` then read the *floor* and stopped depending on sky noise at all — the one property
+   it exists to have. Caught by tripling the synthetic sky noise and finding `c` unmoved
+   (33.3 → 33.4).
+2. **The candidate cap was acting as a rank budget**, returning exactly 600 peaks every
+   frame — the failure mode `budget.py` was written to avoid.
+3. **A frame-indexing error** paired the oldest window positions with the newest pair's
+   homography and layer fit.
+4. **"No opinion" was counted as "passed"**, putting unjudged candidates into the
+   denominator of the rejection rate, so lift-over-chance measured how often the test
+   declined rather than how well it discriminates.
+
+### Next
+
+1. **Keep 2a, drop the second plane.** 2a is the only thing in stage 2 that acquires from a
+   single frame, and on analog it triples the motion branch. The layered homography is
+   measurably worse than one plane on both clips and should not be carried forward.
+2. **Quote `c` as a ranking score, never as a false-alarm rate.** Any operating point must
+   come from the measured curve above, per clip.
+3. **Redefine stage 1 as far/near before gating anything on it** — now blocking two branches
+   rather than one.
+4. **A second test after `c` is not optional**: 77–90% of clutter reaches the target's p10
+   contrast, so `c` alone cannot separate target from clutter on either clip.

@@ -15,6 +15,39 @@ dates, not priorities.
 
 ## Open
 
+- [ ] 2026-09-29 — [algo] **Drop the layered homography; one plane is measurably better.**
+  EXP-022 fitted `H_ground` by RANSAC and refitted on the outliers for `H_far`, as the
+  motion-first plan specifies, and measured it against a single-plane control on identical
+  frames. **Two planes are worse on both clips and on every diagnostic**: epipole
+  reliability 91% vs 94% on O4 and **51% vs 86%** on analog, background agreement 0.294 vs
+  0.309 and 0.246 vs 0.277, `corr(|mu|, dist)` 0.104 vs 0.135 and 0.104 vs 0.174. The
+  second plane is not imaginary — two distinct planes are found in 98% of O4 frames and 82%
+  of analog at median separations of 5.06 and 3.31 px, well clear of the guard — so the
+  mechanism is that splitting the points between two fits leaves each with less evidence,
+  while the field being fitted was never radial to begin with. Delete the branch rather
+  than tune it; `layers.py` keeps the depth-aware ring and the rejector, which are separate.
+
+- [ ] 2026-09-29 — [algo] **`c` is a ranking score, not a false-alarm rate — stop quoting it
+  as one.** The sky branch's whole appeal was that a threshold in units of sigma implies a
+  false-alarm rate on smooth sky. EXP-022 measured the gap: at `c >= 6`, **14.65 false
+  alarms/frame on O4 and 5.16 on analog against a Gaussian 6.5e-05** — six orders of
+  magnitude. The synthetic control explains it rather than excusing it: on pure Gaussian
+  noise sky the maximum `c` seen anywhere was **1.8**, so everything above that on real
+  footage is *structure* (cloud edge, grain, blocking, chroma crawl) and structure has no
+  Gaussian tail. Second reason the units are not what they look like: **sky sigma_ring is
+  exactly 1.4826 on both clips**, the MAD of one grey level — sky is flat to the 8-bit
+  quantiser, so `c` on sky is contrast in units of 1.5 grey levels. Any operating point
+  must be read off the measured curve, per clip.
+
+- [ ] 2026-09-29 — [algo] **The sky branch needs a second test after `c`.** EXP-022:
+  **89.8% of O4 clutter and 76.6% of analog clutter reaches the target's p10 contrast**, so
+  `c` alone cannot separate target from clutter on either clip even where the target is
+  against sky. The branch is still worth keeping — it is the only part of stage 2 that
+  acquires from a single frame, and on analog it found the drone in 32.6% of labelled
+  frames against the motion branch's 9.8% — but it is a *candidate generator*, not a
+  detector. Shape, persistence across frames at the same scale, and the bird question
+  (Stage 4) are the candidates for that second test.
+
 - [ ] 2026-09-29 — [algo] **Redefine stage 1 as far/near, not sky/ground.** EXP-019 measured
   it: `skyline.split` puts the labelled airborne drone in `scene` in **257 of 257** O4
   frames and **158 of 224** analog frames. The user's correction stands — "the drone is in
@@ -254,6 +287,22 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-29 — [algo] **Score a HUD mask against labels, not against its coverage percentage.** EXP-020: the tool prints `7.71% of the frame`, which is the wrong number — 13.15% sounded acceptable and was 20% of the ground truth. Add `--labels <dir>` to `src.data.hud_mask` so the build reports how many labelled boxes the mask would veto at `HUD_VETO_FRACTION`, and refuse silently-expensive masks. Cheap: the scoring loop is `overlap_fraction` over YOLO txt files, ~20 lines, and it is the only check that would have caught this.
 
 ## Done
+
+- [x] 2026-09-29 — [algo] **Run stage 2 over a span with an overview video.** Done —
+  **EXP-022**. Both branches built and rendered on two clips:
+  `stage2_first_catch_650_964.mp4` (315 frames) and `stage2_catch_2_441_800.mp4` (360).
+  New `silhouette.py` (2a: negative-polarity scale-normalised DoG over 3–40 px, the IRST
+  contrast statistic, cloud/bloom/size rejections; 8 synthetic self-checks) and `layers.py`
+  (2b: two-plane RANSAC with a separation guard, per-layer residuals, an epipolar
+  **rejector** that can never confirm, depth-aware rings; 10 checks), driven by
+  `overlay_stage2.py` with a single-plane control on identical frames.
+  **The regime inversion is real** — sigma_ring 1.48 on sky against 11.86 (O4) and 7.41
+  (analog) on scene — **and the two branches fail on different frames**, which is the only
+  reason to have two: O4 sky 18.7% / scene 30.7% / either 37.4%, analog sky 32.6% / scene
+  9.8% / either 33.9%. Three findings are filed as open items above: drop the layered
+  homography, stop quoting `c` as a false-alarm rate, and add a second test after `c`.
+  Four defects the self-checks caught before any long run are written up in the ledger —
+  none would have thrown an exception.
 
 - [x] 2026-09-29 — [algo] **Fit the epipole once per window, not once per frame pair.**
   Done — **EXP-021**. `runs/sofa_o4/exp017_motion_first/window.py` + `overlay_window.py`,
