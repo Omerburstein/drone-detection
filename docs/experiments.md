@@ -3295,6 +3295,11 @@ currently earning its cost.
 
 ## EXP-022 — stage 2, both branches: a sky silhouette detector and a two-plane scene test
 
+> **Corrected 2026-09-30.** The "measured target size" quoted below is the DoG's
+> detected scale, not the target: the labelled boxes are a median 71.6 px on O4 and
+> 37.0 px on analog. Read the sky branch's recall as "a candidate landed in the grown
+> box", and see *Correction to EXP-022 and EXP-023* at the end of this file.
+
 - **Date:** 2026-09-29
 - **Question:** run the plan's two-branch stage 2 over a whole span with an overview video.
   2a: multi-scale negative-polarity blob detection on sky, scored by the IRST local
@@ -3431,6 +3436,11 @@ None would have raised an exception; each returns a plausible-looking number.
 
 ## EXP-023 — the depth-aware ring, and size as evidence
 
+> **Corrected 2026-09-30.** The "measured target size" quoted below is the DoG's
+> detected scale, not the target: the labelled boxes are a median 71.6 px on O4 and
+> 37.0 px on analog. Read the sky branch's recall as "a candidate landed in the grown
+> box", and see *Correction to EXP-022 and EXP-023* at the end of this file.
+
 - **Date:** 2026-09-29
 - **Question:** EXP-022 implemented the depth-aware ring, self-checked it, and then never
   passed it — the whole run used an undifferentiated ring. Turn it on and measure it. And
@@ -3538,3 +3548,89 @@ top of condition C on analog, a 3.5 px floor gives 2.57 FA/frame at 46 frames ag
    needs `far vs near`. This is the third experiment to land on the same defect.
 3. **Keep the per-candidate dump.** Every number in this entry after the renders was a
    re-cut of two CSVs, in seconds. EXP-022 had none and every question cost a 14-minute span.
+
+## Correction to EXP-022 and EXP-023 — "target size" was the detected scale
+
+- **Date:** 2026-09-30
+- **Raised by:** the user, on reading EXP-023: *"How is the target less then 8 pixels? I am
+  sure it has around 20 pixels."* Correct, and the entries above were wrong.
+
+### What was wrong
+
+EXP-022 and EXP-023 both report a **"measured target size"** of 3.1 px on O4 and 6.2 px on
+analog. That is the **DoG's detected scale**, not the target. Read from the labels:
+
+| | labelled box (max of w, h) | detected scale | ratio | ladder tops out at |
+| --- | ---: | ---: | ---: | ---: |
+| O4 650–964 | median **71.6 px** (17–142) | 3.1 px | **0.048** | 40 px |
+| analog 441–800 | median **37.0 px** (18–80) | 6.2 px | **0.163** | 27 px |
+
+Two compounding causes:
+
+1. **The scale ladder tops out below the median target on both clips**, so the detector
+   structurally cannot match the airframe as a blob. It fires on some small dark
+   sub-feature instead.
+2. **`on_drone` grows the box** by `max(10 px, 25%)` before testing, so a 3 px speck
+   anywhere in a ~90×64 region on O4 is credited as a hit.
+
+### What this invalidates
+
+- **Every sky-branch recall figure in EXP-022 and EXP-023 means "a candidate landed inside
+  the grown box", not "the drone was detected".** The numbers are reproducible and the
+  A/B comparisons between conditions remain valid — both arms are credited the same way —
+  but none of them is evidence that the branch detects the airframe.
+- **The minimum-diameter analysis in EXP-023 cut on detected scale**, which is an artefact
+  of the ladder. The tables are arithmetically correct about the detected-scale
+  distribution and say nothing about target size. In particular the conclusion "the O4
+  target is at the bottom of the scale ladder so size carries no information" describes
+  the ladder's floor, not the drone.
+- **`MAX_SCALE_FOR_TARGET` is mis-set**, at ~56 px of diameter against O4 targets reaching
+  142 px. It would reject the real airframe at close range if the ladder were extended.
+  Ceiling and ladder have to be fixed together, which is why no large-blob rule was
+  changed here.
+
+What is **not** affected: the σ_ring regime-inversion measurement (1.48 on sky against
+11.86 and 7.41 on scene), the false-alarm curves, the c-vs-Gaussian comparison, and the
+EXP-021 / EXP-022 scene-branch and layered-homography results. None of those depend on
+target size.
+
+### Two further defects fixed at the same time
+
+- **The render was drawing rejected candidates.** ~190 per frame (141 `uncertain band`,
+  50 `cloud`, 1.4 `bloom`) against ~10 kept, so the picture looked full of detections while
+  the report said 5/frame — the user asked why, and the answer was that the two were
+  describing different things. Rejections are now drawn only with `--show-rejected`.
+- **Report sections printed for conditions the run did not apply.** With a whole ring there
+  are no stage-1 labels, yet the per-label breakdown printed three zeros and the
+  "what the depth-aware ring changed" block printed an identity — both reading as measured
+  null results. Each section is now gated on the condition it describes.
+
+### Rolled back, and why
+
+The user asked to roll back the difference between EXP-022 and EXP-023. **Defaults now
+reproduce EXP-022** — whole ring, uncertain band scored — with both EXP-023 changes behind
+`--depth-ring` and `--refuse-uncertain`. The measurements justifying them stand: neither
+wins on both clips at matched false-alarm rate, so neither is a safe default, and the
+auditable default is the one already in the ledger. Verified: the rolled-back run returns
+73/224 at 5.16 FA/frame on analog, EXP-022's numbers exactly.
+
+### The candidate dump, as asked
+
+Every candidate is now recorded, kept **and** rejected, with its `reason`, `kept` flag,
+`sigma`, `response` and all ring/core quantities — the earlier dump held only kept rows, so
+a threshold could be raised from the file but never lowered and no rejection could be
+audited. Recording literally everything gave 530,273 rows and 59.6 MB on analog, 94.5% of
+it `below threshold` at c ≈ 1.4 — beneath the **c = 1.8 ceiling measured on pure Gaussian
+noise sky**, so those rows carry no information. `--dump-floor` (default 3.0, half the
+operating threshold) always keeps structural rejections and anything on target regardless:
+44,988 rows and 4.8 MB, a 12× reduction with nothing auditable lost.
+
+### Next, in order
+
+1. **Extend the scale ladder to cover 3–150 px and re-measure.** Nothing about the sky
+   branch's recall means what it says until this is done, and no threshold, floor or
+   ceiling should be tuned before it.
+2. **Then revisit the size floor and the large-blob ceiling together**, from true sizes.
+3. **Tighten `on_drone` for this branch**, or report the detected-scale-to-true-size ratio
+   beside every recall figure. The run now prints the ratio and refuses to call it a
+   detection when it is below 0.5.

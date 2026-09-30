@@ -15,6 +15,26 @@ dates, not priorities.
 
 ## Open
 
+- [ ] 2026-09-30 — [algo] **Extend the sky branch's scale ladder to cover the real target
+  sizes, then re-measure everything.** The ladder spans 3–40 px of diameter on O4 and
+  3–27 px on analog, while the labelled targets on those spans are a median **71.6 px
+  (17–142)** and **37.0 px (18–80)**. The detector therefore fires at **0.048×** and
+  **0.163×** the target's true size — it is matching a small dark sub-feature inside a box
+  `on_drone` has grown by `max(10 px, 25%)`, not the airframe. **Nothing about the sky
+  branch's recall means what it says until this is fixed**, and no threshold, size floor or
+  large-blob ceiling should be tuned before it. `MAX_SCALE_FOR_TARGET` is mis-set for the
+  same reason: at ~56 px of diameter it would reject the real O4 airframe at close range,
+  so ceiling and ladder move together. Raised by the user, who was right that the target is
+  ~20 px and not 3. Full write-up in the correction section of [experiments.md](experiments.md).
+
+- [ ] 2026-09-30 — [algo] **Give the sky branch a persistence gate.** It is still purely
+  single-frame, while the motion branch's k-of-5 rule cut that branch's load by 80% for ~4
+  points of recall (EXP-021). A real target is visible in consecutive frames at a
+  consistent scale; grain, chroma crawl and compression blocking are not. Likely a better
+  false-alarm lever than any threshold, and it costs the branch's zero-latency property
+  only if the single-frame hits are withheld — report them immediately and mark them
+  confirmed on persistence instead. `window.py` already has the machinery.
+
 - [ ] 2026-09-29 — [algo] **Make the stage-1 uncertain-band policy a per-clip operating
   point.** EXP-023 measured both settings at matched false-alarm rate and **neither
   dominates**: refusing the band wins on O4 (40 vs 30 drone frames at 9.35 FA/frame),
@@ -296,6 +316,23 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-29 — [algo] **Score a HUD mask against labels, not against its coverage percentage.** EXP-020: the tool prints `7.71% of the frame`, which is the wrong number — 13.15% sounded acceptable and was 20% of the ground truth. Add `--labels <dir>` to `src.data.hud_mask` so the build reports how many labelled boxes the mask would veto at `HUD_VETO_FRACTION`, and refuse silently-expensive masks. Cheap: the scoring loop is `overlap_fraction` over YOLO txt files, ~20 lines, and it is the only check that would have caught this.
 
 ## Done
+
+- [x] 2026-09-30 — [algo] **Roll back the EXP-022/EXP-023 difference, and record every
+  candidate.** Both done, plus three defects the user's questions exposed.
+  **Rollback:** defaults reproduce EXP-022 (whole ring, uncertain band scored); the two
+  EXP-023 changes are now `--depth-ring` and `--refuse-uncertain`. Verified — the
+  rolled-back analog run returns **73/224 at 5.16 FA/frame**, EXP-022 exactly.
+  **Dump:** every candidate, kept *and* rejected, with `reason`, `kept`, `sigma`,
+  `response` and all ring/core quantities; the old dump held kept rows only, so a threshold
+  could be raised but never lowered. `--dump-floor` (default 3.0) always keeps structural
+  rejections and on-target rows, cutting analog from 530,273 rows / 59.6 MB to 44,988 /
+  4.8 MB — the dropped rows sat at c ≈ 1.4, below the **c = 1.8 ceiling measured on pure
+  Gaussian noise sky**, so they carried no information.
+  **Defects fixed:** the render drew ~190 rejected candidates per frame against ~10 kept,
+  which is why the video looked full while the report said 5/frame (now `--show-rejected`);
+  report sections printed for conditions the run had not applied, reading as measured null
+  results (now gated); and the "target size" figures were the detected scale — see the
+  correction section in [experiments.md](experiments.md), filed above as a blocking item.
 
 - [x] 2026-09-29 — [algo] **Wire in the depth-aware ring and re-run the sky branch.**
   Done — **EXP-023**, in a new folder `runs/sofa_o4/exp023_sky_branch/` so EXP-022 stays
