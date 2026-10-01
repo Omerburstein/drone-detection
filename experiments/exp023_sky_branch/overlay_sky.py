@@ -3,7 +3,7 @@
     PYTHONPATH="experiments/exp023_sky_branch;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
         py -3.13 -m overlay_sky --start 650 --end 964
 
-    PYTHONPATH="runs/sofa_analog/exp023_sky_branch;experiments/exp023_sky_branch;runs/sofa_analog/exp017_motion_first;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
+    PYTHONPATH="experiments/exp023_sky_branch/analog_catch_2;experiments/exp023_sky_branch;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
         py -3.13 -m overlay_sky --start 441 --end 800
 
 `--no-video` prints the report without writing frames. EXP-022's `overlay_stage2.py` in
@@ -37,7 +37,7 @@ be confused. This is the sky branch alone.
 
 Colours
 -------
-  * CYAN circle, radius = detected scale -- kept. Thicker above twice the threshold.
+  * RED circle, radius = detected scale -- kept. Thicker above twice the threshold.
   * DARK CYAN circle -- rejected, drawn ONLY with `--show-rejected`. There are ~190 of
                         these per frame against ~10 kept, so drawing them by default fills
                         the picture with circles that are not false alarms and makes the
@@ -46,6 +46,10 @@ Colours
                         candidates this change ADDS.
   * ORANGE circle    -- the reverse: kept by the whole ring, dropped by the depth-aware
                         one. These are the false alarms the change REMOVES.
+
+Every circle is drawn at least `MIN_DRAW_DIAMETER` (10 px) across, so a 3 px detection is
+still visible on the video. Drawing only: the radius in the report and the dump is the
+detected scale, unchanged.
 """
 from __future__ import annotations
 
@@ -66,8 +70,14 @@ from overlay_video import LAYER_COLOUR, TINT, load_boxes, on_drone, px, text_blo
 W, H = CLIP["width"], CLIP["height"]
 S = W / 1440.0
 
-KEPT, REJ = (230, 230, 60), (110, 110, 40)
+KEPT, REJ = (0, 0, 255), (110, 110, 40)
 ADDED, REMOVED = (230, 80, 230), (40, 160, 240)
+MIN_DRAW_DIAMETER = 10   # px in the output video; drawing only, never fed back into scoring
+
+
+def draw_radius(diameter: float) -> int:
+    """The radius a candidate is drawn at: its detected scale, floored at MIN_DRAW_DIAMETER."""
+    return int(round(max(diameter, MIN_DRAW_DIAMETER) / 2.0))
 
 
 def label_map(sl: skyline.Skyline) -> np.ndarray:
@@ -260,7 +270,7 @@ def _score(hits, box, frame, a, st, rows, img) -> None:
             rows.append(_row(s, frame, hit_any))
         if not s.kept:
             if a.show_rejected and s.reason != "below threshold":
-                cv2.circle(img, (int(s.x), int(s.y)), max(px(3), int(s.diameter / 2)),
+                cv2.circle(img, (int(s.x), int(s.y)), draw_radius(s.diameter),
                            REMOVED if keeps_plain else REJ, max(1, px(1)))
             continue
 
@@ -284,7 +294,7 @@ def _score(hits, box, frame, a, st, rows, img) -> None:
             st["clutter_snr"].append(s.snr)
             st["clutter_size"].append(s.diameter)
         colour = ADDED if not keeps_plain else KEPT
-        cv2.circle(img, (int(s.x), int(s.y)), max(px(3), int(round(s.diameter / 2.0))),
+        cv2.circle(img, (int(s.x), int(s.y)), draw_radius(s.diameter),
                    colour, max(1, px(1) + int(s.contrast >= 2 * a.contrast)))
 
     if box is not None:

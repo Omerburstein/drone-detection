@@ -317,6 +317,20 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-01 — [algo] **Clean overlays on both clips, red circles, and no scripts
+  in `runs/`.** Rendered `runs/sofa_o4/clean_first_catch_650_964.mp4` the same way as the
+  analog `clean_catch_2_441_800.mp4` (`overlay_sky --no-sky --no-truth`, EXP-022
+  defaults), and re-rendered both after changing the drawing: kept circles are now red and
+  at least 10 px across (`overlay_sky.MIN_DRAW_DIAMETER`; drawing only, the report and dump
+  are unchanged). Deleted every folder under `runs/sofa_o4/` (~1.1 GB). They held the
+  **only** copy of the EXP-012b–EXP-024 code, so all 64 scripts under `runs/` moved first to
+  `experiments/` (tracked; the was→now table is in `experiments/README.md`), and the O4
+  prop/ladder masks and EXP-015's screen-fixed map moved to `data/processed/SOFA-O4/`.
+  Checked: both clips reproduce their original `[stage 0]` mask percentages from the new
+  location, and `silhouette`'s self-checks pass. Ledger paths naming a script under
+  `runs/<clip>/expNNN_*/` now mean `experiments/expNNN_*/`; the O4 outputs they name are
+  gone. The default overlay is now analog `catch_2` 441–800 unless another clip is named.
+
 - [x] 2026-10-01 — [algo] **Window length: render a 10-frame and a 15-frame gate and
   recommend one.** Four overlay videos on `first_catch` 650-964 (matched-load 5/10 and
   6/15, low-load 8/10 and 10/15), plus a k=5 control on the same span so the table is

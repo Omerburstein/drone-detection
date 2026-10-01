@@ -3,7 +3,7 @@
     PYTHONPATH="experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
         py -3.13 -m overlay_video --start 650 --end 964
 
-    PYTHONPATH="runs/sofa_analog/exp017_motion_first;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
+    PYTHONPATH="experiments/exp017_motion_first/analog_catch_2;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
         py -3.13 -m overlay_video --start 441 --end 800
 
 Why the two stages are drawn together

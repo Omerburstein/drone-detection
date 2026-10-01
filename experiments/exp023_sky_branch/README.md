@@ -11,7 +11,7 @@ comes from those directories via `PYTHONPATH`; only what changed lives here.
 | --- | --- |
 | `silhouette.py` | stage 2a, second cut: per-candidate depth-aware ring, the `snr` area-aware statistic, a `min_diameter` floor, and the uncertain-band refusal. `py -3.13 -m silhouette` runs 10 synthetic checks. |
 | `overlay_sky.py` | the renderer and report, with an internal A/B (every candidate carries both the depth-aware and whole-ring contrast) and a per-candidate CSV dump. |
-| `clipcfg.py` | O4 `first_catch`, output to `runs/sofa_o4/exp023_sky_branch/`. The analog twin is `runs/sofa_analog/exp023_sky_branch/clipcfg.py`; the O4 prop/ladder masks are read from `data/processed/SOFA-O4/`, the analog ones from `runs/sofa_analog/exp017_motion_first/`. |
+| `clipcfg.py` | O4 `first_catch`, output to `runs/sofa_o4/exp023_sky_branch/`. The analog twin is `analog_catch_2/clipcfg.py` (with `analog_catch_4/`, `analog_catch_5/`); the O4 prop/ladder masks are read from `data/processed/SOFA-O4/`, the analog ones from `runs/sofa_analog/exp017_motion_first/`. |
 
 ## Running it
 
@@ -21,7 +21,7 @@ PYTHONPATH="experiments/exp023_sky_branch;experiments/exp017_motion_first;experi
     py -3.13 -m overlay_sky --start 650 --end 964
 
 # analog -- its clipcfg goes first, everything else falls through
-PYTHONPATH="runs/sofa_analog/exp023_sky_branch;experiments/exp023_sky_branch;runs/sofa_analog/exp017_motion_first;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
+PYTHONPATH="experiments/exp023_sky_branch/analog_catch_2;experiments/exp023_sky_branch;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
     py -3.13 -m overlay_sky --start 441 --end 800
 ```
 

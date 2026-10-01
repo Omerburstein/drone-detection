@@ -49,9 +49,9 @@ PYTHONPATH="experiments/exp017_motion_first;." py -3.13 -m calibrate_masks
 PYTHONPATH="experiments/exp017_motion_first;." py -3.13 -m debug_video --start 650 --end 964
 
 # analog -- its clipcfg goes first, the shared modules come from the O4 directory
-PYTHONPATH="runs/sofa_analog/exp017_motion_first;experiments/exp017_motion_first;." \
+PYTHONPATH="experiments/exp017_motion_first/analog_catch_2;experiments/exp017_motion_first;." \
     py -3.13 -m calibrate_masks
-PYTHONPATH="runs/sofa_analog/exp017_motion_first;experiments/exp017_motion_first;." \
+PYTHONPATH="experiments/exp017_motion_first/analog_catch_2;experiments/exp017_motion_first;." \
     py -3.13 -m debug_video --start 441 --end 800
 ```
 
@@ -207,7 +207,7 @@ build.
 PYTHONPATH="experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
     py -3.13 -m check_fisheye --frames 40 --range 1.2 --lam=-0.20
 # analog
-PYTHONPATH="runs/sofa_analog/exp017_motion_first;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
+PYTHONPATH="experiments/exp017_motion_first/analog_catch_2;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
     py -3.13 -m check_fisheye --frames 40 --lam=-0.60
 ```
 
@@ -286,7 +286,7 @@ the question.
 ```bash
 PYTHONPATH="experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
     py -3.13 -m overlay_video --start 650 --end 964
-PYTHONPATH="runs/sofa_analog/exp017_motion_first;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
+PYTHONPATH="experiments/exp017_motion_first/analog_catch_2;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
     py -3.13 -m overlay_video --start 441 --end 800
 ```
 

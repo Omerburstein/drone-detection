@@ -4,7 +4,7 @@ This is the whole point of stopping here. The depth-aware ring in stage 2 is onl
 as this boundary, so the boundary gets looked at before anything is built on it.
 
     PYTHONPATH="experiments/exp017_motion_first;." py -3.13 -m debug_video
-    PYTHONPATH="runs/sofa_analog/exp017_motion_first;experiments/exp017_motion_first;." \
+    PYTHONPATH="experiments/exp017_motion_first/analog_catch_2;experiments/exp017_motion_first;." \
         py -3.13 -m debug_video --start 400 --end 800
 
 What you are looking at

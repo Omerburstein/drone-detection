@@ -64,8 +64,10 @@ the doc, rather than a file list here, which goes stale.
 
 `experiments/` holds the per-experiment scripts behind EXP-012b onward (the sky branch,
 `overlay_sky`, the masks). They are run through a `PYTHONPATH` stack, not imported from
-`src`; `experiments/README.md` has the commands. Never put code under `runs/` again: it is
-gitignored, and until 2026-10-01 this code existed only there.
+`src`; `experiments/README.md` has the commands. **`runs/` holds outputs only — never a
+script**, including a clip config: it is gitignored, and until 2026-10-01 this code existed
+only there. A clip config lives in a subfolder of its experiment
+(`experiments/exp023_sky_branch/analog_catch_2/clipcfg.py`) and points its `out` at `runs/`.
 
 **`src/data/` is source code, not a dataset.** The gitignore rules for `data/`,
 `weights/` and `runs/` are anchored with a leading slash for exactly this reason —

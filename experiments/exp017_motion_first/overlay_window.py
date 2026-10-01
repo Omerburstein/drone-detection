@@ -3,7 +3,7 @@
     PYTHONPATH="experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
         py -3.13 -m overlay_window --start 650 --end 964 [--k 5] [--min-appear 4]
 
-    PYTHONPATH="runs/sofa_analog/exp017_motion_first;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
+    PYTHONPATH="experiments/exp017_motion_first/analog_catch_2;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
         py -3.13 -m overlay_window --start 441 --end 800
 
 `overlay_video.py` stays as the single-pair baseline. Keeping both is the point: the

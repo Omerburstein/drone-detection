@@ -3,7 +3,7 @@
 Run from the repo root, e.g.
 
     PYTHONPATH="experiments/exp017_motion_first;." py -3.13 -m calibrate_masks
-    PYTHONPATH="runs/sofa_analog/exp017_motion_first;experiments/exp017_motion_first;." \
+    PYTHONPATH="experiments/exp017_motion_first/analog_catch_2;experiments/exp017_motion_first;." \
         py -3.13 -m calibrate_masks
 
 Why over every clip, and not over one clip's empty frames

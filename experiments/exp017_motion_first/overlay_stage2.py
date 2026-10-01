@@ -4,7 +4,7 @@ parallax-discounted scene motion, measured over a span.
     PYTHONPATH="experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
         py -3.13 -m overlay_stage2 --start 650 --end 964
 
-    PYTHONPATH="runs/sofa_analog/exp017_motion_first;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
+    PYTHONPATH="experiments/exp017_motion_first/analog_catch_2;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
         py -3.13 -m overlay_stage2 --start 441 --end 800
 
 `--no-video` prints the report without writing frames, which is the fast way to re-cut a
