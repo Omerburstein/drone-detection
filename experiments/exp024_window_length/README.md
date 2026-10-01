@@ -45,6 +45,14 @@ PYTHONPATH="experiments/exp024_window_length/analog_catch_2;experiments/exp024_w
 `--appear-radius` is **14 px on O4 and 9 px on analog** — the same physical radius read on
 a 1440 px and a 960 px picture. Everything else is left at EXP-017's defaults.
 
+**The video is drawn in the clean look by default** (2026-10-01, at the user's request),
+the same as EXP-023's `clean_catch_2_441_800.mp4`: stage-0 mask tints, each kept track as a
+red circle 10 px across, and a two-line caption. `--diagnostic` brings back EXP-017's full
+drawing (stage-1 tint and horizon, epipole, grey flash dots, green survivors with arrows,
+the label box). Drawing only — the report and every number above are identical either
+way. The analog `window10_` / `window15_catch_2_441_800.mp4` were re-rendered clean; the O4
+EXP-024 videos predate this and were deleted with the O4 run folders.
+
 ## O4 result (first_catch 650-964, 315 frames, 190 with the drone as a candidate)
 
 k=5 is at least as good at every load it can reach, and strictly better below ~40

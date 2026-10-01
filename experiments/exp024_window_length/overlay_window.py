@@ -29,6 +29,12 @@ What is different from the single-pair render
 
 Colours
 -------
+The default render is the CLEAN look, matching EXP-023's `clean_catch_2_441_800.mp4`: the
+stage-0 mask tints, every kept candidate (survives, or unjudged with `--direction`) as a RED
+circle at least 10 px across, and a two-line caption. Nothing else -- no stage-1 tint or
+horizon, no epipole, no flash dots, no arrows, no label box. `--diagnostic` restores the full
+drawing below. Drawing only: the report is identical either way.
+
   * DARK GREY dot  -- flash: failed persistence, dropped before being judged
   * RED dot        -- rejected: accumulated residual is along the line to the epipole
   * GREY ring      -- unjudged: near the FOE, or the window carries no reliable epipole
@@ -58,6 +64,8 @@ S = W / 1440.0
 FLASH = (90, 90, 90)
 REJECT, SURVIVE, UNJUDGED = (60, 60, 235), (60, 230, 60), (170, 170, 170)
 COLOUR = {"flash": FLASH, "rejected": REJECT, "unjudged": UNJUDGED, "survives": SURVIVE}
+KEPT = (0, 0, 255)       # clean render: same red as overlay_sky's kept circles
+MIN_DRAW_DIAMETER = 10   # px; a track has no scale, so every kept circle is drawn at this
 
 
 def make_pair(prev_bgr, cur_bgr, frame: int, stage0: masks.Stage0, tau: float) -> win.Pair:
@@ -90,6 +98,10 @@ def main() -> None:
     ap.add_argument("--tau", type=float, default=1.661)
     ap.add_argument("--fps", type=float, default=10.0)
     ap.add_argument("--no-video", action="store_true")
+    ap.add_argument("--diagnostic", action="store_true",
+                    help="draw everything: stage-1 tint and horizon, epipole, flash dots, "
+                         "arrows, the label box. OFF by default -- the default is the "
+                         "clean look (red kept circles only), as in EXP-023's clean renders.")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
 
@@ -143,14 +155,16 @@ def main() -> None:
         sl = skyline.split(cur, valid)
 
         img = np.zeros((H, W, 3), np.uint8) if a.no_video else cur.copy()
-        tint(img, sl.sky, TINT["sky"], 0.22)
-        tint(img, sl.uncertain, TINT["uncertain"], 0.30)
+        if a.diagnostic:
+            tint(img, sl.sky, TINT["sky"], 0.22)
+            tint(img, sl.uncertain, TINT["uncertain"], 0.30)
         for name, m in stage0.layers.items():
             tint(img, m, LAYER_COLOUR[name], 0.35)
-        xs = np.nonzero(sl.horizon >= 0)[0]
-        for x in xs[::4]:
-            cv2.circle(img, (int(x), int(sl.horizon[x])), px(2), (40, 220, 230), -1)
-        draw_epipole(img, fit.epipole)
+        if a.diagnostic:
+            xs = np.nonzero(sl.horizon >= 0)[0]
+            for x in xs[::4]:
+                cv2.circle(img, (int(x), int(sl.horizon[x])), px(2), (40, 220, 230), -1)
+            draw_epipole(img, fit.epipole)
 
         per = {"flash": 0, "rejected": 0, "unjudged": 0, "survives": 0}
         for t in tracks:
@@ -161,7 +175,10 @@ def main() -> None:
             st["appear_hist"].append(t.appearances)
             st["steps_hist"].append(t.steps)
             p = (int(t.x), int(t.y))
-            if v == "flash":
+            if not a.diagnostic:
+                if v in ("survives", "unjudged"):
+                    cv2.circle(img, p, MIN_DRAW_DIAMETER // 2, KEPT, max(1, px(1)))
+            elif v == "flash":
                 cv2.circle(img, p, px(3), FLASH, -1)
             elif v == "unjudged":
                 cv2.circle(img, p, px(6), UNJUDGED, max(1, px(2)))
@@ -173,6 +190,7 @@ def main() -> None:
                 cv2.arrowedLine(img, p,
                                 (int(t.x + t.total_mu[0] * g), int(t.y + t.total_mu[1] * g)),
                                 SURVIVE, max(1, px(2)), tipLength=0.3)
+            if v == "survives":
                 lab = sl.label(t.x, t.y)
                 st[f"surv_{'unc' if lab == 'uncertain' else lab}"] += 1
         st["seeds"] += len(tracks)
@@ -180,7 +198,8 @@ def main() -> None:
         box = boxes.get(f)
         if box:
             bx, by, bw, bh = [int(v) for v in box]
-            cv2.rectangle(img, (bx, by), (bx + bw, by + bh), (60, 230, 60), px(2))
+            if a.diagnostic:
+                cv2.rectangle(img, (bx, by), (bx + bw, by + bh), (60, 230, 60), px(2))
             mine = [t for t in tracks if on_drone(t.x, t.y, box)]
             if mine:
                 st["drone_seen"] += 1
@@ -201,7 +220,9 @@ def main() -> None:
                 txt = f"drone: {best} ({appears}/{a.k} frames)"
             else:
                 txt = "drone: not a candidate"
-            text_block(img, [txt], x0=bx, y0=max(int(20 * S), by - int(10 * S)), scale=0.55)
+            if a.diagnostic:
+                text_block(img, [txt], x0=bx, y0=max(int(20 * S), by - int(10 * S)),
+                           scale=0.55)
 
         st["n"] += 1
         st["grid_n"].append(len(gx))
@@ -215,7 +236,13 @@ def main() -> None:
                                                      fit.epipole.point[1] - st["epi_prev"][1])))
             st["epi_prev"] = fit.epipole.point.copy()
 
-        text_block(img, [
+        if not a.diagnostic:
+            text_block(img, [
+                f"frame {f}   window k={a.k}, need {a.min_appear}",
+                f"candidates {len(tracks)}   kept {per['survives'] + per['unjudged']}",
+            ])
+        else:
+            text_block(img, [
             f"frame {f}   window k={a.k}, need {a.min_appear}   tau {a.tau}",
             f"stage 1: sky {sl.sky_fraction * 100:.1f}%  uncertain {sl.uncertain.mean() * 100:.1f}%",
             f"stage 2: epipole {'OK' if fit.reliable else 'UNRELIABLE'}"
@@ -225,7 +252,7 @@ def main() -> None:
                f"  per-pair spread {fit.epipole_spread:.0f}px"),
             f"seeds {len(tracks)}:  flash {per['flash']}  rejected {per['rejected']}"
             f"  unjudged {per['unjudged']}  SURVIVE {per['survives']}",
-        ])
+            ])
         if writer is not None:
             writer.write(img)
 

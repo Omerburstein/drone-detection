@@ -317,6 +317,16 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-01 — [algo] **EXP-024's overlay drawn in the clean look.** The analog
+  EXP-024 videos had been rendered in EXP-017's diagnostic style (sky tint, horizon dots,
+  epipole, flash dots, arrows, label box), the opposite of the standing request that every
+  overlay look like EXP-023's `clean_catch_2_441_800.mp4`. `overlay_window.py` in
+  `experiments/exp024_window_length/` now draws that look by default: stage-0 tints, kept
+  tracks as red 10 px circles, two-line caption. `--diagnostic` restores the old drawing.
+  Re-rendered `runs/sofa_analog/exp024_window_length/window10_` and
+  `window15_catch_2_441_800.mp4`; the reports are byte-identical to the earlier ones apart
+  from the first line, so only the drawing changed.
+
 - [x] 2026-10-01 — [algo] **Clean overlays on both clips, red circles, and no scripts
   in `runs/`.** Rendered `runs/sofa_o4/clean_first_catch_650_964.mp4` the same way as the
   analog `clean_catch_2_441_800.mp4` (`overlay_sky --no-sky --no-truth`, EXP-022
