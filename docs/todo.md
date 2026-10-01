@@ -317,6 +317,15 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-01 — [algo] **EXP-024 at 5/7 and 5/10 on analog, and EXP-025: top 3 per
+  frame.** Rendered `window7_need5_` and `window10_need5_catch_2_441_800.mp4` (clean look).
+  5/7 keeps the same 18 of 174 drone frames (10%) as 5/10 at 0.8 vs 1.3 candidates/frame.
+  EXP-025 (`experiments/exp025_top3/`) shows only each frame's 3 highest-contrast sky-branch
+  candidates, tagged `#rank c`. Load drops from 5.48 to 2.88/frame while keeping 61 of
+  EXP-023's 73 drone frames (27.2% of 224). The drone is #1 in 31, #2 in 18, #3 in 12.
+  Video: `runs/sofa_analog/exp025_top3/top3_catch_2_441_800.mp4`. Both are in
+  `docs/experiments.md`.
+
 - [x] 2026-10-01 — [algo] **EXP-024's overlay drawn in the clean look.** The analog
   EXP-024 videos had been rendered in EXP-017's diagnostic style (sky tint, horizon dots,
   epipole, flash dots, arrows, label box), the opposite of the standing request that every

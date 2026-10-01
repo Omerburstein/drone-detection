@@ -3784,6 +3784,26 @@ detector misses the target in 186 of 360 frames — and, for both clips, the pea
 association the O4 half of this entry argues for, which needs neither texture nor flow and
 would make persistence independent of LK entirely.
 
+### Added 2026-10-01: 5-of-7 and 5-of-10 on analog, rendered for viewing
+
+The user asked for videos at 5/10 and 5/7. Same span, radius 9 px, fb gate 0.67 px, no
+direction test, drawn in the clean look (red 10 px circles on kept tracks only). k=7 had
+not been run before; its one pass gives the whole curve:
+
+| need | k=7 load/frame | k=7 drone kept | k=10 load/frame | k=10 drone kept |
+| ---: | ---: | :--- | ---: | :--- |
+| 2 | 20.2 | 63 (36%) | 21.6 | 64 (37%) |
+| 3 | 5.8 | 38 (22%) | 6.8 | 38 (22%) |
+| 4 | 2.1 | 28 (16%) | 2.8 | 30 (17%) |
+| **5** | **0.8** | **18 (10%)** | **1.3** | **18 (10%)** |
+
+Out of the 174 labelled frames where the target is a candidate at all. **5/7 keeps the same
+18 drone frames as 5/10 at 60% of the load**, and k=7 is otherwise k=10's curve shifted to
+lower load. Neither changes the conclusion above: at 5 appearances either gate keeps the
+target in one frame in ten. Artifacts in `runs/sofa_analog/exp024_window_length/`:
+`window7_need5_catch_2_441_800.mp4` (+ `.log`) and `window10_need5_catch_2_441_800.mp4`, a
+copy of the clean-redrawn `window10_` render, which already ran at need 5.
+
 ### Standing recommendation
 
 **On O4, keep k=5 with 4-of-5. Do not lengthen the window.** Revisit only if a downstream
@@ -3802,3 +3822,63 @@ displacement and size growth measured off it. EXP-023 established size as eviden
 labels give median growth +0.14 px over 5 frames against +6.34 over 15, so growth needs a
 long baseline while persistence wants a short one. That tension — not the window length —
 is the real open question.
+
+## EXP-025 — the sky branch, top 3 per frame: half the load, 84% of the hits
+
+- **Date:** 2026-10-01
+- **Question:** the user asked for a video showing only each frame's top 3 targets by score,
+  labelled so each can be told apart. If a downstream stage takes only a frame's N
+  highest-contrast candidates, how often is the drone among them, and how often is it #1?
+- **Model / weights:** none. EXP-023's sky branch at EXP-022 defaults (whole ring, c >= 6,
+  uncertain band scored, no size floor), with a per-frame cap of 3 applied **after** the
+  threshold and ranked by contrast `c`.
+- **Data:** `data/raw/SOFA-ANALOG/videos/catch_2.mp4` frames 441–800 (360 frames, 224
+  labelled).
+- **Hardware / cost:** i7-1255U CPU, one render of the span (EXP-023's cost; the cap is free).
+- **Scripts:** `experiments/exp025_top3/overlay_top3.py`. Artifacts in
+  `runs/sofa_analog/exp025_top3/`: `top3_catch_2_441_800.mp4`, `top3_analog.log`, and
+  `top3_catch_2_441_800.csv` (one row per ranked candidate: frame, rank, x, y, c, diameter,
+  on_target).
+- **Drawing:** the clean look. Each shown candidate is a red circle (at least 10 px across)
+  tagged `#rank c`, with `#1` thicker. Nothing is drawn from the labels.
+
+### Result
+
+| | per frame | drone frames (of 224) |
+| --- | ---: | ---: |
+| every candidate at c >= 6 (= EXP-023) | 5.48 | 73 (32.6%) |
+| **top 3** | **2.88** | **61 (27.2%)** |
+| top 2 | ≤ 2 | 49 (21.9%) |
+| top 1 | ≤ 1 | 31 (13.8%) |
+
+Rank of the drone when it is shown: **#1 in 31 frames, #2 in 18, #3 in 12.** Before the cap
+it reproduces EXP-023 to the digit (73/224, 5.5/frame), which is what makes the cap the only
+difference.
+
+**Capping at 3 cuts the load by 47% and keeps 61 of the 73 drone frames (84%).** The drone,
+when it is a candidate at all, is usually near the top: it is #1 in 42% of the frames where
+it is kept. But contrast is not a confident ranker. In more than half of those frames
+(42 of 73) something else outranks it, so a top-1 policy would hand over clutter in most
+frames.
+
+### Read with
+
+- **Same caveat as EXP-023:** "drone" means a candidate inside the label box grown by
+  max(10 px, 25%), and the detector fires at ~0.16x the airframe's size. A hit says a top
+  candidate was in the right place, not that the airframe was detected.
+- **Not comparable to EXP-024's window gate.** EXP-024's recall is out of the 174 frames
+  where the target is a *motion* candidate; this is out of all 224 labelled frames, from a
+  different detector. Reading 27% here against 22% at 3/7 there would compare different
+  denominators and different detectors.
+- A top-N cap is a *load* control, not a filter: it never removes a frame's best clutter, so
+  the false-alarm count is at least min(3, kept) − 1 in every frame where the drone is shown.
+
+### Next
+
+Rank by a statistic that separates better than `c`. EXP-023 measured 80.9% of clutter
+reaching the target's c p10 on this clip. The cap only helps as much as the ranking does,
+and a statistic can be tried without a re-render once it
+is in a candidate dump. EXP-023's
+`runs/sofa_analog/exp023_sky_branch/candidates_catch_2_441_800.csv` already carries `snr`,
+`c_plain`, `diameter` and `on_target` for every kept candidate, so re-ranking by any of them
+and re-counting top-3 hits is a GROUP BY, not another span.
