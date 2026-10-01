@@ -1,10 +1,15 @@
-"""The 5-frame version: accumulate each candidate's direction, and drop the ones that flash.
+"""EXP-024: the same k-frame renderer, with the window length as the question.
 
-    PYTHONPATH="experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
-        py -3.13 -m overlay_window --start 650 --end 964 [--k 5] [--min-appear 4]
+Forked from EXP-017 so that experiment stays frozen at the numbers EXP-021/022 cite.
+Two differences, both recorded in this folder's README: a `--direction` flag whose
+default is OFF, and a report that prints every `--min-appear` operating point from one
+pass.
 
-    PYTHONPATH="experiments/exp017_motion_first/analog_catch_2;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
-        py -3.13 -m overlay_window --start 441 --end 800
+    O4 first_catch:
+    PYTHONPATH="experiments/exp024_window_length/o4_first_catch;experiments/exp024_window_length;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." py -3.13 -m overlay_window --start 650 --end 964 --appear-radius 14 --k 5 --min-appear 4
+
+    SOFA-ANALOG catch_2:
+    PYTHONPATH="experiments/exp024_window_length/analog_catch_2;experiments/exp024_window_length;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." py -3.13 -m overlay_window --start 441 --end 800 --appear-radius 9 --k 5 --min-appear 4
 
 `overlay_video.py` stays as the single-pair baseline. Keeping both is the point: the
 window is only worth its cost if the same span comes out better, and "better" has to be
@@ -78,6 +83,10 @@ def main() -> None:
     ap.add_argument("--fb-max", type=float, default=None,
                     help="forward-backward LK gate in px. The default is px(1.0), which "
                          "on a noisy CVBS capture rejects nearly every track.")
+    ap.add_argument("--direction", action="store_true",
+                    help="also apply the epipolar direction test. OFF by default: "
+                         "EXP-021 measured it costing 33 points of recall while "
+                         "rejecting at chance, and EXP-022/023 default it off too.")
     ap.add_argument("--tau", type=float, default=1.661)
     ap.add_argument("--fps", type=float, default=10.0)
     ap.add_argument("--no-video", action="store_true")
@@ -114,7 +123,8 @@ def main() -> None:
               surv_sky=0, surv_scene=0, surv_unc=0, grid_n=[], agree=[],
               steps_hist=[], drone_v={"flash": 0, "rejected": 0, "unjudged": 0,
                                       "survives": 0},
-              drone_seen=0, drone_kept=0, drone_flash=0, drone_red=[], appear_hist=[])
+              drone_seen=0, drone_kept=0, drone_flash=0, drone_red=[], appear_hist=[],
+              drone_appear=[])
 
     for f in range(first + 1, a.end + 1):
         ok, cur = cap.read()
@@ -144,7 +154,8 @@ def main() -> None:
 
         per = {"flash": 0, "rejected": 0, "unjudged": 0, "survives": 0}
         for t in tracks:
-            v = t.verdict(a.min_appear)
+            v = (t.verdict(a.min_appear) if a.direction else
+                 ("flash" if t.appearances < a.min_appear else "survives"))
             per[v] += 1
             st["counts"][v] += 1
             st["appear_hist"].append(t.appearances)
@@ -173,7 +184,9 @@ def main() -> None:
             mine = [t for t in tracks if on_drone(t.x, t.y, box)]
             if mine:
                 st["drone_seen"] += 1
-                vs = [t.verdict(a.min_appear) for t in mine]
+                vs = [(t.verdict(a.min_appear) if a.direction else
+                       ("flash" if t.appearances < a.min_appear else "survives"))
+                      for t in mine]
                 best = ("survives" if "survives" in vs else
                         "unjudged" if "unjudged" in vs else
                         "rejected" if "rejected" in vs else "flash")
@@ -184,6 +197,7 @@ def main() -> None:
                 if best == "flash":
                     st["drone_flash"] += 1
                 appears = max(t.appearances for t in mine)
+                st["drone_appear"].append(appears)
                 txt = f"drone: {best} ({appears}/{a.k} frames)"
             else:
                 txt = "drone: not a candidate"
@@ -241,10 +255,27 @@ def report(st, a, out) -> None:
         print(f"  usable residual steps per seed: median {np.median(sh):.0f} of {a.k}, "
               f"{float((sh >= a.k - 1).mean()) * 100:.0f}% got {a.k - 1}+")
 
+    # The whole min-appear curve from ONE pass. `appearances` does not depend on the
+    # threshold -- `Track.verdict` only compares against it -- so every operating point of
+    # this window length is already in these histograms. Sweeping by re-rendering would
+    # cost k times as much for the same table, and would invite reading thresholds off
+    # different spans.
+    if len(hist) and st["drone_appear"]:
+        da = np.asarray(st["drone_appear"])
+        seen = st["drone_seen"]
+        print()
+        print("  OPERATING POINTS (persistence alone, every threshold from this one pass)")
+        print(f"  {'need':>6} {'load/frame':>11} {'drone kept':>14} {'seeds held':>11}")
+        for m in range(1, a.k + 1):
+            share = float((hist >= m).mean())
+            kept = int((da >= m).sum())
+            print(f"  {str(m) + '/' + str(a.k):>6} {share * tot / n:>11.1f} "
+                  f"{kept:>6} ({kept / seen * 100:3.0f}%) {share * 100:>10.1f}%")
+
     print(f"\nWHAT SURVIVES, per frame (seeds {tot / n:.1f}/frame)")
     for kk in ("flash", "rejected", "unjudged", "survives"):
         print(f"  {kk:9s} {c[kk] / n:7.1f}/frame   {c[kk] / tot * 100:5.1f}%")
-    judged = c["rejected"] + c["survives"]
+    judged = (c["rejected"] + c["survives"]) if a.direction else 0
     if judged:
         got = c["rejected"] / judged
         print(f"\n  rejection among JUDGED (persistent) candidates  {got * 100:5.1f}%")

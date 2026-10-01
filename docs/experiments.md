@@ -3635,7 +3635,7 @@ operating threshold) always keeps structural rejections and anything on target r
    beside every recall figure. The run now prints the ratio and refuses to call it a
    detection when it is below 0.5.
 
-## EXP-024 — window length: 10 and 15 frames are strictly worse than 5
+## EXP-024 — window length: worse than 5 on O4, and no usable setting at all on analog
 
 - **Date:** 2026-10-01
 - **Question:** the user asked for a 10-frame and a 15-frame persistence gate, after a
@@ -3649,11 +3649,17 @@ operating threshold) always keeps structural rejections and anything on target r
   identical across all three window lengths, so only the gate differs.
 - **Hardware / cost:** i7-1255U CPU, ~6–9 min per rendered span, ~5 min per `--no-video`
   pass. Under an hour for everything below.
-- **Scripts (gitignored):** `runs/sofa_o4/exp017_motion_first/overlay_window.py`, with two
-  additions recorded in that folder's README — a `--direction` flag (default off, matching
-  `overlay_stage2.py`) and an operating-point table that prints **every** `min_appear`
-  threshold from one pass. Artifacts: `window10_first_catch_650_964.mp4`,
-  `window15_first_catch_650_964.mp4`, `window10_need8_…mp4`, `window15_need10_…mp4`.
+- **Scripts:** `experiments/exp024_window_length/` — `overlay_window.py` forked from
+  EXP-017's so that experiment stays frozen, plus a `clipcfg.py` per clip under
+  `o4_first_catch/` and `analog_catch_2/`. Two changes from EXP-017's renderer, documented
+  in that folder's README: a `--direction` flag (default off, matching `overlay_stage2.py`)
+  and an operating-point table printing **every** `min_appear` threshold from one pass.
+  **Written before the 2026-10-01 restructure** (commits `0d5d729`, `0f98eb2`) that moved
+  every experiment script out of gitignored `runs/` into tracked `experiments/`; the O4
+  artifacts named in the first version of this entry — `window10_first_catch_650_964.mp4`
+  and the other three — were deleted with the O4 run folders and can be regenerated from
+  the commands in the folder README. Analog artifacts survive:
+  `runs/sofa_analog/exp024_window_length/window{10,15}_catch_2_441_800.mp4` and seven logs.
 
 ### The whole curve, three window lengths, one span
 
@@ -3715,11 +3721,81 @@ end". On the full 315 frames, where the target is 19 px at frame 708, the same c
 is 25% / 19% / 17%. **Any window-length claim from 900–964 is a claim about large targets.**
 The same caution applies to EXP-021's headline 78% and 31.2/frame, which are that sub-span.
 
+### The analog clip answers differently: nothing wins, because the curve collapses
+
+`catch_2` 441–800 (360 frames, the drone a candidate in 174 of them), 60,338 seeds =
+167.6/frame, appearance radius **9 px** — the same physical radius as O4's 14 px read on a
+960 px picture. Stage-0 coverage reproduces EXP-021's analog run exactly (hud 11.64%,
+prop 0.44%, ladder 3.21%, edge 7.63%, union 19.49%), which is what says the rebuilt clip
+config is the same one.
+
+| load/frame | k=5 | k=10 | k=15 |
+| ---: | :--- | :--- | :--- |
+| ~168 | 1/5 → 100% | 1/10 → 100% | 1/15 → 100% |
+| ~18–23 | 2/5 → 34% | 2/10 → **37%** | 2/15 → **37%** |
+| ~4–8 | 3/5 → 21% | 3/10 → 22% | 3/15 → 22% |
+| ~1.1–3.6 | 4/5 → 13% | 4/10 → 17% | 4/15 → 17% |
+| ~0.1–1.9 | 5/5 → 2% | 5/10 → 10% | 5/15 → 10% |
+
+**At matched load the three window lengths are indistinguishable** — interpolating k=10 to
+k=5's 18.1/frame gives ~33.5% against 34%. So the O4 conclusion ("longer is strictly
+worse") does **not** transfer; on analog longer is merely *not better*.
+
+What dominates instead is the shape of the curve. **1/k keeps 100% of the drone at 167.6
+candidates/frame, and 2/k keeps 37% at ~20.** Two-thirds of the target is lost at the first
+real threshold, and the default 4-of-5 sits at 13%. There is no operating region on this
+clip where persistence both filters and keeps the target. EXP-021 published the 4-of-5
+figure (1.1/frame, 13%) without the curve around it, so this is the first statement of how
+steep the drop is.
+
+### How much of that is the forward-backward gate, measured rather than assumed
+
+`usable residual steps per seed: median 0` at k=5, 10 and 15 — against median 3 on O4. The
+analog gate is `px(1.0) = 0.67 px` on a 960 px frame, and EXP-017's own `--fb-max` help
+text warns it "on a noisy CVBS capture rejects nearly every track". That matters structurally:
+`build_tracks` uses LK to find *where* to test `_appears`, so a track that dies at step 0
+has a NaN position, scores no appearance, and is dropped as a flash however reliably the
+detector fired on it. The 99.3% flash rate could therefore have been an optical-flow
+artifact rather than target intermittency.
+
+Re-run at `--fb-max 3.0`:
+
+| | seeds at full depth | load/frame | drone kept |
+| --- | ---: | ---: | ---: |
+| k=5, fb 0.67 | 13% got 4+ | 1.1 | 13% |
+| k=5, fb 3.0 | 28% got 4+ | 1.9 | 16% |
+| k=10, fb 0.67 | 6% got 9+ | 2.9 | 17% |
+| k=10, fb 3.0 | **16%** got 9+ | 5.9 | **25%** |
+
+**The gate is throttling LK — and it is not the explanation.** Surviving tracks more than
+double, but load rises with recall: at matched load ~6/frame it is 25% against 22%, about
+three points. Median usable steps stays 0 at a 4.5× looser gate. So the analog collapse is
+mostly the detector not firing on the target consistently, not flow failure. Three points
+is still worth having, and `--fb-max` on analog should be revisited on its own rather than
+inside a window-length question.
+
+### What this pair of clips says together
+
+Persistence is cheap and sound on O4 at k=5 and **has no usable setting on analog at any
+window length**. That is a stage-1/stage-2 problem, not a window-length problem: the analog
+target is not a candidate often enough for "appeared in m of k frames" to separate it from
+noise, and no choice of k or m repairs that. The next move on analog is upstream — why the
+detector misses the target in 186 of 360 frames — and, for both clips, the peak-chaining
+association the O4 half of this entry argues for, which needs neither texture nor flow and
+would make persistence independent of LK entirely.
+
 ### Standing recommendation
 
-**Keep k=5 with 4-of-5. Do not lengthen the window.** Revisit only if a downstream stage
-needs under 14 candidates/frame, where k=10 at 9/10 is the only option and costs 8 points
-of recall against k=5's floor.
+**On O4, keep k=5 with 4-of-5. Do not lengthen the window.** Revisit only if a downstream
+stage needs under 14 candidates/frame, where k=10 at 9/10 is the only option and costs 8
+points of recall against k=5's floor.
+
+**On analog, do not tune the window at all — persistence has no usable setting there.**
+Every window length keeps at most 37% of the target once the gate filters anything, and
+the shipping 4-of-5 keeps 13%. Spending effort on k or m on this clip is spending it on
+the wrong stage. Two things to do instead: raise `--fb-max` off its 0.67 px default (worth
+~3 points of recall at matched load, measured above, and it should be decided on its own
+terms), and look upstream at why the target is not a candidate in 186 of 360 frames.
 
 **Next, and separately from window length:** peak-chaining association, then accumulated
 displacement and size growth measured off it. EXP-023 established size as evidence; the

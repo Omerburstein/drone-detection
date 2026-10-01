@@ -331,8 +331,8 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
   `runs/<clip>/expNNN_*/` now mean `experiments/expNNN_*/`; the O4 outputs they name are
   gone. The default overlay is now analog `catch_2` 441–800 unless another clip is named.
 
-- [x] 2026-10-01 — [algo] **Window length: render a 10-frame and a 15-frame gate and
-  recommend one.** Four overlay videos on `first_catch` 650-964 (matched-load 5/10 and
+- [x] 2026-10-01 — [algo] **Window length on both clips: render a 10-frame and a 15-frame
+  gate and recommend one.** Four overlay videos on `first_catch` 650-964 (matched-load 5/10 and
   6/15, low-load 8/10 and 10/15), plus a k=5 control on the same span so the table is
   internal to one run. **EXP-024. Recommendation: keep k=5 at 4-of-5.** k=5 is at least as
   good at every load it can reach and strictly better below ~40 candidates/frame -- 42%
@@ -351,6 +351,16 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
   an operating-point table printing every `min_appear` from one pass.
   **Caveat recorded:** on 900-964 alone the strict settings look tied (52/51/48%); on the
   full span they are 25/19/17%. EXP-021's 78% and 31.2/frame are that easy sub-span.
+  **Analog (2026-10-01, same entry):** the O4 conclusion does not transfer -- at matched
+  load the three window lengths are indistinguishable on `catch_2`, so longer is not worse,
+  merely not better. What dominates is that **persistence has no usable setting on analog**:
+  1/k keeps 100% of the target at 167.6 candidates/frame and 2/k keeps 37% at ~20, with the
+  shipping 4-of-5 at 13%. Probed the suspected cause: `--fb-max 3.0` against the 0.67 px
+  default more than doubles surviving tracks but buys only ~3 points at matched load, so LK
+  throttling is real and is **not** the explanation. Analog's problem is upstream of the
+  gate. Scripts now live in `experiments/exp024_window_length/` with a clipcfg per clip;
+  EXP-017's `overlay_window.py` was reverted to its frozen state after I had edited it in
+  place.
 
 - [x] 2026-09-30 — [algo] **Roll back the EXP-022/EXP-023 difference, and record every
   candidate.** Both done, plus three defects the user's questions exposed.
