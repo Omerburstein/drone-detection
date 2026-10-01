@@ -317,6 +317,27 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-01 — [algo] **Window length: render a 10-frame and a 15-frame gate and
+  recommend one.** Four overlay videos on `first_catch` 650-964 (matched-load 5/10 and
+  6/15, low-load 8/10 and 10/15), plus a k=5 control on the same span so the table is
+  internal to one run. **EXP-024. Recommendation: keep k=5 at 4-of-5.** k=5 is at least as
+  good at every load it can reach and strictly better below ~40 candidates/frame -- 42%
+  recall at 25.8/frame against 33% (k=10) and 29% (k=15) at matched load. A longer window
+  buys only *reach*: 5/5 floors k=5 at 14.3/frame, and below that k=10 at 9/10 is the only
+  option, at 17%.
+  **This reverses my own recommendation from the design discussion that preceded it** --
+  I argued it from motion-magnitude SNR, which does grow with window length, and applied
+  it to the persistence gate, which shrinks with it. Two different tests.
+  **The durable finding:** `usable residual steps per seed: median 3` at k=5, 10 and 15
+  alike. LK tracks die at three frames regardless of window length, so the accumulated
+  residual a long window exists to compute is mostly unavailable, and any motion-magnitude
+  test must chain candidate *peaks* rather than optical flow.
+  **Instrument:** `overlay_window.py` gained `--direction` (default off, matching
+  `overlay_stage2.py`; it previously always applied a test EXP-021 measured at chance) and
+  an operating-point table printing every `min_appear` from one pass.
+  **Caveat recorded:** on 900-964 alone the strict settings look tied (52/51/48%); on the
+  full span they are 25/19/17%. EXP-021's 78% and 31.2/frame are that easy sub-span.
+
 - [x] 2026-09-30 — [algo] **Roll back the EXP-022/EXP-023 difference, and record every
   candidate.** Both done, plus three defects the user's questions exposed.
   **Rollback:** defaults reproduce EXP-022 (whole ring, uncertain band scored); the two

@@ -3634,3 +3634,95 @@ operating threshold) always keeps structural rejections and anything on target r
 3. **Tighten `on_drone` for this branch**, or report the detected-scale-to-true-size ratio
    beside every recall figure. The run now prints the ratio and refuses to call it a
    detection when it is below 0.5.
+
+## EXP-024 — window length: 10 and 15 frames are strictly worse than 5
+
+- **Date:** 2026-10-01
+- **Question:** the user asked for a 10-frame and a 15-frame persistence gate, after a
+  design discussion in which **I recommended lengthening the window** on the grounds that
+  a target's accumulated displacement grows with window length while its positional
+  scatter does not. Does a longer window actually buy anything?
+- **Model / weights:** none. No learned component.
+- **Data:** `data/processed/SOFA-O4/videos/first_catch.avi` frames 650–964 (315 frames,
+  257 labelled, the drone a candidate in 190 of them), `tau = 1.661`, appearance radius
+  14 px, fb gate 1.00 px, **direction test off**. 41,876 seeds = 132.9 candidates/frame,
+  identical across all three window lengths, so only the gate differs.
+- **Hardware / cost:** i7-1255U CPU, ~6–9 min per rendered span, ~5 min per `--no-video`
+  pass. Under an hour for everything below.
+- **Scripts (gitignored):** `runs/sofa_o4/exp017_motion_first/overlay_window.py`, with two
+  additions recorded in that folder's README — a `--direction` flag (default off, matching
+  `overlay_stage2.py`) and an operating-point table that prints **every** `min_appear`
+  threshold from one pass. Artifacts: `window10_first_catch_650_964.mp4`,
+  `window15_first_catch_650_964.mp4`, `window10_need8_…mp4`, `window15_need10_…mp4`.
+
+### The whole curve, three window lengths, one span
+
+`appearances` does not depend on `min_appear` — `Track.verdict` only compares against it —
+so one render per window length measures the entire load-versus-recall curve. Drone recall
+is out of the 190 labelled frames where the target is a candidate at all.
+
+| load/frame | k=5 | k=10 | k=15 |
+| ---: | :--- | :--- | :--- |
+| ~133 | 1/5 → 100% | 1/10 → 100% | 1/15 → 100% |
+| ~60–67 | 2/5 → **71%** | 2/10 → 72% | 2/15 → 72% |
+| ~39–40 | 3/5 → **55%** | (3/10 → 56% at 47.6) | 4/15 → 45% |
+| ~26–29 | 4/5 → **42%** | 5/10 → 33% | 6/15 → 29% |
+| ~14 | 5/5 → **25%** | 8/10 → 19% | 10/15 → 17% |
+| ~9.8 | *unreachable* | 9/10 → **17%** | 11/15 → 13% |
+| ~3–6 | *unreachable* | 10/10 → 7% | 15/15 → 1% |
+
+**k=5 is at least as good at every load it can reach, and strictly better below ~40.** At
+matched load ~26–29 it holds 42% against 33% and 29% — nine and thirteen points. The three
+converge only at the loosest setting (2/k, 71–72%), where the gate is barely filtering.
+
+The one thing a longer window offers is **reach**: k=5 has five thresholds and 5/5 is its
+floor at 14.3 candidates/frame. Below that only a longer window can operate — k=10 at 9/10
+gives 17% at 9.8/frame. That is a granularity argument, not a motion argument, and it
+arrives with less recall than k=5's floor.
+
+### Why longer is worse, and why I predicted the opposite
+
+The recommendation I gave before this run was argued from **motion-magnitude SNR**: a
+target's net displacement grows roughly linearly with window length (16.8 px over 5 frames,
+35.7 over 15, measured from the labels) while positional scatter stays ~10 px. That is true,
+and it is about a test that **does not exist in the code**.
+
+The gate that ships is persistence, and it degrades with window length for a reason that
+runs the other way: a longer window requires the detector to fire on the target in *more
+frames*, and those firings are intermittent. `4/k` returns the same recall at every k —
+the same target frames satisfy it — while admitting steadily more noise that happened to
+flash four times somewhere in a longer span. Lengthening the window therefore moves the
+curve down and right. Two different tests; I applied one's reasoning to the other.
+
+### The finding that outlives the comparison: LK tracks die at three frames
+
+`usable residual steps per seed: median 3` at **k=5, k=10 and k=15 alike** — 47% of seeds
+reach 4+ steps at k=5, 37% reach 9+ at k=10, 32% reach 14+ at k=15. Lengthening the window
+does not lengthen the tracks.
+
+So the accumulated residual a long window exists to compute is mostly unavailable, and the
+motion-magnitude test proposed above cannot be built on `_track_back` at all. Its only
+viable form is **chaining candidate peaks** by position across frames — which needs no
+texture and no optical flow, and which `window._appears` already does for one frame at a
+time without anything chaining it.
+
+### Span dependence, stated because it nearly produced a wrong answer
+
+On frames 900–964 alone — the easy end, target 70–107 px — the strict settings converge:
+52% / 51% / 48% at load ~14 for k=5 / 10 / 15, a one-to-three frame spread on n=65. An
+early draft of this conclusion rested on that sub-span and read it as "tied at the strict
+end". On the full 315 frames, where the target is 19 px at frame 708, the same comparison
+is 25% / 19% / 17%. **Any window-length claim from 900–964 is a claim about large targets.**
+The same caution applies to EXP-021's headline 78% and 31.2/frame, which are that sub-span.
+
+### Standing recommendation
+
+**Keep k=5 with 4-of-5. Do not lengthen the window.** Revisit only if a downstream stage
+needs under 14 candidates/frame, where k=10 at 9/10 is the only option and costs 8 points
+of recall against k=5's floor.
+
+**Next, and separately from window length:** peak-chaining association, then accumulated
+displacement and size growth measured off it. EXP-023 established size as evidence; the
+labels give median growth +0.14 px over 5 frames against +6.34 over 15, so growth needs a
+long baseline while persistence wants a short one. That tension — not the window length —
+is the real open question.
