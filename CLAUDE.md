@@ -62,6 +62,11 @@ CLI entry points are the top-level `src/*.py` modules, one reference page each u
 `docs/`. Run `py -3.13 -m src.<name> --help` for the current parameters -- that, and
 the doc, rather than a file list here, which goes stale.
 
+`experiments/` holds the per-experiment scripts behind EXP-012b onward (the sky branch,
+`overlay_sky`, the masks). They are run through a `PYTHONPATH` stack, not imported from
+`src`; `experiments/README.md` has the commands. Never put code under `runs/` again: it is
+gitignored, and until 2026-10-01 this code existed only there.
+
 **`src/data/` is source code, not a dataset.** The gitignore rules for `data/`,
 `weights/` and `runs/` are anchored with a leading slash for exactly this reason —
 an unanchored `data/` matches at any depth and silently drops the package. Do not
