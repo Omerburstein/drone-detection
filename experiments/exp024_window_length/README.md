@@ -123,6 +123,10 @@ same target frames at every k, so the shortest window is the cheapest version of
 `rank_hist.py` (no arguments, reads the k=3 and k=4 dumps and EXP-023's candidate dump)
 draws the drone's rank among each frame's survivors at 2/3, 2/4 and sky c>=6 into
 `rank_hist_catch_2_441_800.png`. Median rank 5 for both windows, 2 for the sky branch.
+`--rank-by sky` re-ranks the window survivors by the sky branch's contrast at the same spot
+(nearest EXP-023 blob within 9 px, else last) into `rank_hist_skyc_catch_2_441_800.png`.
+The drone goes to #1 in 38 (2/3) and 39 (2/4) frames, mostly because 90% of the window's
+survivors have no sky blob nearby.
 
 ### The fb gate, measured rather than assumed
 

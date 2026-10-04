@@ -369,6 +369,15 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-04 — [algo] **2/3 and 2/4 window survivors ranked by the sky branch's
+  contrast.** `rank_hist.py --rank-by sky`: each survivor takes the `c` of the nearest
+  EXP-023 blob within 9 px, else last. The drone is #1 in 38 and 39 frames, against 5 and 4
+  by motion score, but 90% of survivors have no sky blob nearby, so this is mostly the
+  intersection of the two detectors. That intersection keeps the drone in 48 frames at
+  1.43/frame against the sky branch alone's 42 at the same load (51 vs 43 for 2/4): the
+  first sign that persistence adds to the sky branch. `docs/experiments.md` EXP-024
+  addendum.
+
 - [x] 2026-10-04 — [algo] **Drone-rank histograms for 2/3, 2/4 and the sky branch on
   analog.** `experiments/exp024_window_length/rank_hist.py`, which reads the dumps, no
   re-render. Window gates: median rank 5, #1 in 5 and 4 frames, flat from rank 1 to 8. Sky

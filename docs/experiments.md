@@ -4008,6 +4008,36 @@ nothing about which survivor is the target. The sky branch keeps the drone at #1
 does not move. Ranks are each detector's own `c`, so they compare across panels; the
 scores do not.
 
+**Ranked by the sky branch's `c` instead** (`rank_hist.py --rank-by sky`, figure
+`rank_hist_skyc_catch_2_441_800.png`). The window still decides what survives, and each
+survivor takes the `c` of the nearest EXP-023 candidate within 9 px. That dump holds every
+blob down to c=-0.96. A survivor with no blob that close ranks last, behind any clutter it
+ties with.
+
+| gate, ranked by sky `c` | kept | #1 | top 3 | median rank | survivors with no sky blob |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2/3 window | 57 | **38** | 46 | 1 | 4466 of 4982 (90%) |
+| 2/4 window | 60 | **39** | 49 | 1 | 5309 of 5906 (90%) |
+
+From #1 in 5 frames to 38, but read it for what it is: **90% of the window's survivors have
+no sky blob within 9 px**, so the ranking is mostly the intersection of the two detectors.
+That intersection, unthresholded, is a candidate set in its own right, and **it beats the
+sky branch alone at matched load**:
+
+| | load/frame | drone frames /224 |
+| --- | ---: | ---: |
+| 2/3 window, with a sky blob within 9 px | 1.43 | **48** |
+| sky branch alone, c >= 8.60 | 1.43 | 42 |
+| 2/4 window, with a sky blob within 9 px | 1.66 | **51** |
+| sky branch alone, c >= 8.28 | 1.66 | 43 |
+
+Six to eight frames at a load of about 1.5 per frame, on one clip, and recut from dumps
+rather than run as a pipeline. That is the first evidence that motion persistence adds
+something the sky branch's contrast does not. It is also a cheaper form of the open
+follow-up, persistence on the sky branch: this AND needs no chaining. The drone is lost
+from the intersection in 9 frames of 57 (2/3) where the window kept it but no sky blob lay
+within 9 px.
+
 
 ### 2026-10-04 — would displacement magnitude be a better statistic than direction?
 
