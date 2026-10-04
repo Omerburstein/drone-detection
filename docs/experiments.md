@@ -4011,13 +4011,14 @@ scores do not.
 **Ranked by the sky branch's `c` instead** (`rank_hist.py --rank-by sky`, figure
 `rank_hist_skyc_catch_2_441_800.png`). The window still decides what survives, and each
 survivor takes the `c` of the nearest EXP-023 candidate within 9 px. That dump holds every
-blob down to c=-0.96. A survivor with no blob that close ranks last, behind any clutter it
-ties with.
+blob down to c=-0.96. Blobs vetoed as `cloud` (large and soft-edged, a shape rule the branch
+applies at any `c`) are left out. A survivor with no blob that close ranks last, behind any
+clutter it ties with.
 
 | gate, ranked by sky `c` | kept | #1 | top 3 | median rank | survivors with no sky blob |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 2/3 window | 57 | **38** | 46 | 1 | 4466 of 4982 (90%) |
-| 2/4 window | 60 | **39** | 49 | 1 | 5309 of 5906 (90%) |
+| 2/3 window | 57 | **38** | 46 | 1 | 4506 of 4982 (90%) |
+| 2/4 window | 60 | **39** | 49 | 1 | 5357 of 5906 (91%) |
 
 From #1 in 5 frames to 38, but read it for what it is: **90% of the window's survivors have
 no sky blob within 9 px**, so the ranking is mostly the intersection of the two detectors.
@@ -4026,13 +4027,16 @@ sky branch alone at matched load**:
 
 | | load/frame | drone frames /224 |
 | --- | ---: | ---: |
-| 2/3 window, with a sky blob within 9 px | 1.43 | **48** |
-| sky branch alone, c >= 8.60 | 1.43 | 42 |
-| 2/4 window, with a sky blob within 9 px | 1.66 | **51** |
-| sky branch alone, c >= 8.28 | 1.66 | 43 |
+| 2/3 window, with a sky blob within 9 px | 1.32 | **48** |
+| sky branch alone, c >= 8.79 | 1.32 | 39 |
+| 2/4 window, with a sky blob within 9 px | 1.52 | **52** |
+| sky branch alone, c >= 8.47 | 1.52 | 42 |
 
-Six to eight frames at a load of about 1.5 per frame, on one clip, and recut from dumps
-rather than run as a pipeline. That is the first evidence that motion persistence adds
+Counted per blob: a frame counts when a blob on the drone is in the set, the same test both
+rows use. Nine to ten frames at a load of about 1.4 per frame, on one clip, and recut from
+dumps rather than run as a pipeline. The first version of this table kept cloud-vetoed blobs
+(1.43 and 1.66/frame against 42 and 43). Dropping them removed only clutter: the drone's
+frames and ranks did not change. That is the first evidence that motion persistence adds
 something the sky branch's contrast does not. It is also a cheaper form of the open
 follow-up, persistence on the sky branch: this AND needs no chaining. The drone is lost
 from the intersection in 9 frames of 57 (2/3) where the window kept it but no sky blob lay
@@ -4243,3 +4247,33 @@ stricter and its numbers lower.
 Artifacts in `runs/sofa_analog/exp025_top3/`: `gate4of5_image_top3_catch_2_441_800.mp4`
 and `gate4of5_top3_catch_2_441_800.mp4` (camera-compensated), each with its `.log`, `.csv`
 (every kept candidate with `appearances`) and `_drone_ranks.md` from `drone_ranks.py`.
+
+### Added 2026-10-04: the 2-of-4 motion window, ranked by sky contrast, top 3 (EXP-025c)
+
+The user asked for a video: EXP-024's 2-of-4 motion window deciding what survives, the sky
+branch's `c` deciding the order, top 3 only. `experiments/exp025_top3/overlay_window_skyc.py`
+draws it from two dumps, with no detector re-run: EXP-024's `seeds_k4_` and EXP-023's
+candidate dump. A sky blob is **confirmed** when a 2-of-4 survivor lies within 9 px. Confirmed
+blobs are ranked by `c` with **no threshold**, and blobs the sky branch vetoes as `cloud` are
+dropped, as it drops them at any `c`. Each blob is drawn once. A window survivor with no blob
+nearby cannot be ranked and is not drawn.
+
+| catch_2 441–800 | ranked/frame | shown/frame | drone in top 3 (of 224) | #1 / #2 / #3 |
+| --- | ---: | ---: | ---: | :---: |
+| sky c >= 6, no gate (EXP-025) | 5.48 | 2.88 | **61** | 31 / 18 / 12 |
+| sky 4 of 5 in picture coordinates (EXP-025b) | 1.94 | 1.71 | 27 | 20 / 6 / 1 |
+| **2-of-4 motion window, ranked by sky c** | **1.52** | **1.29** | **49** | **39 / 8 / 2** |
+
+The drone is confirmed in 52 frames and in the top 3 in 49. **It is #1 in 39, more than
+EXP-025's 31, at 45% of the shown load** (1.29 against 2.88 per frame). It gives up 12
+top-3 frames to EXP-025, mostly at #2 and #3. It beats the sky branch's own 4-of-5 gate
+(EXP-025b) on every column. That gate needs c >= 6 in four of five frames; this one needs
+motion in two of four, and no contrast floor.
+
+Not independent of the EXP-024 rank histograms: it is the same intersection, which keeps the
+drone in 52 frames at 1.52/frame against the sky branch alone's 42 at that load. The same
+caveats apply too: one clip, recut from dumps, one 9 px radius.
+
+Artifacts in `runs/sofa_analog/exp025_top3/`: `window2of4_skyc_top3_catch_2_441_800.mp4`,
+its `.csv` (every shown blob: frame, rank, x, y, c, diameter, seeds confirming it,
+on_target) and `window2of4_skyc_analog.log`.

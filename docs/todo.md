@@ -369,6 +369,16 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-04 — [algo] **EXP-025c: the 2-of-4 motion window, ranked by sky contrast,
+  top 3, rendered.** `experiments/exp025_top3/overlay_window_skyc.py` draws it from the
+  EXP-024 and EXP-023 dumps. A sky blob is ranked when a 2-of-4 survivor lies within 9 px,
+  with no c threshold and cloud vetoes dropped. The drone is in the top 3 in 49 of 224
+  frames and #1 in 39, against EXP-025's 61 and 31, at 1.29 shown/frame against 2.88. It
+  beats EXP-025b's sky 4-of-5 gate on every column. Dropping cloud vetoes also corrected the
+  EXP-024 intersection numbers: 48 vs 39 (2/3) and 52 vs 42 (2/4) against the sky branch
+  alone at matched load. Video:
+  `runs/sofa_analog/exp025_top3/window2of4_skyc_top3_catch_2_441_800.mp4`.
+
 - [x] 2026-10-04 — [algo] **2/3 and 2/4 window survivors ranked by the sky branch's
   contrast.** `rank_hist.py --rank-by sky`: each survivor takes the `c` of the nearest
   EXP-023 blob within 9 px, else last. The drone is #1 in 38 and 39 frames, against 5 and 4

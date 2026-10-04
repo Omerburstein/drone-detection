@@ -8,7 +8,7 @@ contrast for the sky branch, so ranks compare across panels but `c` does not.
 
 `--rank-by sky` ranks the window gates' survivors by the **sky branch's** contrast instead:
 each survivor takes the `c` of the nearest EXP-023 candidate within `SKY_RADIUS` in the
-same frame (that dump holds every blob to c=-0.96), and one with no blob that close ranks
+same frame (that dump holds every blob to c=-0.96; cloud vetoes are dropped), and one with no blob that close ranks
 last. The window still decides *what survives*; only the order changes.
 
 The drone's rank is the best rank of any survivor on it (`on_target`), counted
@@ -61,10 +61,16 @@ def labelled_frames() -> set[int]:
 
 
 def sky_index() -> dict[int, np.ndarray]:
-    """EXP-023's candidates by frame, as (N, 3) arrays of (x, y, c)."""
+    """EXP-023's candidates by frame, as (N, 3) arrays of (x, y, c).
+
+    Blobs vetoed as `cloud` are left out: that is a shape rule the sky branch applies at any
+    c, so they are not candidates whatever the threshold.
+    """
     by_frame = defaultdict(list)
     with open(SKY_DUMP, encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
+            if r["reason"] == "cloud":
+                continue
             by_frame[int(r["frame"])].append((float(r["x"]), float(r["y"]), float(r["c"])))
     return {f: np.asarray(v) for f, v in by_frame.items()}
 

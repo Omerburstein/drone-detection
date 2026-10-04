@@ -15,6 +15,7 @@ drone among them, and how often is it #1?
 | `overlay_top3.py` | renderer and report. `--top N` changes the cap, `--no-video` prints the report only. Writes a CSV of every ranked candidate (`frame, rank, x, y, c, diameter, on_target`) next to the video. |
 | `overlay_gate.py` | EXP-025b: the same top N, after a persistence gate of `--min-appear` of `--k` frames (default 4 of 5). `--coords scene` (default) chains camera-compensated, `--coords image` in raw picture coordinates. Prints every threshold 1..k from one pass. Writes a CSV of every kept candidate (`frame, x, y, c, diameter, appearances, rank_all, on_target`). |
 | `drone_ranks.py` | reads `overlay_gate.py`'s CSV and writes a Markdown table of every frame the drone is in a top N, with its rank with and without the gate. Any threshold, no re-render. |
+| `overlay_window_skyc.py` | EXP-025c: EXP-024's 2-of-4 motion window decides what survives, the sky branch's `c` decides the order. Drawn from EXP-024's `seeds_k4_` dump and EXP-023's candidate dump, no detector re-run. A blob is ranked when a survivor lies within 9 px; no c threshold, cloud vetoes dropped (`--keep-cloud` keeps them). Writes a CSV of every shown blob. |
 
 The candidates come from EXP-023's `silhouette.detect` and the drawing helpers from its
 `overlay_sky.py`, both unchanged, so before the cap they are EXP-023's to the digit.
@@ -99,6 +100,24 @@ the previous frame's candidates exactly (537/538 above). Two windows in three co
 duplicate pair, and there 4 of 5 can be 3 live frames plus a copy. Dropping duplicates
 before the window is built, as the open todo proposes for EXP-024, would make this gate
 stricter.
+
+## The motion window, ranked by sky contrast (EXP-025c)
+
+```bash
+PYTHONPATH="experiments/exp023_sky_branch/analog_catch_2;experiments/exp025_top3;experiments/exp023_sky_branch;experiments/exp017_motion_first;experiments/exp015_normalised_motion;."     py -3.13 -m overlay_window_skyc
+```
+
+Needs `runs/sofa_analog/exp024_window_length/seeds_k4_catch_2_441_800.csv` (EXP-024's
+`overlay_window --k 4 --dump`) and EXP-023's `candidates_catch_2_441_800.csv`.
+
+| catch_2 441-800, top 3 | ranked/frame | shown/frame | drone in top 3 (of 224) | #1 / #2 / #3 |
+| --- | ---: | ---: | ---: | :---: |
+| sky c >= 6, no gate (EXP-025) | 5.48 | 2.88 | 61 | 31 / 18 / 12 |
+| sky 4 of 5, picture coordinates (EXP-025b) | 1.94 | 1.71 | 27 | 20 / 6 / 1 |
+| **2-of-4 motion window, ranked by sky c** | **1.52** | **1.29** | **49** | **39 / 8 / 2** |
+
+The drone is #1 in more frames than EXP-025's, at 45% of the shown load. It gives up 12
+top-3 frames, mostly at #2 and #3. Video: `window2of4_skyc_top3_catch_2_441_800.mp4`.
 
 ## Result
 
