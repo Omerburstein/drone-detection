@@ -28,6 +28,16 @@ Sweeping `--min-appear` by re-rendering costs k times as much for the same table
 invites reading thresholds off different spans. Only the **video** is drawn at the single
 `--min-appear` passed; the table covers the rest.
 
+**`--dump`, a per-seed CSV.** One row per seed per rendered frame: `frame, x, y, c,
+appearances, steps, verdict, on_target`. `c` is the seed's contrast, carried out of
+`budget.candidates`' column 0 — `build_tracks` returns one track per seed in seed order, so
+the two line up by index. `on_target` is `overlay_video.on_drone`, the same grown-box
+criterion every other experiment matches with. Like the table above it is
+threshold-independent, so one pass answers *how many false alarms* and *what the drone
+scored against them* at every `--min-appear`, not just the one rendered. Counting rows with
+`appearances >= m` reproduces the OPERATING POINTS row for `m/k` exactly; that is the check
+that the dump describes the same pass the report does.
+
 ## Running
 
 Clip config first on the path, then this folder, then what it builds on.

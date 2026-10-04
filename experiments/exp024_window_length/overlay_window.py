@@ -43,6 +43,8 @@ drawing below. Drawing only: the report is identical either way.
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import os
 from collections import deque
 
@@ -98,6 +100,11 @@ def main() -> None:
     ap.add_argument("--tau", type=float, default=1.661)
     ap.add_argument("--fps", type=float, default=10.0)
     ap.add_argument("--no-video", action="store_true")
+    ap.add_argument("--dump", default=None,
+                    help="CSV of every seed in every rendered frame: its contrast, "
+                         "how many of the k frames it appeared in, and whether it sat "
+                         "on the labelled drone. Threshold-independent, so one pass "
+                         "answers load and recall at every --min-appear.")
     ap.add_argument("--diagnostic", action="store_true",
                     help="draw everything: stage-1 tint and horizon, epipole, flash dots, "
                          "arrows, the label box. OFF by default -- the default is the "
@@ -137,6 +144,7 @@ def main() -> None:
                                       "survives": 0},
               drone_seen=0, drone_kept=0, drone_flash=0, drone_red=[], appear_hist=[],
               drone_appear=[])
+    rows: list[dict] = []
 
     for f in range(first + 1, a.end + 1):
         ok, cur = cap.read()
@@ -167,7 +175,11 @@ def main() -> None:
             draw_epipole(img, fit.epipole)
 
         per = {"flash": 0, "rejected": 0, "unjudged": 0, "survives": 0}
-        for t in tracks:
+        # Tracks come back one per seed, in seed order, so column 0 of the reference
+        # frame's candidates is this track's contrast.
+        cvals = plist[-1].cands[:, 0]
+        box_now = boxes.get(f)
+        for i_t, t in enumerate(tracks):
             v = (t.verdict(a.min_appear) if a.direction else
                  ("flash" if t.appearances < a.min_appear else "survives"))
             per[v] += 1
@@ -193,6 +205,12 @@ def main() -> None:
             if v == "survives":
                 lab = sl.label(t.x, t.y)
                 st[f"surv_{'unc' if lab == 'uncertain' else lab}"] += 1
+            if a.dump is not None:
+                rows.append(dict(frame=f, x=round(t.x, 1), y=round(t.y, 1),
+                                 c=round(float(cvals[i_t]), 3),
+                                 appearances=t.appearances, steps=t.steps, verdict=v,
+                                 on_target=int(bool(box_now)
+                                                and on_drone(t.x, t.y, box_now))))
         st["seeds"] += len(tracks)
 
         box = boxes.get(f)
@@ -259,6 +277,13 @@ def main() -> None:
     if writer is not None:
         writer.release()
     cap.release()
+    if a.dump is not None:
+        with io.open(a.dump, "w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=["frame", "x", "y", "c", "appearances",
+                                               "steps", "verdict", "on_target"])
+            w.writeheader()
+            w.writerows(rows)
+        print(f"[dump] {len(rows)} seeds -> {a.dump}")
     report(st, a, out)
 
 
