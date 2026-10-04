@@ -3891,7 +3891,7 @@ on the target whatever its `c`, so no re-render. It reproduces the counts above 
 
 | why it missed | frames | the drone's best `c` there |
 | --- | ---: | --- |
-| kept (c >= 6) but ranked 4th or lower | 12 | 6.0–8.7, and within 0.0–0.6 of that frame's #3 in 8 of the 12 |
+| kept (c >= 6) but ranked 4th or lower | 12 | 6.0–8.7, and within 0.0–0.6 of that frame's #3 in 7 of the 12 |
 | a candidate, but below c = 6 | 150 | median **2.7** (p10 1.9, p90 5.1, max 5.9); median gap to #3 is 4.6 |
 | not a candidate at all | 1 | none |
 
