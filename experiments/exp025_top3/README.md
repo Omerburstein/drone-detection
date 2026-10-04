@@ -13,6 +13,8 @@ drone among them, and how often is it #1?
 | file | what it is |
 | --- | --- |
 | `overlay_top3.py` | renderer and report. `--top N` changes the cap, `--no-video` prints the report only. Writes a CSV of every ranked candidate (`frame, rank, x, y, c, diameter, on_target`) next to the video. |
+| `overlay_gate.py` | EXP-025b: the same top N, after a persistence gate of `--min-appear` of `--k` frames (default 4 of 5). `--coords scene` (default) chains camera-compensated, `--coords image` in raw picture coordinates. Prints every threshold 1..k from one pass. Writes a CSV of every kept candidate (`frame, x, y, c, diameter, appearances, rank_all, on_target`). |
+| `drone_ranks.py` | reads `overlay_gate.py`'s CSV and writes a Markdown table of every frame the drone is in a top N, with its rank with and without the gate. Any threshold, no re-render. |
 
 The candidates come from EXP-023's `silhouette.detect` and the drawing helpers from its
 `overlay_sky.py`, both unchanged, so before the cap they are EXP-023's to the digit.
@@ -26,6 +28,78 @@ PYTHONPATH="experiments/exp023_sky_branch/analog_catch_2;experiments/exp025_top3
     --out runs/sofa_analog/exp025_top3/top3_catch_2_441_800.mp4
 ```
 
+```bash
+# EXP-025b: 4 of 5, then top 3 -- chained in picture coordinates (the one that works)
+PYTHONPATH="experiments/exp023_sky_branch/analog_catch_2;experiments/exp025_top3;experiments/exp023_sky_branch;experiments/exp017_motion_first;experiments/exp015_normalised_motion;."     py -3.13 -m overlay_gate --start 441 --end 800 --coords image     --out runs/sofa_analog/exp025_top3/gate4of5_image_top3_catch_2_441_800.mp4
+py -3.13 experiments/exp025_top3/drone_ranks.py     runs/sofa_analog/exp025_top3/gate4of5_image_top3_catch_2_441_800.csv
+```
+
+## The gate (EXP-025b)
+
+Each kept candidate (c >= 6) is chained back through the 4 frames before it: step into the
+older frame, take the nearest kept candidate within 9 px (14 px at 1440 wide, EXP-024's
+radius), move the chain onto it. The candidate survives at 4 appearances of 5, its own
+frame included. Then the top 3 survivors by c are drawn, as `overlay_top3.py` draws them.
+`appearances` does not depend on the threshold, so `--min-appear 1` is EXP-025 to the digit
+(73 / 61 / 31-18-12), and every threshold is in the report.
+
+**Chain in picture coordinates on intercept footage, not camera-compensated.** The camera
+follows the drone, so the drone is steadier in the picture than the background: the
+labelled drone's step is a median 4.1 px raw against 6.7 px compensated, over 9 px in 20%
+of frames against 40%. Compensation threw the chain off the drone, and kept it in 3 frames.
+
+| catch_2 441-800, 4 of 5, top 3 | shown/frame | drone in top 3 (of 224) | #1 / #2 / #3 |
+| --- | ---: | ---: | :---: |
+| no gate (EXP-025) | 2.88 | 61 | 31 / 18 / 12 |
+| gate, `--coords scene` | 1.03 | 3 | 2 / 1 / 0 |
+| **gate, `--coords image`** | **1.71** | **27** | **20 / 6 / 1** |
+| ceiling: drone kept in >= 4 of its last 5 frames | | 46 | |
+
+### Every frame the drone is in the gated top 3 (`--coords image`)
+
+| frame | rank, 4 of 5 gate | rank, no gate | c | appearances of 5 |
+| ---: | :---: | :---: | ---: | :---: |
+| 513 | #2 | #3 | 7.0 | 4 |
+| 514 | #2 | #3 | 6.8 | 5 |
+| 515 | #2 | #2 | 11.0 | 5 |
+| 522 | #1 | #1 | 9.3 | 4 |
+| 523 | #1 | #1 | 20.6 | 5 |
+| 524 | #2 | — | 7.0 | 5 |
+| 525 | #3 | — | 7.7 | 5 |
+| 526 | #1 | #2 | 7.7 | 5 |
+| 537 | #1 | #1 | 7.7 | 4 |
+| 538 | #1 | #1 | 7.7 | 4 |
+| 543 | #1 | #1 | 6.9 | 4 |
+| 544 | #1 | #1 | 6.9 | 5 |
+| 556 | #2 | #2 | 9.7 | 4 |
+| 557 | #1 | #2 | 8.7 | 5 |
+| 561 | #1 | #1 | 9.6 | 4 |
+| 562 | #1 | #1 | 11.3 | 5 |
+| 563 | #1 | #3 | 7.8 | 5 |
+| 564 | #1 | #2 | 9.8 | 4 |
+| 570 | #1 | #2 | 11.1 | 4 |
+| 571 | #1 | #1 | 20.5 | 5 |
+| 572 | #1 | — | 8.1 | 5 |
+| 573 | #1 | #2 | 10.2 | 5 |
+| 574 | #2 | #3 | 10.3 | 5 |
+| 575 | #1 | #1 | 20.8 | 5 |
+| 576 | #1 | #1 | 14.8 | 5 |
+| 577 | #1 | #1 | 26.1 | 5 |
+| 578 | #1 | #1 | 18.1 | 5 |
+
+"—": the drone was a kept candidate but ranked 4th or lower before the gate. The gate
+removed the clutter above it. With `--coords scene` the drone is in the gated top 3 in
+frames 513 (#1), 514 (#2) and 515 (#1) only. `drone_ranks.py` writes the full table,
+including the 37 frames the gate removed, next to each CSV.
+
+**Duplicate frames help this gate rather than hurt it.** `catch_2` repeats 1 frame in 6
+(found in EXP-024's 2026-10-04 addendum). The motion branch gets no candidates on a
+duplicate pair, but the sky branch detects on one frame at a time, so a duplicate repeats
+the previous frame's candidates exactly (537/538 above). Two windows in three contain a
+duplicate pair, and there 4 of 5 can be 3 live frames plus a copy. Dropping duplicates
+before the window is built, as the open todo proposes for EXP-024, would make this gate
+stricter.
+
 ## Result
 
-See EXP-025 in `docs/experiments.md`.
+See EXP-025 in `docs/experiments.md`, and its 2026-10-04 addendum for the gate.

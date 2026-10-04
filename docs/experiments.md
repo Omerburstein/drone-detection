@@ -3988,3 +3988,45 @@ pure-noise sky reaches (EXP-023), and 4.6 below what the clutter in the same fra
 Of those, 16 sit at c 5–6 and 26 at c 4–6, so lowering the threshold recovers a few. The
 bulk (93 frames at c < 3) is a target the contrast statistic does not see. That points
 upstream, at the ranking statistic EXP-025 already names, not at N.
+
+### Added 2026-10-04: a 4-of-5 persistence gate before the top 3 (EXP-025b)
+
+The user asked for the top-3 video behind a 5-frame gate. They chose sky-branch persistence
+at 4 of 5. `experiments/exp025_top3/overlay_gate.py` chains each kept candidate (c >= 6)
+back through the 4 frames before it. At each step it takes the nearest kept candidate
+within 9 px and moves onto it, so the chain follows a moving target. Only candidates with
+4 or more appearances are ranked. Same span, same detector. One pass reports every
+threshold, and `need 1/5` reproduces the table above to the digit (73 / 61 / 31-18-12).
+
+| catch_2 441–800 | survivors/frame | shown/frame | drone in top 3 (of 224) | #1 / #2 / #3 |
+| --- | ---: | ---: | ---: | :---: |
+| no gate | 5.48 | 2.88 | 61 | 31 / 18 / 12 |
+| 4 of 5, chain camera-compensated | 1.12 | 1.03 | **3** | 2 / 1 / 0 |
+| **4 of 5, chain in picture coordinates** | **1.94** | **1.71** | **27** | **20 / 6 / 1** |
+| ceiling: drone kept in >= 4 of its last 5 frames | | | 46 | |
+
+**Compensating for camera motion is wrong on intercept footage.** I built the gate
+camera-compensated first, which was the option offered and chosen. It kept the drone in 3
+frames, because the camera follows the drone: from the labels, the drone's step between
+frames is a median 4.1 px in the picture against 6.7 px after compensation, and over the
+9 px radius in 20% of frames against 40%. Compensation suits static clutter, not a chased
+target. `--coords image` chains in raw picture coordinates; it is the video to watch.
+
+In picture coordinates the gate **cuts the load by 41% (2.88 → 1.71 shown/frame) and keeps
+27 of the 46 frames any 4-of-5 gate could keep.** It also improves the ranking: the drone is
+#1 in 20 of its 27 frames (74%), against 31 of 61 (51%) without the gate. In 3 frames
+(524, 525, 572) it is in the gated top 3 although it was 4th or lower before, because the
+gate removed the clutter above it. The cost is recall: 27 of 224 against 61. The drone's
+c >= 6 firings come in short runs, broken mostly where it is not kept at all, and at 579/580
+where it jumps 12 px in one step. The full per-frame table is in the folder README.
+
+**Duplicate frames inflate this gate.** `catch_2` repeats 1 frame in 6 (EXP-024's 2026-10-04
+addendum). The sky branch detects on one frame at a time, so a duplicate repeats the
+previous frame's candidates (537/538) and counts as a free appearance. Two windows in three
+contain a duplicate pair. This is the opposite of the motion branch, where a duplicate pair
+produces nothing. Dropping duplicates before the window is built would make this gate
+stricter and its numbers lower.
+
+Artifacts in `runs/sofa_analog/exp025_top3/`: `gate4of5_image_top3_catch_2_441_800.mp4`
+and `gate4of5_top3_catch_2_441_800.mp4` (camera-compensated), each with its `.log`, `.csv`
+(every kept candidate with `appearances`) and `_drone_ranks.md` from `drone_ranks.py`.

@@ -336,6 +336,17 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-04 — [algo] **EXP-025b: the top 3 behind a 4-of-5 persistence gate, and a
+  table of every frame the drone is ranked.** `experiments/exp025_top3/overlay_gate.py`
+  chains each sky-branch candidate back 4 frames (nearest kept candidate within 9 px) and
+  ranks only those seen in 4 of 5. Chained **in picture coordinates** it keeps the drone in
+  the top 3 in 27 of 224 frames (#1 in 20) at 1.71 shown/frame, against 61 at 2.88 with no
+  gate; 46 is the ceiling. Chained camera-compensated, which was the option asked for, it
+  keeps 3, because the camera follows the drone and compensation moves the chain off it.
+  `drone_ranks.py` writes the per-frame rank table (it is also in the folder README). Video:
+  `runs/sofa_analog/exp025_top3/gate4of5_image_top3_catch_2_441_800.mp4`.
+  `docs/experiments.md` EXP-025 addendum.
+
 - [x] 2026-10-04 — [algo] **EXP-024: 4-of-5 vs 5-of-7 on analog, with contrast — and
   catch_2 turns out to repeat 1 frame in 6.** Added `--dump` to the EXP-024 overlay (one
   row per seed per frame: contrast, appearances, steps, verdict, on_drone), so false-alarm
