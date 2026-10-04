@@ -18,6 +18,7 @@ drone among them, and how often is it #1?
 | `overlay_window_skyc.py` | EXP-025c: EXP-024's 2-of-4 motion window decides what survives, the sky branch's `c` decides the order. Drawn from EXP-024's `seeds_k4_` dump and EXP-023's candidate dump, no detector re-run. A blob is ranked when a survivor lies within 9 px; no c threshold, cloud vetoes dropped (`--keep-cloud` keeps them). Writes a CSV of every shown blob. |
 | `overlay_split.py` | EXP-025d: stage 1 splits the frame; the sky branch (c >= 6) ranks on the sky, EXP-025c's 2-of-4 window on the ground, one pooled top 3 by c. `--merge R` folds blobs within R px into one first; `--min-draw` sets the smallest drawn circle. Writes a CSV of every shown blob and a per-labelled-frame `_drone.csv`. |
 | `split_rank_hist.py` | reads `overlay_split.py`'s `_drone.csv` and draws the drone's rank histogram, stacked by section. |
+| `run_clips.py`, `clips/clipcfg.py`, `clips_summary.py` | EXP-025e: the split overlay on catch_4 and catch_5. One config for both clips, chosen by `EXP025_CLIP`. The driver runs the window and the overlay per clip, skipping any step whose output exists, and reuses EXP-023's sky dumps. The summary prints a row per clip from the logs. |
 
 The candidates come from EXP-023's `silhouette.detect` and the drawing helpers from its
 `overlay_sky.py`, both unchanged, so before the cap they are EXP-023's to the digit.
@@ -155,6 +156,18 @@ candidates (0.64/frame) and leaves the drone's numbers unchanged: 66 in the top 
 `--merge 20 --min-draw 20` (40 px across; circles drawn at least 20 px, appearance only)
 folds 1893 candidates and gets 68 in the top 3, 53 / 10 / 5. Two of the gained frames are a
 clutter anchor absorbing the drone, and one (585, #2 to #1) is the drone's own blob.
+
+## Other labelled clips (EXP-025e)
+
+```bash
+py -3.13 experiments/exp025_top3/run_clips.py          # catch_4 and catch_5, 2 at a time
+py -3.13 experiments/exp025_top3/clips_summary.py
+```
+
+Outputs in `runs/sofa_analog/exp025_top3/<clip>/`. The drone is in the top 3 in 14 of 82
+frames on catch_4 and 31 of 188 on catch_5, against 33 and 30 for the sky branch alone.
+Stage 1 finds little sky on either (median 0% and 7%), so the window ranks nearly
+everything. The split pays off only where the sky mask works.
 
 ## Result
 

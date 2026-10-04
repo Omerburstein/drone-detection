@@ -369,6 +369,13 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-04 — [algo] **EXP-025e: the sky/ground split overlay on catch_4 and catch_5.**
+  `experiments/exp025_top3/run_clips.py` (merge 20 px, circles >= 20 px), reusing EXP-023's
+  sky dumps. Drone in the top 3: catch_4 14 of 82 (sky alone 33), catch_5 31 of 188 (sky
+  alone 30). Stage 1 calls a median 0% and 7% of those frames sky, so the window decides
+  almost everything, and the catch_2 gain does not carry over. Unlabelled clips and FIELD
+  dropped at the user's request.
+
 - [x] 2026-10-04 — [algo] **EXP-027: drop the OSD horizon dashes ("white dots") from the
   sky/window split.** New `src.algo.masking.grid_twins` / `on_osd_grid`: a blob with copies
   at 2 of the positions ±1, ±2 OSD columns away is a dash. GLAD's `has_twin` would have vetoed

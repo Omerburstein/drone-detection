@@ -4470,3 +4470,39 @@ Six rank moves are all upward: 2 → 1 (×4), 3 → 1, 3 → 2.
 Artifacts in `runs/sofa_analog/exp027_osd_grid/`: `split_sky_window2of4_top1_merge20_osdgrid_catch_2_441_800`
 `.mp4`, `.csv`, `_drone.csv`, and `grid_analog.log`. The same for `top3`, plus
 `_rank_hist.png` and `grid_top3_analog.log`.
+
+### Added 2026-10-04: the split on catch_4 and catch_5 — it only helps where stage 1 finds sky (EXP-025e)
+
+The same overlay (`overlay_split.py --merge 20 --min-draw 20`) on the two other labelled
+analog clips, by `experiments/exp025_top3/run_clips.py`. The clips are set in
+`exp025_top3/clips/clipcfg.py`. The user asked for the unlabelled clips (catch_3/6/7/8,
+miss_1/2, FIELD) to be dropped mid-run. The sky-branch candidates are EXP-023's own
+dumps (catch_4 159–326, catch_5 69–444), with the same settings as catch_2's. They cover
+every labelled frame (209–295 and 119–394). Only the 2-of-4 window and the overlay are new.
+A first attempt that re-ran the sky branch from frame 2 was still on catch_4 after an
+hour. The opening frames of these clips are slow for it (not profiled).
+
+"Sky alone" is EXP-025's rule over the whole frame (kept, c >= 6, top 3 by c), counted from
+the same dumps.
+
+| clip | stage 1 sky, median / skyless frames | shown/frame | drone in top 3 | #1 / #2 / #3 | sky alone: top 3, #1 |
+| --- | :---: | ---: | ---: | :---: | :---: |
+| catch_2 441–800 (EXP-025d, merge 20) | 22% / 66 of 360 | 1.62 | 68 of 224 | 53 / 10 / 5 | 61, 31 |
+| catch_4 159–326 | 0% / 110 of 168 | 1.30 | 14 of 82 | 8 / 3 / 3 | 33, 17 |
+| catch_5 69–444 | 7% / 5 of 376 | 0.97 | 31 of 188 | 14 / 10 / 7 | 30, 14 |
+
+**The catch_2 gain does not carry over.** On catch_5 the split ties the sky branch alone
+(31 against 30 in the top 3, 14 #1 each) at about a third of its shown load. On catch_4 it
+loses more than half (14 against 33). In both, stage 1 calls little or no sky, so nearly
+every blob goes to the ground section, and the 2-of-4 window drops the drone there (66 of
+82 frames on catch_4, 136 of 188 on catch_5). catch_4 is heavy analog breakup, with frames
+of almost pure static (e.g. 260), and stage 1 finds no sky in 110 of 168 frames. On
+catch_5, frame 135 has the drone in open sky ranked #1 by the *window*, tagged `gnd`:
+stage 1 called only a strip near the tree sky. The split is only as good as the sky mask,
+the defect EXP-023 already named. On these two clips the mask, not either detector, decides
+the outcome.
+
+Artifacts in `runs/sofa_analog/exp025_top3/{catch_4,catch_5}/`:
+`split_sky_window2of4_top3_merge20_<clip>_<span>.mp4`, its `.csv`, `_drone.csv`,
+`_rank_hist.png`, `seeds_k4_<clip>_<span>.csv`, and `window_`/`split_<clip>.log`.
+`clips_summary.py` prints the per-clip table from the logs.
