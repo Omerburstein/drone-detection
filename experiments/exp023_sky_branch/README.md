@@ -35,6 +35,10 @@ Both are drawing-only; the report is unchanged. Clean renders made with both (20
 `runs/sofa_o4/clean_first_catch_650_964.mp4` and
 `runs/sofa_analog/exp023_sky_branch/clean_catch_2_441_800.mp4`.
 
+The same clean look at the dump floor instead of the shipping cut (2026-10-04),
+`--contrast 3`: `clean_c3_catch_2_441_800.mp4`, 45.5 kept/frame, drone in 130 of 224
+frames. Circles are thicker at twice the threshold, so the bold ones are the c >= 6 set.
+
 ## The headline
 
 **The depth-aware ring is a recall win. The uncertain-band refusal is a false-alarm win

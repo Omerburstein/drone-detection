@@ -3712,6 +3712,25 @@ operating threshold) always keeps structural rejections and anything on target r
    beside every recall figure. The run now prints the ratio and refuses to call it a
    detection when it is below 0.5.
 
+### 2026-10-04 — rendered at the dump floor, c >= 3
+
+The user asked for the sky-branch video without the c >= 6 cut, and chose the dump floor
+(c >= 3) over no threshold (1473 candidates/frame) and over drawing only what c >= 6 drops.
+`overlay_sky --contrast 3 --no-sky --no-truth` on `catch_2` 441-800, clean look:
+`runs/sofa_analog/exp023_sky_branch/clean_c3_catch_2_441_800.mp4` with `clean_c3_analog.log`.
+
+| catch_2 441-800 | kept/frame | drone frames (of 224) | `c` on drone, median |
+| --- | ---: | ---: | ---: |
+| c >= 6 (shipping) | 5.5 | 73 (32.6%) | 8.2 |
+| **c >= 3 (this video)** | **45.5** | **130 (58.0%)** | 5.9 |
+
+Lowering the cut buys 57 drone frames for 8x the load. Cloud rejections are unchanged
+(75.55/frame), and the run's own false-alarm curve gives 5.16/frame at c >= 6, EXP-022's
+figure exactly, so this is the same pass with a lower cut. Circles are drawn thicker at
+twice the threshold, so **in this video the bold circles are exactly the c >= 6 set**, and
+the thin ones are what the shipping cut removes. Recall still means "a candidate landed in
+the grown box" (detected/true size 0.154), as corrected above.
+
 ## EXP-024 — window length: worse than 5 on O4, and no usable setting at all on analog
 (where 1 frame in 6 is a duplicate, and the 2-frame sky branch beats it anyway)
 

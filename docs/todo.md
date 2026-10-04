@@ -369,6 +369,12 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-04 — [algo] **EXP-023's sky branch rendered without the c >= 6 cut.** At the
+  dump floor, c >= 3, clean look, `catch_2` 441-800:
+  `runs/sofa_analog/exp023_sky_branch/clean_c3_catch_2_441_800.mp4`. 45.5 kept/frame
+  against 5.5, and the drone lands in 130 of 224 frames against 73. Bold circles are the
+  c >= 6 set (drawn thicker at 2x threshold). `docs/experiments.md` EXP-023 addendum.
+
 - [x] 2026-10-04 — [algo] **EXP-024 on analog at 2/3, 2/4, 2/5 and 3/5, rendered for
   viewing.** Four clean-look videos of `catch_2` 441-800, plus the first k=3 and k=4 curves
   and dumps. At two appearances the window length barely matters to the target: 57, 60 and
