@@ -30,6 +30,24 @@ dates, not priorities.
   at median 0 usable steps). Compare against EXP-023's c>=6 and EXP-025's top-3 cap at
   matched load, on the 224 denominator.
 
+- [ ] 2026-10-04 — [algo] **Chain candidate peaks instead of tracking pixels, and use the
+  accumulated displacement as the statistic.** Measured in EXP-024's 2026-10-04 addendum:
+  the target's ego-compensated displacement over 5 frames is median 28.4 px with p10 13.9,
+  against the background field's median 3.18 px and p90 5.60 — non-overlapping tails, where
+  the epipolar direction test on the same data runs at chance (30.7% vs 22.8%). So magnitude
+  is the better statistic and `Track.total_mu` already holds it; only its direction is
+  tested, with magnitude reduced to a 2 px veto. **What blocks it is association, not the
+  statistic**: the target has a full-depth LK track in 2 of 19 sampled windows, and window
+  length does not help (47% of seeds reach full depth at k=5, 32% at k=15). Peak-chaining by
+  proximity is arithmetically viable — target step median 4.12 px, p90 12.67, so a ~13 px
+  radius catches 90% of steps and admits 0.13 spurious candidates per step at 167.6
+  candidates/frame — needs no texture, and a duplicate frame contributes no candidate rather
+  than killing a tracker. One chain yields the displacement *and* the appearance count, so it
+  replaces both halves of the present gate. **First, the cheap prerequisite:** add `total_mu`
+  to the seed dump and measure magnitude separation against *surviving candidates* rather
+  than background grid points, on O4 where tracks reach median depth 3 — grid points are a
+  biased-optimistic comparison and that gap is the one unmeasured step.
+
 - [ ] 2026-10-04 — [algo] **Drop duplicate frames before the window is built, then
   re-measure analog persistence.** `catch_2` repeats 1 frame in 6 (148 of 890, at
   `f % 6 == 4` exactly — 25 fps resampled to 30), and a duplicate pair produces zero

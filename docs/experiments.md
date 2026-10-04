@@ -3969,6 +3969,55 @@ Artifacts in `runs/sofa_analog/exp024_window_length/`:
 its `_analog.log`, plus `seeds_k3_` / `seeds_k4_catch_2_441_800.csv`.
 
 
+### 2026-10-04 — would displacement magnitude be a better statistic than direction?
+
+Asked: why not follow each candidate across the k frames and use how far it moved. The
+pipeline already computes that — `Track.total_mu`, the ego-compensated displacement
+accumulated into the reference frame — but its magnitude is only a veto
+(`min_displacement = px(2.0)`, "displacement too small"); only its *direction* is tested.
+So this measures whether promoting magnitude to the discriminator would be better. Sampled
+on `catch_2` 441-800: label centres for the target, `accumulate_grid` for the background.
+
+| displacement over 5 frames | n | p10 | median | p90 |
+| :--- | ---: | ---: | ---: | ---: |
+| target, raw image space | 52 frames | 6.29 | 18.51 | 36.87 px |
+| target, ego-compensated (label centres) | 52 frames | **13.85** | **28.38** | 97.97 px |
+| background grid, tracked all 5 frames | 19 windows | 2.38 | **3.18** | 5.60 px |
+| target, from a full-depth track | **2 windows** | 100.67 | 107.46 | 114.25 px |
+
+**Magnitude separates where direction does not.** The target's p10 (13.9 px) is above the
+background's p90 (5.6 px) — non-overlapping tails, ~9x at the medians — while the epipolar
+direction test on the same data runs at 30.7% against a 22.8% chance floor. Compensation
+*amplifies* the target's motion (28 px against 18 px raw) because the camera is chasing it,
+so removing ego-motion adds to the target's apparent travel. 100% of sampled frames clear
+the 2 px veto and 92% clear 10 px.
+
+**And it is unavailable.** The target had a full-depth track in **2 of 19 sampled windows**,
+matching the k=5 log's "13% got 4+". The discriminator is strong and measurable about a
+tenth of the time, which is the same LK-survival wall as everything else here. Those 2
+windows read 107 px against the labels' 28 px, so they are not representative — likely
+drifted tracks accumulating junk — and the ratio from them should not be quoted.
+
+**The caveat that would decide it.** The background grid is *not* the false alarms:
+candidates are peaks selected for high motion-map response, so surviving clutter is a
+biased, higher-residual subset of the static field. Separation against grid points is the
+optimistic case. Separation against surviving candidates is unmeasured, and is the number
+that settles whether magnitude should replace direction. Measuring it needs `total_mu` in
+the seed dump — a one-line change — plus a pass on O4, where tracks reach median depth 3
+rather than 0.
+
+**Forward vs backward tracking is a latency choice, not an information one.** Seeding from
+the newest frame and tracking back yields a verdict for the current frame; seeding at `f`
+and following forward yields it at `f + k` (167 ms at 30 fps) and only about candidates `k`
+frames old. Same pairs, same information, and the window is buffered either way.
+
+**Peak-chaining looks arithmetically viable as the replacement for LK.** The target's
+frame-to-frame step is median 4.12 px, p90 12.67, so a ~13 px chaining radius catches 90% of
+steps; at 167.6 candidates/frame on 960x720 that radius admits 0.13 spurious candidates per
+step (a ~13% false-link rate). No texture, no flow, immune to the duplicate frames, and one
+chain yields both the displacement and the appearance count.
+
+
 ### Standing recommendation
 
 **On O4, keep k=5 with 4-of-5. Do not lengthen the window.** Revisit only if a downstream
