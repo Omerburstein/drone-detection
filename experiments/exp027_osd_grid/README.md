@@ -25,8 +25,7 @@ results together. Any `overlay_split` flag overrides the defaults.
 
 ```bash
 PYTHONPATH="experiments/exp023_sky_branch/analog_catch_2;experiments/exp027_osd_grid;experiments/exp025_top3;experiments/exp023_sky_branch;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
-    py -3.13 -m overlay_grid            # top 1
-    py -3.13 -m overlay_grid --top 3    # top 3
+    py -3.13 -m overlay_grid            # top 1; append --top 3 for the top 3
 ```
 
 The outputs go to `runs/sofa_analog/exp027_osd_grid/split_sky_window2of4_top{1,3}_merge20_osdgrid_catch_2_441_800`:
