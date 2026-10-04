@@ -4376,3 +4376,23 @@ from 145 to 142, consistent with the motion window, not fragmentation, being the
 
 Artifacts in `runs/sofa_analog/exp025_top3/`: `split_sky_window2of4_top3_merge20_catch_2_441_800.mp4`,
 its `.csv`, `_drone.csv` and `_rank_hist.png`.
+
+## EXP-026 — the sky/ground split, #1 only
+
+The user asked for EXP-025d's overlay (sky branch on the sky, 2-of-4 window on the ground)
+showing only each frame's #1. `experiments/exp026_top1/overlay_top1.py` runs
+`overlay_split.py` unchanged with `--top 1 --merge 20 --min-draw 20`. These are the latest
+EXP-025d settings, with circles drawn at least 20 px across.
+
+| catch_2 441–800 | ranked/frame | shown/frame | drone #1 (of 224) | sky / ground | shown blobs on the drone |
+| --- | ---: | ---: | ---: | :---: | ---: |
+| EXP-025d top 3, merge 20 | 1.95 | 1.62 | 53 | 36 / 17 | — |
+| **top 1, merge 20** | **1.95** | **0.79** | **53** | **36 / 17** | **53 of 284** |
+
+The cap does not change the ranking, so the #1 count is EXP-025d's to the digit. This
+includes 585, the merge's one clean gain. The video halves the shown load, from 1.62 to
+0.79 per frame, and 76 of 360 frames show nothing. Of the 284 circles drawn, 53 sit on
+the labelled drone. The sky section is right in 36 of 131, the ground in 17 of 153.
+
+Artifacts in `runs/sofa_analog/exp026_top1/`: `split_sky_window2of4_top1_merge20_catch_2_441_800.mp4`,
+its `.csv`, `_drone.csv`, and `top1_analog.log`.

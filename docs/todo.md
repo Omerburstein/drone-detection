@@ -369,6 +369,12 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-04 — [algo] **EXP-026: EXP-025d's sky/ground split overlay with only the #1
+  per frame.** `experiments/exp026_top1/overlay_top1.py` runs `overlay_split.py --top 1
+  --merge 20 --min-draw 20`. The drone is #1 in 53 of 224 labelled frames (36 sky,
+  17 ground), at 0.79 shown/frame. 53 of the 284 circles drawn are on the drone. Video:
+  `runs/sofa_analog/exp026_top1/split_sky_window2of4_top1_merge20_catch_2_441_800.mp4`.
+
 - [x] 2026-10-04 — [algo] **EXP-025d re-run with blobs merged at 20 px (40 px across),
   circles drawn at least 20 px.** `overlay_split.py --merge 20 --min-draw 20`. The drone
   is in the top 3 in 68 of 224 frames and #1 in 53, against 66 / 52 unmerged. Of the 3
