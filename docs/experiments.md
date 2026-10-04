@@ -3987,6 +3987,27 @@ Artifacts in `runs/sofa_analog/exp024_window_length/`:
 `window{3,4,5}_need2_catch_2_441_800.mp4` and `window5_need3_catch_2_441_800.mp4`, each with
 its `_analog.log`, plus `seeds_k3_` / `seeds_k4_catch_2_441_800.csv`.
 
+**Where the drone ranks among the survivors** (asked for as histograms, 2026-10-04).
+`experiments/exp024_window_length/rank_hist.py` reads the dumps, ranks each frame's survivors
+by the detector's own score, and drops each of the 224 labelled frames into one bar: the
+drone's best rank, "filtered out" (a candidate on it existed, none survived) or "not a
+candidate". Figure: `runs/sofa_analog/exp024_window_length/rank_hist_catch_2_441_800.png`.
+
+| gate | survivors/frame | kept | #1 | top 3 | median rank | filtered out | not a candidate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2/3 window | 13.8 | 57 | 5 | 20 | 5 | 117 | 50 |
+| 2/4 window | 16.4 | 60 | 4 | 20 | 5 | 114 | 50 |
+| sky, c >= 6 | 5.5 | 73 | 31 | 61 | 2 | 150 | 1 |
+| sky, c >= 4.46 (2/3's load) | 13.8 | 95 | 31 | 62 | 2 | — | 1 |
+
+**When the window gate keeps the drone, it does not rank it.** Its ranks are flat from 1 to
+8, #1 in under 1 frame in 10 of those it keeps, so the motion-peak height says almost
+nothing about which survivor is the target. The sky branch keeps the drone at #1 in 31 of
+73 and in the top 3 in 61. **Its ranks do not depend on the load:** loosened to the window's
+13.8/frame, it gains 22 frames, all of them below the top 3, and its #1 and top-3 counts do
+not move. Ranks are each detector's own `c`, so they compare across panels; the
+scores do not.
+
 
 ### 2026-10-04 — would displacement magnitude be a better statistic than direction?
 

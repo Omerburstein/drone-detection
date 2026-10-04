@@ -120,6 +120,10 @@ same target frames at every k, so the shortest window is the cheapest version of
 3/4 → 18% at 3.1 and 3/3 → 10% at 1.5. Videos for 2/3, 2/4, 2/5 and 3/5:
 `window{k}_need{m}_catch_2_441_800.mp4`.
 
+`rank_hist.py` (no arguments, reads the k=3 and k=4 dumps and EXP-023's candidate dump)
+draws the drone's rank among each frame's survivors at 2/3, 2/4 and sky c>=6 into
+`rank_hist_catch_2_441_800.png`. Median rank 5 for both windows, 2 for the sky branch.
+
 ### The fb gate, measured rather than assumed
 
 `usable residual steps per seed: median 0` at every k, against median 3 on O4. The analog
