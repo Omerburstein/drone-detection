@@ -3287,6 +3287,83 @@ After the fixes, at 0.8 px of tracking noise: per-pair reliable in **1 of 9** wi
 **121 px** of error; accumulated reliable in **9 of 9** with **5.7 px**. The machinery is
 right; the footage does not contain the field it is designed to exploit.
 
+### 2026-10-04 — what survives scores what, and 1 frame in 6 is a duplicate
+
+Asked: at k=5 against a two-frames-longer window, how many false alarms, and what does
+the drone score. `overlay_window.py --dump` (added for this, documented in the folder
+README) writes one row per seed per rendered frame with its contrast, so both are
+readable at every threshold from a single pass. Both passes reproduce the earlier logs
+exactly — 60338 seeds, identical operating points — and counting dump rows with
+`appearances >= m` reproduces each OPERATING POINTS row, which is what ties the dump to
+the pass that produced it.
+
+| gate | kept/frame | **false/frame** | drone frames | drone `c` | FA `c` p50 | FA `c` p90 | drone rank | drone is #1 |
+| ---: | ---: | ---: | :--- | ---: | ---: | ---: | ---: | ---: |
+| 3/5 | 4.25 | 4.14 | 36 (21%) | 3.89 | 2.61 | 4.48 | #3 | 28% |
+| **4/5** | 1.09 | **1.03** | **22 (13%)** | **4.44** | 2.77 | 5.05 | **#1** | 50% |
+| 5/5 | 0.11 | 0.10 | 3 (2%) | 4.37 | 2.69 | 5.13 | #1 | 67% |
+| 4/7 | 2.08 | 2.00 | 28 (16%) | 4.37 | 2.72 | 4.90 | #2 | 39% |
+| **5/7** | 0.84 | **0.79** | **18 (10%)** | **4.48** | 2.79 | 4.93 | **#1** | 56% |
+| 6/7 | 0.30 | 0.26 | 14 (8%) | 4.50 | 2.79 | 5.28 | #1 | 86% |
+
+`c` is median contrast; rank is the drone's median rank by contrast among that frame's
+survivors; "drone is #1" is how often it is the strongest survivor in its frame.
+
+**At matched false-alarm load the two windows are a wash.** Interpolating k=7 between 5/7
+and 4/7 to k=5's 1.03 false alarms/frame gives ~12.0% against 4-of-5's 12.6% — a
+difference of one frame in 174. k=5 is marginally ahead, the same direction as O4 but far
+smaller. 5-of-7 is the tighter *absolute* setting: 0.79 false alarms/frame against 1.03,
+bought with 4 drone frames.
+
+**The drone's contrast is a detector property, not a window one** — 4.44 at 4-of-5 against
+4.48 at 5-of-7. The window selects which seeds survive; it does not change their strength.
+Against the false alarms it keeps, the drone sits at ~1.6x their median but just *below*
+their p90, so roughly one false alarm in ten outscores it. Contrast narrows the field, it
+does not finish the job.
+
+**Ranking after persistence does not pay.** Keeping only the strongest survivor per frame
+halves the false alarms and halves recall with it, landing on 6% at every setting tried
+(0.39-0.73 false alarms/frame at 3/5, 4/5, 4/7 and 5/7 alike). Not an operating point.
+
+#### 1 frame in 6 of catch_2 is a duplicate, and it caps every gate above
+
+148 of 890 frames are near-duplicates of their predecessor — mean |diff| 0.32-0.94 against
+8-26 for real frames — at `f % 6 == 4` without a single exception (147 gaps, all of them
+6). That is 25 fps content resampled into a 30 fps container. **A duplicate pair yields
+zero candidates**, and all 60 zero-seed frames in the k=5 dump are exactly those frames.
+
+So the effective window is `k * 5/6`, and every `m/k` above is stricter than it reads:
+
+| k | live frames per window | strictest reachable |
+| ---: | :--- | :--- |
+| 5 | 4 live in 300 of 360 windows, 5 live in 60 | 5/5 reachable in **17%** of windows |
+| 7 | 6 live in 300 of 360 windows, 5 live in 60 | 7/7 reachable in **0%** |
+
+**7-of-7 kept 0 of 60338 seeds** — that is arithmetic, not sampling: every 7-frame window
+contains at least one duplicate. 5-of-5's 2% is the same effect. And 4-of-5 is secretly a
+*perfect-run* requirement — 4 appearances out of 4 live chances in 83% of windows — which
+is why it costs 9 points against 3-of-5 for a 4x load reduction.
+
+**It is the analog capture chain, not this file.** First 400 frames of every clip:
+
+| set | clips | duplicates | dominant gap |
+| :--- | ---: | ---: | :--- |
+| SOFA-ANALOG | 9 of 9 | 16.8-17.8% | 6 |
+| SOFA-O4 | 0 of 6 | 0.0-0.8%, uncadenced | none |
+
+So **O4's numbers are unaffected** — `first_catch` has 3 isolated repeats in 400 frames, no
+cadence — and every analog clip has it. The *phase differs per clip* (`catch_2` repeats at
+`f % 6 == 4`, `catch_6` at `% 6 == 2`), so a fix must **detect** duplicates rather than
+assume a phase, and because it is the capture chain it belongs at decode in `src/data/`
+rather than in an experiment.
+
+This is the specific mechanism behind "the problem is upstream", and it is not the
+detector's fault. **Deduplicate before windowing, or count `m` against live frames.** Until
+then no analog persistence number should be read as if the window were k frames long.
+Unmeasured: whether deduplicating recovers recall. It needs a change to how the window is
+built, so it is a separate run, not a flag.
+
+
 ### Standing recommendation
 
 **Keep persistence, turn the direction test off.** Persistence rests only on "a real thing
@@ -3636,6 +3713,7 @@ operating threshold) always keeps structural rejections and anything on target r
    detection when it is below 0.5.
 
 ## EXP-024 — window length: worse than 5 on O4, and no usable setting at all on analog
+(where 1 frame in 6 turns out to be a duplicate)
 
 - **Date:** 2026-10-01
 - **Question:** the user asked for a 10-frame and a 15-frame persistence gate, after a
@@ -3802,7 +3880,11 @@ Out of the 174 labelled frames where the target is a candidate at all. **5/7 kee
 lower load. Neither changes the conclusion above: at 5 appearances either gate keeps the
 target in one frame in ten. Artifacts in `runs/sofa_analog/exp024_window_length/`:
 `window7_need5_catch_2_441_800.mp4` (+ `.log`) and `window10_need5_catch_2_441_800.mp4`, a
-copy of the clean-redrawn `window10_` render, which already ran at need 5.
+copy of the clean-redrawn `window10_` render, which already ran at need 5. Added
+2026-10-04: `window5_catch_2_441_800.mp4` (+ `.log`) at the defaults, k=5 need 4 in the
+clean look — the render `curve_k5.log` named but never wrote, having run `--no-video` —
+and the per-seed dumps `seeds_k5_catch_2_441_800.csv` / `seeds_k7_...csv` behind the
+contrast table below.
 
 ### Standing recommendation
 
@@ -3816,6 +3898,11 @@ the shipping 4-of-5 keeps 13%. Spending effort on k or m on this clip is spendin
 the wrong stage. Two things to do instead: raise `--fb-max` off its 0.67 px default (worth
 ~3 points of recall at matched load, measured above, and it should be decided on its own
 terms), and look upstream at why the target is not a candidate in 186 of 360 frames.
+
+**And before either, deduplicate.** 1 frame in 6 of this clip is a repeat carrying
+no motion, so a nominally 5-frame gate is really a 4-frame one and the strictest
+settings are partly unreachable by arithmetic. That is cheap to fix and every analog
+persistence number above is measured through it.
 
 **Next, and separately from window length:** peak-chaining association, then accumulated
 displacement and size growth measured off it. EXP-023 established size as evidence; the

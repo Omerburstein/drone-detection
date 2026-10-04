@@ -15,6 +15,25 @@ dates, not priorities.
 
 ## Open
 
+- [ ] 2026-10-04 — [algo] **Drop duplicate frames before the window is built, then
+  re-measure analog persistence.** `catch_2` repeats 1 frame in 6 (148 of 890, at
+  `f % 6 == 4` exactly — 25 fps resampled to 30), and a duplicate pair produces zero
+  candidates, so a nominal k-frame window carries only `k * 5/6` live frames. Measured in
+  EXP-024: 7-of-7 keeps 0 of 60338 seeds because every 7-window contains a duplicate, 5-of-5
+  is reachable in 17% of windows, and 4-of-5 is a perfect-run requirement rather than the
+  4-in-5 it reads as. **Every analog persistence number in EXP-021/024 is measured through
+  this.** The fix is in how the window is assembled, not a flag: skip pairs whose candidate
+  list is empty (or whose frame diff is under ~2.0) when filling the deque, so k counts live
+  pairs. Then re-run the k=5 operating curve and compare against EXP-024's. Unknown whether
+  it recovers recall — the target may simply not be a candidate often enough — but no
+  window-length or threshold question on analog is answerable until it is done.
+  **Scanned: all 9 analog clips carry it (16.8-17.8%, gap 6); all 6 O4 clips are clean
+  (0-0.8%, uncadenced), so O4's numbers stand.** The phase differs per clip (`catch_2` at
+  `f % 6 == 4`, `catch_6` at `% 6 == 2`), so detect duplicates rather than assume a phase.
+  Since it is the capture chain and not one file, the drop belongs at decode in
+  `src/data/` — which makes it a change under `src/` with tests, not an experiment script.
+
+
 - [ ] 2026-09-30 — [algo] **Extend the sky branch's scale ladder to cover the real target
   sizes, then re-measure everything.** The ladder spans 3–40 px of diameter on O4 and
   3–27 px on analog, while the labelled targets on those spans are a median **71.6 px
@@ -316,6 +335,25 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-29 — [algo] **Score a HUD mask against labels, not against its coverage percentage.** EXP-020: the tool prints `7.71% of the frame`, which is the wrong number — 13.15% sounded acceptable and was 20% of the ground truth. Add `--labels <dir>` to `src.data.hud_mask` so the build reports how many labelled boxes the mask would veto at `HUD_VETO_FRACTION`, and refuse silently-expensive masks. Cheap: the scoring loop is `overlap_fraction` over YOLO txt files, ~20 lines, and it is the only check that would have caught this.
 
 ## Done
+
+- [x] 2026-10-04 — [algo] **EXP-024: 4-of-5 vs 5-of-7 on analog, with contrast — and
+  catch_2 turns out to repeat 1 frame in 6.** Added `--dump` to the EXP-024 overlay (one
+  row per seed per frame: contrast, appearances, steps, verdict, on_drone), so false-alarm
+  count and the drone's score are readable at every threshold from one pass; counting rows
+  with `appearances >= m` reproduces the OPERATING POINTS row for `m/k`. 4-of-5 gives 1.03
+  false alarms/frame and keeps the drone in 22 of 174 frames at median contrast 4.44
+  (median rank #1, strongest in frame half the time); 5-of-7 gives 0.79 and 18 frames at
+  4.48. At matched load the two are within one frame of each other. The drone sits at ~1.6x
+  the false alarms' median contrast but below their p90, so ~1 in 10 outscores it; ranking
+  after persistence halves load and recall together (6% everywhere) and is not an operating
+  point. **The find: 148 of 890 frames are near-duplicates at `f % 6 == 4` exactly** — 25
+  fps resampled to 30 — and a duplicate pair yields zero candidates, so the effective
+  window is `k * 5/6`. 7-of-7 kept 0 of 60338 seeds by arithmetic, 5-of-5 is reachable in
+  17% of windows, and 4-of-5 is really a perfect-run requirement. Also rendered
+  `window5_catch_2_441_800.mp4` at the defaults, the video `curve_k5.log` named but never
+  wrote. `docs/experiments.md` EXP-024 addendum; artifacts in
+  `runs/sofa_analog/exp024_window_length/`.
+
 
 - [x] 2026-10-01 — [algo] **EXP-024 at 5/7 and 5/10 on analog, and EXP-025: top 3 per
   frame.** Rendered `window7_need5_` and `window10_need5_catch_2_441_800.mp4` (clean look).

@@ -135,9 +135,46 @@ The analog collapse is mostly the detector not firing on the target consistently
 having anyway, and `--fb-max` deserves deciding on its own terms rather than inside a
 window-length question.
 
+## 1 frame in 6 of catch_2 is a duplicate (2026-10-04)
+
+148 of 890 frames repeat their predecessor — mean |diff| 0.32-0.94 against 8-26 for real
+frames — at `f % 6 == 4` with no exception. 25 fps content in a 30 fps container. **A
+duplicate pair produces zero candidates**: all 60 zero-seed frames in the k=5 dump are
+exactly those frames.
+
+Every `m/k` on the curves above is therefore stricter than it reads, because the effective
+window is `k * 5/6`:
+
+| k | live frames per window | strictest reachable |
+| ---: | :--- | :--- |
+| 5 | 4 live in 300 of 360, 5 live in 60 | 5/5 in **17%** of windows |
+| 7 | 6 live in 300 of 360, 5 live in 60 | 7/7 in **0%** |
+
+7-of-7 kept 0 of 60338 seeds, which is arithmetic rather than sampling. 4-of-5 is a
+perfect-run requirement: 4 appearances out of 4 live chances in 83% of windows. Fix this
+before reading any analog persistence number — deduplicate before windowing, or count the
+threshold against live frames.
+
+## Contrast of what survives (2026-10-04)
+
+From `--dump`. `c` is median contrast, rank is the drone's median rank among its frame's
+survivors.
+
+| gate | kept/fr | false/fr | drone frames | drone `c` | FA p50 | FA p90 | rank | is #1 |
+| ---: | ---: | ---: | :--- | ---: | ---: | ---: | ---: | ---: |
+| 4/5 | 1.09 | 1.03 | 22 (13%) | 4.44 | 2.77 | 5.05 | #1 | 50% |
+| 5/7 | 0.84 | 0.79 | 18 (10%) | 4.48 | 2.79 | 4.93 | #1 | 56% |
+
+At matched false-alarm load the two are within one frame of each other (k=7 interpolated to
+1.03/frame is ~12.0% against 12.6%). The drone's contrast does not depend on the window —
+the window selects seeds, it does not strengthen them — and sits at ~1.6x the false alarms'
+median but just below their p90, so about one in ten outscores it. Keeping only the
+strongest survivor per frame halves false alarms and halves recall, landing on 6%
+everywhere; not an operating point.
+
 ## Recommendation
 
-**O4: keep k=5 at 4-of-5.** **Analog: do not tune the window at all** — it is the wrong
+**O4: keep k=5 at 4-of-5.** **Analog: deduplicate first, then do not tune the window** — it is the wrong
 stage. Raise `--fb-max` off 0.67 px, and look upstream at why the target is not a candidate
 in 186 of 360 frames. For both clips the durable next step is peak-chaining association,
 which needs neither texture nor flow and would make persistence independent of LK.
