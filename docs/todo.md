@@ -376,6 +376,9 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
   `experiments/exp027_osd_grid/overlay_grid.py`. On catch_2 441–800, top 1: dash-band false
   alarms 120 → 49, shown/frame 0.79 → 0.64, drone #1 53 → 57 (+5, −1 at 585). Not yet on
   in `run_clips.py`. The end dashes of the row still get through.
+  **Top 3** (`overlay_grid --top 3`): dash-band false alarms 254 → 92, shown/frame 1.62 → 1.08,
+  drone in the top 3 68 → 67. Lost 4: 590 was a merge artefact, 499 and 585 are the drone
+  in the dash row, and 660 is a false veto on blurred grass. Gained 3.
 
 - [x] 2026-10-04 — [algo] **EXP-026: EXP-025d's sky/ground split overlay with only the #1
   per frame.** `experiments/exp026_top1/overlay_top1.py` runs `overlay_split.py --top 1

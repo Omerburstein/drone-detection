@@ -23,8 +23,9 @@ def main() -> None:
     if "--out" not in args:
         start = args[args.index("--start") + 1] if "--start" in args else "441"
         end = args[args.index("--end") + 1] if "--end" in args else "800"
-        args += ["--out", f"runs/sofa_analog/exp027_osd_grid/split_sky_window2of4_top1_merge20"
-                          f"_osdgrid_{CLIP['name']}_{start}_{end}.mp4"]
+        top = args[args.index("--top") + 1] if "--top" in args else "1"
+        args += ["--out", f"runs/sofa_analog/exp027_osd_grid/split_sky_window2of4_top{top}"
+                          f"_merge20_osdgrid_{CLIP['name']}_{start}_{end}.mp4"]
     sys.argv = [sys.argv[0], *DEFAULTS, *args]
     overlay_split.main()
 

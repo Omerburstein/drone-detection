@@ -25,11 +25,13 @@ results together. Any `overlay_split` flag overrides the defaults.
 
 ```bash
 PYTHONPATH="experiments/exp023_sky_branch/analog_catch_2;experiments/exp027_osd_grid;experiments/exp025_top3;experiments/exp023_sky_branch;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
-    py -3.13 -m overlay_grid
+    py -3.13 -m overlay_grid            # top 1
+    py -3.13 -m overlay_grid --top 3    # top 3
 ```
 
-The outputs go to `runs/sofa_analog/exp027_osd_grid/split_sky_window2of4_top1_merge20_osdgrid_catch_2_441_800`:
-the `.mp4`, a `.csv` of every shown blob, and a `_drone.csv`.
+The outputs go to `runs/sofa_analog/exp027_osd_grid/split_sky_window2of4_top{1,3}_merge20_osdgrid_catch_2_441_800`:
+the `.mp4`, a `.csv` of every shown blob, and a `_drone.csv`. The top-3 run also has a
+`_rank_hist.png` (`exp025_top3/split_rank_hist.py` on its `_drone.csv`).
 
 ## Result
 
@@ -37,6 +39,11 @@ the `.mp4`, a `.csv` of every shown blob, and a `_drone.csv`.
 | --- | ---: | ---: | ---: | ---: |
 | EXP-026 | 0.79 | 53 | 231 | 120 |
 | **EXP-027 `--osd-grid`** | **0.64** | **57** (36 sky, 21 ground) | **175** | **49** |
+
+| catch_2 441-800, top 3, merge 20 | shown/frame | drone in top 3 (of 224) | drone #1 | false alarms shown | in the dash band |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| EXP-025d | 1.62 | 68 | 53 | 513 | 254 |
+| **EXP-027 `--osd-grid --top 3`** | **1.08** | **67** (36 sky, 31 ground) | **57** | **318** | **92** |
 
 Without `--osd-grid`, `overlay_split` reproduces EXP-026's CSVs byte for byte. See EXP-027
 in `docs/experiments.md` for what is left in the band and the one frame lost (585).

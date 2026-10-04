@@ -4448,5 +4448,25 @@ was not re-tuned on this clip.
 - The other recurring false alarms are the top corners (928,16) ×32 and (16,16) ×13. They
   are the picture rim, not OSD.
 
+**Top 3** (`overlay_grid --top 3`, the user's follow-up). The candidates are the same, so
+the veto counts are the same. Against EXP-025d's top 3 at merge 20:
+
+| catch_2 441–800, top 3, merge 20 | shown/frame | drone in top 3 (of 224) | #1 / #2 / #3 | FA shown | in the dash band |
+| --- | ---: | ---: | :---: | ---: | ---: |
+| EXP-025d | 1.62 | 68 | 53 / — / — | 513 | 254 |
+| **EXP-027 `--osd-grid`** | **1.08** | **67** | **57 / 6 / 4** | **318** | **92** |
+
+A third of the shown load goes, and the dash band loses 162 of its 254 false alarms. The
+drone enters the top 3 in 3 frames (703, 777, 782) and leaves it in 4:
+
+- **590** is not a real loss. EXP-025d's circle there was a dash (4 grid copies) that the
+  20 px merge credited to the drone because it absorbed a c 0.4 on-drone member.
+- **499 and 585** are the drone in the dash row. At 499 its blob sits at y 286 with 4 grid copies.
+- **660** is the one false veto: motion-blurred grass, where the drone's own blob (c 2.0)
+  found copies at 2 grid positions.
+
+Six rank moves are all upward: 2 → 1 (×4), 3 → 1, 3 → 2.
+
 Artifacts in `runs/sofa_analog/exp027_osd_grid/`: `split_sky_window2of4_top1_merge20_osdgrid_catch_2_441_800`
-`.mp4`, `.csv`, `_drone.csv`, and `grid_analog.log`.
+`.mp4`, `.csv`, `_drone.csv`, and `grid_analog.log`. The same for `top3`, plus
+`_rank_hist.png` and `grid_top3_analog.log`.
