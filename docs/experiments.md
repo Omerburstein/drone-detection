@@ -3882,3 +3882,22 @@ is in a candidate dump. EXP-023's
 `runs/sofa_analog/exp023_sky_branch/candidates_catch_2_441_800.csv` already carries `snr`,
 `c_plain`, `diameter` and `on_target` for every kept candidate, so re-ranking by any of them
 and re-counting top-3 hits is a GROUP BY, not another span.
+
+### Added 2026-10-04: the drone's score in the 163 frames it missed the top 3
+
+Read from EXP-023's dump (`candidates_catch_2_441_800.csv`), which records every candidate
+on the target whatever its `c`, so no re-render. It reproduces the counts above (73 kept,
+61 in the top 3).
+
+| why it missed | frames | the drone's best `c` there |
+| --- | ---: | --- |
+| kept (c >= 6) but ranked 4th or lower | 12 | 6.0–8.7, and within 0.0–0.6 of that frame's #3 in 8 of the 12 |
+| a candidate, but below c = 6 | 150 | median **2.7** (p10 1.9, p90 5.1, max 5.9); median gap to #3 is 4.6 |
+| not a candidate at all | 1 | none |
+
+**The miss is the threshold, not the cap.** The cap costs 12 frames, most of them by a hair.
+The other 150 are frames where the drone scores a median 2.7: barely above the 1.8 that
+pure-noise sky reaches (EXP-023), and 4.6 below what the clutter in the same frame scores.
+Of those, 16 sit at c 5–6 and 26 at c 4–6, so lowering the threshold recovers a few. The
+bulk (93 frames at c < 3) is a target the contrast statistic does not see. That points
+upstream, at the ranking statistic EXP-025 already names, not at N.
