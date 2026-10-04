@@ -4277,3 +4277,52 @@ caveats apply too: one clip, recut from dumps, one 9 px radius.
 Artifacts in `runs/sofa_analog/exp025_top3/`: `window2of4_skyc_top3_catch_2_441_800.mp4`,
 its `.csv` (every shown blob: frame, rank, x, y, c, diameter, seeds confirming it,
 on_target) and `window2of4_skyc_analog.log`.
+
+### Added 2026-10-04: the frame split into sky and ground, one detector each, top 3 by c (EXP-025d)
+
+The user asked for a video with the frame split into sky and ground: the sky branch on the
+sky, the 2-of-4 motion window on the ground, and the top 3 chosen by the sky branch's `c`.
+They chose **one pooled ranking per frame**, not a top 3 per section.
+`experiments/exp025_top3/overlay_split.py` recomputes stage 1 (`skyline.split`, EXP-017) on
+every frame. A blob on a stage-1 sky pixel belongs to the sky section; everything else is
+ground, and the uncertain band goes to whichever side stage 1 called. The sky section is
+EXP-025's detector (kept, c >= 6). The ground section is EXP-025c's (a non-cloud blob
+confirmed by a 2-of-4 survivor within 9 px, any c). Both are drawn from the same two dumps,
+so only stage 1 is new computation. Stage 1 called a median 22% of the frame sky, and no sky
+at all in 66 of 360 frames.
+
+| catch_2 441–800 | ranked/frame | shown/frame | drone in top 3 (of 224) | #1 / #2 / #3 |
+| --- | ---: | ---: | ---: | :---: |
+| sky c >= 6 everywhere (EXP-025) | 5.48 | 2.88 | 61 | 31 / 18 / 12 |
+| 2-of-4 window everywhere, ranked by sky c (EXP-025c) | 1.52 | 1.29 | 49 | 39 / 8 / 2 |
+| **sky branch on sky, 2-of-4 window on ground** | **2.00** | **1.66** | **66** | **52 / 10 / 4** |
+
+**Better than either detector on its own: more top-3 frames than EXP-025 and more #1s than
+EXP-025c, at 58% of EXP-025's shown load.** The drone is ranked in 69 frames.
+
+Split by section (`split_rank_hist.py`):
+
+| | sky section | ground section |
+| --- | ---: | ---: |
+| ranked/frame, shown/frame | 0.71, 0.66 | 1.29, 0.99 |
+| drone ranked | 36 | 33 |
+| drone in top 3 (#1 / #2 / #3) | 36 (36 / 0 / 0) | 30 (16 / 10 / 4) |
+| drone dropped by its section | 9 | 145 |
+| no blob on the drone | 0 | 1 |
+
+**The sky branch's clutter was on the ground.** Restricted to stage-1 sky it ranks 0.71
+blobs/frame, against 5.48 over the whole frame, and when it ranks the drone, the drone is #1
+in all 36 frames. The ground section loses the drone in 145 frames. That is the motion
+window's weakness (EXP-024), now confined to the frames where the drone is below the
+horizon. Raising recall there is the ground detector's problem, not the ranking's.
+
+Caveats: one clip, recut from dumps; "drone" is EXP-023's grown-box `on_target`. A dropped
+drone is credited to the section of its best blob, and a frame with no blob to the section of
+the label box's centre. The sky mask is stage 1's `blue sky vs everything` split, which
+EXP-023 already named as the defect to fix. A frame where stage 1 finds no sky runs the
+window alone.
+
+Artifacts in `runs/sofa_analog/exp025_top3/`: `split_sky_window2of4_top3_catch_2_441_800.mp4`,
+its `.csv` (every shown blob: frame, rank, section, x, y, c, diameter, on_target),
+`_drone.csv` (per labelled frame: outcome, rank, section, c), `_rank_hist.png` and
+`split_analog.log`.

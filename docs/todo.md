@@ -369,6 +369,15 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-04 — [algo] **EXP-025d: sky/ground split, the sky branch on the sky, the
+  2-of-4 window on the ground, top 3 by sky c.** `experiments/exp025_top3/overlay_split.py`
+  recomputes stage 1 per frame and pools both sections into one ranking. The drone is in
+  the top 3 in 66 of 224 frames and #1 in 52, at 1.66 shown/frame. That beats EXP-025
+  (61 / 31 at 2.88) and EXP-025c (49 / 39 at 1.29). In the sky it is #1 in every frame it
+  is ranked (36); the ground section drops it in 145. `split_rank_hist.py` draws the
+  histogram stacked by section. Video:
+  `runs/sofa_analog/exp025_top3/split_sky_window2of4_top3_catch_2_441_800.mp4`.
+
 - [x] 2026-10-04 — [algo] **EXP-025c: the 2-of-4 motion window, ranked by sky contrast,
   top 3, rendered.** `experiments/exp025_top3/overlay_window_skyc.py` draws it from the
   EXP-024 and EXP-023 dumps. A sky blob is ranked when a 2-of-4 survivor lies within 9 px,

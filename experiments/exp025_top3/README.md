@@ -16,6 +16,8 @@ drone among them, and how often is it #1?
 | `overlay_gate.py` | EXP-025b: the same top N, after a persistence gate of `--min-appear` of `--k` frames (default 4 of 5). `--coords scene` (default) chains camera-compensated, `--coords image` in raw picture coordinates. Prints every threshold 1..k from one pass. Writes a CSV of every kept candidate (`frame, x, y, c, diameter, appearances, rank_all, on_target`). |
 | `drone_ranks.py` | reads `overlay_gate.py`'s CSV and writes a Markdown table of every frame the drone is in a top N, with its rank with and without the gate. Any threshold, no re-render. |
 | `overlay_window_skyc.py` | EXP-025c: EXP-024's 2-of-4 motion window decides what survives, the sky branch's `c` decides the order. Drawn from EXP-024's `seeds_k4_` dump and EXP-023's candidate dump, no detector re-run. A blob is ranked when a survivor lies within 9 px; no c threshold, cloud vetoes dropped (`--keep-cloud` keeps them). Writes a CSV of every shown blob. |
+| `overlay_split.py` | EXP-025d: stage 1 splits the frame; the sky branch (c >= 6) ranks on the sky, EXP-025c's 2-of-4 window on the ground, one pooled top 3 by c. Writes a CSV of every shown blob and a per-labelled-frame `_drone.csv`. |
+| `split_rank_hist.py` | reads `overlay_split.py`'s `_drone.csv` and draws the drone's rank histogram, stacked by section. |
 
 The candidates come from EXP-023's `silhouette.detect` and the drawing helpers from its
 `overlay_sky.py`, both unchanged, so before the cap they are EXP-023's to the digit.
@@ -118,6 +120,31 @@ Needs `runs/sofa_analog/exp024_window_length/seeds_k4_catch_2_441_800.csv` (EXP-
 
 The drone is #1 in more frames than EXP-025's, at 45% of the shown load. It gives up 12
 top-3 frames, mostly at #2 and #3. Video: `window2of4_skyc_top3_catch_2_441_800.mp4`.
+
+## Sky and ground split, one detector each (EXP-025d)
+
+```bash
+PYTHONPATH="experiments/exp023_sky_branch/analog_catch_2;experiments/exp025_top3;experiments/exp023_sky_branch;experiments/exp017_motion_first;experiments/exp015_normalised_motion;."     py -3.13 -m overlay_split
+py -3.13 experiments/exp025_top3/split_rank_hist.py
+```
+
+`overlay_split.py` recomputes stage 1 (`skyline.split`) on every frame. A blob on a sky
+pixel is the sky branch's to rank (kept, c >= 6); any other blob is the ground's, ranked
+when a 2-of-4 window survivor lies within 9 px (EXP-025c's rule). Both sections are
+pooled into **one** ranking by `c`, and the top 3 are drawn tagged `#rank c sky|gnd`, with
+stage 1's horizon as a thin line (`--no-split-line` drops it). It needs the same two dumps
+as EXP-025c. It writes the video, a CSV of every shown blob, and a `_drone.csv` with one
+row per labelled frame. `split_rank_hist.py` reads that CSV and draws the drone's rank
+histogram, stacked by section.
+
+| catch_2 441-800, top 3 | ranked/frame | shown/frame | drone in top 3 (of 224) | #1 / #2 / #3 |
+| --- | ---: | ---: | ---: | :---: |
+| sky c >= 6 everywhere (EXP-025) | 5.48 | 2.88 | 61 | 31 / 18 / 12 |
+| 2-of-4 window everywhere (EXP-025c) | 1.52 | 1.29 | 49 | 39 / 8 / 2 |
+| **sky branch on sky, window on ground** | **2.00** | **1.66** | **66** | **52 / 10 / 4** |
+
+The sky section ranks the drone in 36 frames, all at #1. The ground section ranks it in
+33 (16 / 10 / 4 in the top 3) and drops it in 145.
 
 ## Result
 
