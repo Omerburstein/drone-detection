@@ -3713,7 +3713,7 @@ operating threshold) always keeps structural rejections and anything on target r
    detection when it is below 0.5.
 
 ## EXP-024 — window length: worse than 5 on O4, and no usable setting at all on analog
-(where 1 frame in 6 turns out to be a duplicate)
+(where 1 frame in 6 is a duplicate, and the 2-frame sky branch beats it anyway)
 
 - **Date:** 2026-10-01
 - **Question:** the user asked for a 10-frame and a 15-frame persistence gate, after a
@@ -3886,6 +3886,55 @@ clean look — the render `curve_k5.log` named but never wrote, having run `--no
 and the per-seed dumps `seeds_k5_catch_2_441_800.csv` / `seeds_k7_...csv` behind the
 contrast table below.
 
+### 2026-10-04 — against EXP-023's 2-frame sky branch, at matched load
+
+Asked for directly. Both on `catch_2` 441-800, both recut from dumps rather than re-run:
+EXP-023's `candidates_catch_2_441_800.csv` (44988 candidates, floor c=-0.96, so the whole
+curve is in it) and EXP-024's new `seeds_k5_` dump. The EXP-023 dump reproduces its
+published operating point exactly -- 73 of 224 at c>=6 -- which is what licenses recutting it.
+
+**Both recomputed out of the same 224 labelled frames.** EXP-024's own reports divide by
+174, the frames where the target is a *motion* candidate at all; that is the window's
+ceiling, not a denominator, and using it was what made the two look incomparable.
+
+| load/frame | 5-frame window | 2-frame sky branch | sky `c >=` |
+| ---: | ---: | ---: | ---: |
+| 167.6 | 1/5 -> 174 (77.7%) | **223 (99.6%)** | floor |
+| 18.1 | 2/5 -> 60 (26.8%) | **99 (44.2%)** | 4.10 |
+| 4.25 | 3/5 -> 36 (16.1%) | **63 (28.1%)** | 6.58 |
+| 1.09 | 4/5 -> 22 (9.8%) | **38 (17.0%)** | 9.26 |
+| 0.11 | 5/5 -> 3 (1.3%) | **8 (3.6%)** | 15.89 |
+
+**The 2-frame branch wins at every matched load, by about 1.7x throughout.** At its own
+shipping point -- c>=6, 5.27 false alarms/frame, 32.6% -- the window needs 18.0 candidates
+per frame, 3.2x the load, to reach a *lower* 26.8%. There is no load at which the 5-frame
+window is the better instrument on this clip.
+
+**Why, and it is not the gate:** the motion front-end makes the target a candidate in only
+**174 of 224 labelled frames (77.7%)**, so that is the hard ceiling before persistence
+rejects anything. The sky branch reaches **223 of 224 (99.6%)** at its floor. The window is
+competing from 22 points behind with a gate that can only subtract.
+
+**The duplicates hit only the motion branch.** The sky branch keeps 5.38 candidates/frame on
+the 60 duplicate frames against 5.63 on live ones -- essentially unaffected, because
+`silhouette.detect` reads the current frame alone and the pair is used only to warp the
+stage-0 mask. It finds the target in **12 of those 60 frames, where the motion branch finds
+nothing at all**. Single-frame appearance is structurally immune to a repeated frame.
+
+**One thing the window does better.** Scale-free separation -- the share of clutter reaching
+the target's p10, lower being better -- is **53.0% for the window's `c` at 4-of-5 against
+82.0% for the sky's at c>=6**. What survives persistence is better ordered by contrast than
+what survives the sky threshold. Read it as a hint and not more: the two statistics are
+different quantities on different populations, and the window's is 22 target frames.
+
+**Caveat on what this does and does not compare.** These are different detectors -- a motion
+map at tau=1.661 versus single-frame appearance contrast -- so this is a pipeline comparison
+at matched load, *not* a 5-frames-versus-2-frames ablation. It does not say short windows
+beat long ones; EXP-024's own k=5/7/10/15 curves are the ablation, and they say window
+length barely matters here. What it says is that the whole motion-plus-persistence path is
+the weaker of the two on analog.
+
+
 ### Standing recommendation
 
 **On O4, keep k=5 with 4-of-5. Do not lengthen the window.** Revisit only if a downstream
@@ -3903,6 +3952,15 @@ terms), and look upstream at why the target is not a candidate in 186 of 360 fra
 no motion, so a nominally 5-frame gate is really a 4-frame one and the strictest
 settings are partly unreachable by arithmetic. That is cheap to fix and every analog
 persistence number above is measured through it.
+
+**But the deeper point, measured 2026-10-04: on analog the whole motion-plus-persistence
+path is dominated by EXP-023's 2-frame sky branch at every matched load** (~1.7x the recall
+throughout, and 32.6% at 5.3 false alarms/frame against the window's 26.8% at 18.0). The
+motion front-end tops out at 77.7% of labelled frames before the gate subtracts anything,
+against the sky branch's 99.6%. So the analog question is not *which window* but **whether
+persistence helps the sky branch** — the branch that is already winning, and that is immune
+to the duplicate frames because it reads one frame at a time. That is the experiment to run
+next on this clip, and it makes deduplication a prerequisite only for the motion path.
 
 **Next, and separately from window length:** peak-chaining association, then accumulated
 displacement and size growth measured off it. EXP-023 established size as evidence; the
@@ -3953,10 +4011,12 @@ frames.
 - **Same caveat as EXP-023:** "drone" means a candidate inside the label box grown by
   max(10 px, 25%), and the detector fires at ~0.16x the airframe's size. A hit says a top
   candidate was in the right place, not that the airframe was detected.
-- **Not comparable to EXP-024's window gate.** EXP-024's recall is out of the 174 frames
-  where the target is a *motion* candidate; this is out of all 224 labelled frames, from a
-  different detector. Reading 27% here against 22% at 3/7 there would compare different
-  denominators and different detectors.
+- **Comparable to EXP-024's window gate only after fixing the denominator**, which the
+  2026-10-04 addendum to EXP-024 does: EXP-024's printed recall is out of the 174 frames
+  where the target is a *motion* candidate, this is out of all 224 labelled frames. On the
+  common 224 the sky branch beats the window at every matched load by ~1.7x, and the 174 is
+  revealed as the motion front-end's 77.7% ceiling. Still different detectors, so it is a
+  pipeline comparison and not a window-length one.
 - A top-N cap is a *load* control, not a filter: it never removes a frame's best clutter, so
   the false-alarm count is at least min(3, kept) − 1 in every frame where the drone is shown.
 

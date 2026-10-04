@@ -172,9 +172,35 @@ median but just below their p90, so about one in ten outscores it. Keeping only 
 strongest survivor per frame halves false alarms and halves recall, landing on 6%
 everywhere; not an operating point.
 
+## Against EXP-023's 2-frame sky branch (2026-10-04)
+
+Recut from EXP-023's `candidates_catch_2_441_800.csv` and this experiment's `seeds_k5_` dump
+— no re-run. **Both out of the same 224 labelled frames**; EXP-024's own reports divide by
+174, which is the motion front-end's ceiling rather than a denominator.
+
+| load/frame | 5-frame window | 2-frame sky branch | sky `c >=` |
+| ---: | ---: | ---: | ---: |
+| 167.6 | 1/5 -> 174 (77.7%) | **223 (99.6%)** | floor |
+| 18.1 | 2/5 -> 60 (26.8%) | **99 (44.2%)** | 4.10 |
+| 4.25 | 3/5 -> 36 (16.1%) | **63 (28.1%)** | 6.58 |
+| 1.09 | 4/5 -> 22 (9.8%) | **38 (17.0%)** | 9.26 |
+
+The sky branch wins at every matched load by ~1.7x. Its shipping point (c>=6) is 32.6% at
+5.27 false alarms/frame; the window needs 3.2x that load to reach a lower 26.8%. The cause
+is upstream of the gate: the motion front-end makes the target a candidate in 174 of 224
+frames (77.7%) against the sky branch's 223 (99.6%).
+
+The sky branch is also **immune to the duplicate frames** — 5.38 candidates/frame on them
+against 5.63 on live frames, and it finds the target in 12 of the 60 where the motion branch
+finds nothing — because `silhouette.detect` reads one frame and the pair only warps the
+mask.
+
+Different detectors, so this is a pipeline comparison at matched load, not a
+5-frames-vs-2-frames ablation. The k=5/7/10/15 curves above are the ablation.
+
 ## Recommendation
 
-**O4: keep k=5 at 4-of-5.** **Analog: deduplicate first, then do not tune the window** — it is the wrong
+**O4: keep k=5 at 4-of-5.** **Analog: the motion path loses to the 2-frame sky branch at every load — ask whether persistence helps *that* branch instead, and deduplicate before trusting any motion number** — it is the wrong
 stage. Raise `--fb-max` off 0.67 px, and look upstream at why the target is not a candidate
 in 186 of 360 frames. For both clips the durable next step is peak-chaining association,
 which needs neither texture nor flow and would make persistence independent of LK.

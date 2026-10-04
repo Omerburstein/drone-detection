@@ -15,6 +15,21 @@ dates, not priorities.
 
 ## Open
 
+- [ ] 2026-10-04 — [algo] **Put the persistence gate on the sky branch's candidates instead
+  of the motion branch's.** Measured in EXP-024's 2026-10-04 addendum: on `catch_2` 441-800,
+  recut to the common 224 labelled frames, EXP-023's 2-frame sky branch beats the 5-frame
+  motion window at *every* matched load by ~1.7x (32.6% at 5.3 false alarms/frame against
+  the window's 26.8% at 18.0/frame). The cause is upstream of the gate — the motion
+  front-end makes the target a candidate in 174 of 224 frames (77.7%) against the sky
+  branch's 223 (99.6%) — so no window length or threshold can close it. The sky branch is
+  also immune to the 1-in-6 duplicate frames, finding the target in 12 of the 60 where the
+  motion branch finds none. **So the open question is whether persistence adds anything to
+  the branch that is already winning**, where it would start from 99.6% rather than 77.7%.
+  Needs candidate association across frames for sky-branch hits (`window._appears` by peak
+  proximity already does this without flow, and EXP-024 established LK is unusable on analog
+  at median 0 usable steps). Compare against EXP-023's c>=6 and EXP-025's top-3 cap at
+  matched load, on the 224 denominator.
+
 - [ ] 2026-10-04 — [algo] **Drop duplicate frames before the window is built, then
   re-measure analog persistence.** `catch_2` repeats 1 frame in 6 (148 of 890, at
   `f % 6 == 4` exactly — 25 fps resampled to 30), and a duplicate pair produces zero
@@ -335,6 +350,21 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-29 — [algo] **Score a HUD mask against labels, not against its coverage percentage.** EXP-020: the tool prints `7.71% of the frame`, which is the wrong number — 13.15% sounded acceptable and was 20% of the ground truth. Add `--labels <dir>` to `src.data.hud_mask` so the build reports how many labelled boxes the mask would veto at `HUD_VETO_FRACTION`, and refuse silently-expensive masks. Cheap: the scoring loop is `overlap_fraction` over YOLO txt files, ~20 lines, and it is the only check that would have caught this.
 
 ## Done
+
+- [x] 2026-10-04 — [algo] **EXP-024's window gate against EXP-023's 2-frame sky branch, at
+  matched load.** Recut both from dumps, no re-run, and **both out of the same 224 labelled
+  frames** — EXP-024's printed recall divides by 174, which is the motion front-end's
+  ceiling rather than a denominator, and that mismatch was why the ledger had called the two
+  incomparable. The sky branch wins at every matched load by ~1.7x: 99.6% vs 77.7% at the
+  floor, 44.2% vs 26.8% at 18/frame, 17.0% vs 9.8% at 1.1/frame. Its shipping c>=6 is 32.6%
+  at 5.27 false alarms/frame; the window needs 3.2x that load for a lower 26.8%. Cause is
+  upstream of the gate (174/224 vs 223/224 candidate ceiling), and the sky branch is immune
+  to the duplicate frames, finding the target in 12 of the 60 where the motion branch finds
+  none. The window's contrast does order its own survivors better (53.0% of clutter above
+  the target's p10 against the sky's 82.0%), noted as a hint given 22 target frames.
+  Different detectors, so a pipeline comparison and not a window-length ablation. EXP-025's
+  "not comparable" caveat amended to point at the fixed denominator. Filed the follow-up:
+  put persistence on the sky branch instead. `docs/experiments.md` EXP-024 addendum.
 
 - [x] 2026-10-04 — [algo] **EXP-025b: the top 3 behind a 4-of-5 persistence gate, and a
   table of every frame the drone is ranked.** `experiments/exp025_top3/overlay_gate.py`
