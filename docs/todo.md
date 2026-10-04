@@ -373,7 +373,7 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
   analog.** `experiments/exp024_window_length/rank_hist.py`, which reads the dumps, no
   re-render. Window gates: median rank 5, #1 in 5 and 4 frames, flat from rank 1 to 8. Sky
   c>=6: median 2, #1 in 31, top 3 in 61. Loosened to the window's load, the sky branch
-  gains 22 frames, none of them in the top 3. `docs/experiments.md` EXP-024 addendum.
+  gains 22 frames, only one of them in the top 3. `docs/experiments.md` EXP-024 addendum.
 
 - [x] 2026-10-04 — [algo] **EXP-023's sky branch rendered without the c >= 6 cut.** At the
   dump floor, c >= 3, clean look, `catch_2` 441-800:

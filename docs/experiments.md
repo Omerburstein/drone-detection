@@ -4004,8 +4004,8 @@ candidate". Figure: `runs/sofa_analog/exp024_window_length/rank_hist_catch_2_441
 8, #1 in under 1 frame in 10 of those it keeps, so the motion-peak height says almost
 nothing about which survivor is the target. The sky branch keeps the drone at #1 in 31 of
 73 and in the top 3 in 61. **Its ranks do not depend on the load:** loosened to the window's
-13.8/frame, it gains 22 frames, all of them below the top 3, and its #1 and top-3 counts do
-not move. Ranks are each detector's own `c`, so they compare across panels; the
+13.8/frame, it gains 22 frames, only one of them in the top 3 (61 to 62), and its #1 count
+does not move. Ranks are each detector's own `c`, so they compare across panels; the
 scores do not.
 
 
