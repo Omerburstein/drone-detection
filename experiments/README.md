@@ -1,4 +1,4 @@
-# experiments/ — the scripts behind EXP-011 to EXP-026
+# experiments/ — the scripts behind EXP-011 to EXP-027
 
 One folder per experiment, holding the code that produced its ledger entry in
 `docs/experiments.md`. Until 2026-10-01 these lived inside the gitignored run folders
@@ -39,6 +39,9 @@ PYTHONPATH="experiments/exp023_sky_branch/analog_catch_2;experiments/exp023_sky_
 PYTHONPATH="experiments/exp023_sky_branch;experiments/exp017_motion_first;experiments/exp015_normalised_motion;." \
     py -3.13 -m overlay_sky --start 650 --end 964 --no-sky --no-truth \
     --out runs/sofa_o4/clean_first_catch_650_964.mp4
+
+# EXP-027: the sky/ground split, #1 only, with the OSD horizon dashes dropped
+PYTHONPATH="experiments/exp023_sky_branch/analog_catch_2;experiments/exp027_osd_grid;experiments/exp025_top3;experiments/exp023_sky_branch;experiments/exp017_motion_first;experiments/exp015_normalised_motion;."     py -3.13 -m overlay_grid
 ```
 
 The O4 `first_catch` config is the bare `clipcfg.py` in each experiment folder; every other

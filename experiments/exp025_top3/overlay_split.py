@@ -25,6 +25,11 @@ The clean look: stage-0 tints, red circles at least `--min-draw` px across (defa
 `#1` thicker, a two-line caption. The split is drawn as stage 1's horizon (lowest sky row
 per column), a thin line; `--no-split-line` drops it. Nothing is drawn from the labels.
 
+`--osd-grid` (EXP-027) first drops every blob that is a character in a row on the analog
+OSD's grid -- the artificial horizon's white dashes, which slide with pitch and roll so no
+static mask holds them. `src.algo.masking.on_osd_grid` on the current frame: copies of the
+blob at two of the positions +-1 and +-2 columns away. Off by default.
+
 Writes a CSV of every shown blob and one row per frame for the drone (`--hist` input to
 `split_rank_hist.py`): its best rank in the pooled ranking, the section that ranked it, or
 why it was not ranked.
@@ -43,6 +48,7 @@ import common
 import masks
 import skyline
 from clipcfg import CLIP
+from src.algo.masking import on_osd_grid
 from overlay_sky import KEPT, MIN_DRAW_DIAMETER, _draw_background
 from overlay_video import load_boxes, px, text_block
 from overlay_window_skyc import confirmed, load_survivors
@@ -55,6 +61,7 @@ SPLIT_LINE = (60, 200, 230)
 SHOWN_FIELDS = ["frame", "rank", "section", "x", "y", "c", "diameter", "members",
                 "on_target"]
 DRONE_FIELDS = ["frame", "outcome", "rank", "section", "c"]
+OSD_BOX = (8, 14)  # the grid test's box side, px: blob diameter clamped to a dash's size
 
 
 def load_dump(path: str) -> dict[int, list[dict]]:
@@ -74,6 +81,16 @@ def load_dump(path: str) -> dict[int, list[dict]]:
 def section_of(sky: np.ndarray, x: float, y: float) -> str:
     xi, yi = int(np.clip(x, 0, W - 1)), int(np.clip(y, 0, H - 1))
     return "sky" if sky[yi, xi] else "ground"
+
+
+def osd_vetoed(gray: np.ndarray, blobs: list[dict]) -> list[dict]:
+    """The blobs that sit in a row on the OSD grid, tested on a dash-sized square box."""
+    out = []
+    for b in blobs:
+        side = float(np.clip(b["diameter"], *OSD_BOX))
+        if on_osd_grid(gray, (b["x"] - side / 2, b["y"] - side / 2, side, side)):
+            out.append(b)
+    return out
 
 
 def merge(blobs: list[dict], radius: float) -> list[dict]:
@@ -153,6 +170,9 @@ def main() -> None:
                     help="fold blobs within this many px of a stronger one into it, before "
                          "the sections' tests "
                          "(0: off, EXP-025d)")
+    ap.add_argument("--osd-grid", action="store_true",
+                    help="drop blobs in a row on the OSD character grid (the horizon "
+                         "dashes) before merging (EXP-027)")
     ap.add_argument("--window-dump", default=None,
                     help="EXP-024 seed dump (default: its seeds_k{k}_ CSV for this span)")
     ap.add_argument("--sky-dump",
@@ -180,7 +200,8 @@ def main() -> None:
     print("[stage 0] " + ", ".join(f"{k} {v:.2f}%" for k, v in stage0.coverage().items()))
     print(f"[sky section] {a.sky_dump}, c >= 6\n[ground section] {a.min_appear} of {a.k} "
           f"from {wdump}, blob within {a.radius:g} px, any c\n[rank] pooled by c, top {a.top}"
-          + (f", blobs within {a.merge:g} px merged" if a.merge else ""))
+          + (f", blobs within {a.merge:g} px merged" if a.merge else "")
+          + ("\n[osd grid] blobs in a row on the OSD grid dropped first" if a.osd_grid else ""))
 
     cap = cv2.VideoCapture(CLIP["video"])
     cap.set(cv2.CAP_PROP_POS_FRAMES, a.start - 2)
@@ -192,6 +213,7 @@ def main() -> None:
     load = dict.fromkeys(SECTIONS, 0)
     shown_n = dict.fromkeys(SECTIONS, 0)
     sky_frac, folded = [], 0
+    vetoed = dict(blobs=0, on_target=0)
     for f in range(a.start, a.end + 1):
         ok, cur = cap.read()
         if not ok:
@@ -201,6 +223,11 @@ def main() -> None:
         sl = skyline.split(cur, stage0.valid(hmat))
         sky_frac.append(sl.sky_fraction)
         fb = [dict(b) for b in blobs.get(f, [])]
+        if a.osd_grid:
+            gone = osd_vetoed(cv2.cvtColor(cur, cv2.COLOR_BGR2GRAY), fb)
+            vetoed["blobs"] += len(gone)
+            vetoed["on_target"] += sum(b["on_target"] for b in gone)
+            fb = [b for b in fb if not any(b is g for g in gone)]
         for b in fb:
             b["section"] = section_of(sl.sky, b["x"], b["y"])
         objs = merge(fb, a.merge)
@@ -236,10 +263,10 @@ def main() -> None:
             w = csv.DictWriter(fh, fieldnames=fields)
             w.writeheader()
             w.writerows(rows)
-    report(a, out, stem, load, shown_n, sky_frac, drone_rows, folded)
+    report(a, out, stem, load, shown_n, sky_frac, drone_rows, folded, vetoed)
 
 
-def report(a, out, stem, load, shown_n, sky_frac, drone_rows, folded) -> None:
+def report(a, out, stem, load, shown_n, sky_frac, drone_rows, folded, vetoed) -> None:
     n = len(sky_frac)
     print(f"\n[video] {n} frames -> {out}\n[dump] every shown blob -> {stem}.csv"
           f"\n[dump] the drone, per labelled frame -> {stem}_drone.csv")
@@ -252,6 +279,9 @@ def report(a, out, stem, load, shown_n, sky_frac, drone_rows, folded) -> None:
     if a.merge:
         print(f"  merge {a.merge:g} px folded {folded} candidates ({folded / n:.2f}/frame) "
               f"into stronger ones, before the sections' tests")
+    if a.osd_grid:
+        print(f"  osd grid dropped {vetoed['blobs']} candidates ({vetoed['blobs'] / n:.2f}/frame), "
+              f"{vetoed['on_target']} of them on the drone")
     print(f"\n  drone, of {len(drone_rows)} labelled frames      sky  ground  total")
     for name, keep in (("ranked", lambda r: r["outcome"] == "ranked"),
                        (f"in the top {a.top}", lambda r: r["outcome"] == "ranked"

@@ -4396,3 +4396,57 @@ the labelled drone. The sky section is right in 36 of 131, the ground in 17 of 1
 
 Artifacts in `runs/sofa_analog/exp026_top1/`: `split_sky_window2of4_top1_merge20_catch_2_441_800.mp4`,
 its `.csv`, `_drone.csv`, and `top1_analog.log`.
+
+## EXP-027 — the OSD horizon dashes, dropped by the character grid
+
+The user noticed the sky and window branches still firing on the white dots on the
+operator's screen. These are the analog OSD's **artificial horizon**: a row of identical
+dashes, one character column apart (`960 / 30 = 32 px`), sliding with pitch and roll.
+Neither the static HUD mask nor EXP-017's `ladder_mask` covers them at that row. In
+EXP-026's video, 120 of the 231 circles drawn off the drone sat in the dash band
+(y 240–300, x 330–650).
+
+**Measured before choosing the rule.** This covers all 17,790 non-cloud candidates in EXP-023's
+catch_2 441–800 dump (1,633 on the drone), plus EXP-026's 284 shown blobs:
+
+| Rule | on-drone candidates vetoed | shown drone #1 vetoed (of 53) | dash-band FA vetoed (of 120) | other FA vetoed (of 111) |
+| --- | ---: | ---: | ---: | ---: |
+| `has_twin` (GLAD's, anywhere 0.5–2.5 columns), 0.70 | 705 | 32 | 109 | 81 |
+| a row of >= 3 candidate blobs 32 ± 3 px apart, dy <= 6 | 41 | 1 | 70 | 0 |
+| **copies at 2 of ±1, ±2 columns (± 3 px), 0.70** | 186 | **0** | **93** | 16 |
+
+- **GLAD's `has_twin` would have deleted the drone.** On 8–14 px blobs, a dark spot
+  against plain sky correlates with any other dark spot within 64 px.
+- **Polarity does not help.** The sky branch fires on the dash's black outline. All 2,034
+  band candidates are darker than their ring, like the drone.
+- **The grid does.** Copies have to sit at whole-column offsets, at two positions. A
+  free-floating look-alike stops counting.
+
+That rule is now `src.algo.masking.grid_twins` / `on_osd_grid` (unit-tested). It runs as
+`overlay_split.py --osd-grid` on a square box of the blob's diameter, clamped to 8–14 px,
+before merging and before either section's test. `experiments/exp027_osd_grid/overlay_grid.py`
+runs it with EXP-026's settings. The 0.70 threshold is EXP-013's, out of sample, and it
+was not re-tuned on this clip.
+
+| catch_2 441–800, top 1, merge 20 | ranked/frame | shown/frame | drone #1 (of 224) | sky / ground | FA shown | in the dash band |
+| --- | ---: | ---: | ---: | :---: | ---: | ---: |
+| EXP-026 | 1.95 | 0.79 | 53 | 36 / 17 | 231 | 120 |
+| **EXP-027 `--osd-grid`** | **1.16** | **0.64** | **57** | **36 / 21** | **175** | **49** |
+
+- With the flag off, `overlay_split` reproduces EXP-026's `.csv` and `_drone.csv` byte for byte.
+- The veto drops 16.05 candidates per frame, 307 of them on the drone (0.85 per labelled frame).
+  These are low-ranked members. The drone gains #1 in 5 frames (663, 677, 705, 719, 759),
+  where a dash had outranked it.
+- **It loses one: 585**, where the drone flies through the dash row beside the centre
+  marker. Its strongest blob (c 15.0) has dash-outline copies at grid positions. This is
+  the cost the rule was expected to have, and it was EXP-025d's one clean merge gain.
+- **What is left in the band (49):** mostly the **end dash** of the row (594, 602, 611,
+  612, 634). The blob sits on the dash's edge and the analog blur softens it, so its copies
+  score 0.55–0.70, just short. Also the **centre reticle's wing** at 651, just outside the
+  static mask, and treeline. Next: test the end dashes at a lower score, but on a clip
+  other than catch_2.
+- The other recurring false alarms are the top corners (928,16) ×32 and (16,16) ×13. They
+  are the picture rim, not OSD.
+
+Artifacts in `runs/sofa_analog/exp027_osd_grid/`: `split_sky_window2of4_top1_merge20_osdgrid_catch_2_441_800`
+`.mp4`, `.csv`, `_drone.csv`, and `grid_analog.log`.

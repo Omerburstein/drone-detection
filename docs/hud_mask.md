@@ -176,6 +176,13 @@ them clear 0.70. Together with the block mask, **77 of 82** are vetoed. The surv
 **What it would cost:** a real drone flying in formation with an identical drone one
 column apart. It would also veto clutter that repeats at that spacing, which is not a loss.
 
+**On small blobs, use the grid version.** The motion-first experiments' sky branch emits
+8–14 px blobs, not GLAD boxes. At that size `has_twin` matches a dark spot on plain sky to
+any other dark spot, and EXP-027 measured it vetoing the drone in 32 of 53 frames.
+`src.algo.masking.on_osd_grid` asks instead for copies at two of the positions ±1, ±2
+columns, within a few pixels. On catch_2 that kept all 53 and removed 93 of the 120 dash
+false alarms (`overlay_split.py --osd-grid`).
+
 ## Do not use it on clean footage
 
 On a real camera feed there is no overlay, so the mask can only cost detections. Leaving

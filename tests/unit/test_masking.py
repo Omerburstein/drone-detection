@@ -15,8 +15,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.algo.masking import (HUD_VETO_FRACTION, OSD_COLUMNS, TWIN_SCORE, has_twin,
-                              is_masked, overlap_fraction, twin_score)
+from src.algo.masking import (GRID_STEPS, HUD_VETO_FRACTION, OSD_COLUMNS, TWIN_SCORE,
+                              grid_twins, has_twin, is_masked, on_osd_grid,
+                              overlap_fraction, twin_score)
 
 
 @pytest.fixture
@@ -156,3 +157,62 @@ class TestTwins:
 
     def test_a_box_outside_the_frame_scores_nothing(self):
         assert twin_score(sky(), (2000, 2000, 10, 10)) == 0.0
+
+
+class TestGridTwins:
+    """The twin tell locked to whole OSD columns, for the sky branch's small blobs.
+
+    The case `twin_score` gets wrong is a lone dark spot with another dark spot
+    at an arbitrary distance on the same row -- a drone beside a tree top.
+    """
+
+    def test_a_dash_in_a_row_of_dashes_is_on_the_grid(self):
+        gray = sky()
+        for k in range(-3, 4):
+            dash(gray, 470 + k * COLUMN, 300)
+        assert grid_twins(gray, (470, 300, 8, 5)) == 4
+        assert on_osd_grid(gray, (470, 300, 8, 5))
+
+    def test_the_end_dash_is_still_on_the_grid(self):
+        """The outermost dash has copies on one side only: +1 and +2 columns."""
+        gray = sky()
+        for k in range(0, 4):
+            dash(gray, 470 + k * COLUMN, 300)
+        assert on_osd_grid(gray, (470, 300, 8, 5))
+
+    def test_a_tilted_row_is_on_the_grid(self):
+        gray = sky()
+        for k in range(-3, 4):
+            dash(gray, 470 + k * COLUMN, 300 + 6 * k)
+        assert on_osd_grid(gray, (470, 300, 8, 5))
+
+    def test_a_copy_off_the_grid_does_not_count(self):
+        """A drone with a look-alike 1.5 columns away twins, but is not on the grid."""
+        gray = sky()
+        drone(gray, 470, 300)
+        drone(gray, 470 + COLUMN * 3 // 2, 300)
+        assert has_twin(gray, (470, 300, 10, 6))
+        assert grid_twins(gray, (470, 300, 10, 6)) == 0
+
+    def test_one_copy_is_not_a_row(self):
+        gray = sky()
+        drone(gray, 470, 300)
+        drone(gray, 470 + COLUMN, 300)
+        assert grid_twins(gray, (470, 300, 10, 6)) == 1
+        assert not on_osd_grid(gray, (470, 300, 10, 6))
+
+    def test_a_drone_beside_the_horizon_bar_is_not_on_the_grid(self):
+        gray = sky()
+        for k in range(-3, 4):
+            dash(gray, 470 + k * COLUMN, 300)
+        drone(gray, 486, 330)
+        assert not on_osd_grid(gray, (486, 330, 10, 6))
+
+    def test_a_flat_box_has_no_copies(self):
+        gray = np.full((HEIGHT, WIDTH), 150, dtype=np.uint8)
+        assert grid_twins(gray, (470, 300, 10, 10)) == 0
+
+    def test_a_box_at_the_frame_edge_is_not_an_error(self):
+        gray = sky()
+        dash(gray, 0, 0)
+        assert 0 <= grid_twins(gray, (0, 0, 8, 5)) <= len(GRID_STEPS)

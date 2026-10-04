@@ -369,6 +369,14 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-04 — [algo] **EXP-027: drop the OSD horizon dashes ("white dots") from the
+  sky/window split.** New `src.algo.masking.grid_twins` / `on_osd_grid`: a blob with copies
+  at 2 of the positions ±1, ±2 OSD columns away is a dash. GLAD's `has_twin` would have vetoed
+  the drone in 32 of 53 frames. Wired in as `overlay_split.py --osd-grid` and run by
+  `experiments/exp027_osd_grid/overlay_grid.py`. On catch_2 441–800, top 1: dash-band false
+  alarms 120 → 49, shown/frame 0.79 → 0.64, drone #1 53 → 57 (+5, −1 at 585). Not yet on
+  in `run_clips.py`. The end dashes of the row still get through.
+
 - [x] 2026-10-04 — [algo] **EXP-026: EXP-025d's sky/ground split overlay with only the #1
   per frame.** `experiments/exp026_top1/overlay_top1.py` runs `overlay_split.py --top 1
   --merge 20 --min-draw 20`. The drone is #1 in 53 of 224 labelled frames (36 sky,

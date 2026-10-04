@@ -122,3 +122,61 @@ def has_twin(gray: np.ndarray,
              threshold: float = TWIN_SCORE) -> bool:
     """Is this box one of a row of identical OSD characters?"""
     return twin_score(gray, box) >= threshold
+
+
+# --- The same tell, locked to the grid --------------------------------------
+#
+# `twin_score` looks anywhere 0.5-2.5 columns away. On GLAD's boxes that was
+# enough, but on the sky branch's 8-14 px blobs it is not: a small dark spot on
+# plain sky correlates with any other dark spot, and EXP-027 measured the drone
+# "twinning" in 32 of the 53 frames it was shown at #1. The dashes, though, sit
+# on the character grid, so their copies are *exactly* whole columns away. Asking
+# for copies at two of the four positions +-1 and +-2 columns -- with a few
+# pixels of slack, not a 64 px strip -- kept all 53 and still took 93 of the 120
+# false alarms the dashes made.
+
+GRID_STEPS = (-2, -1, 1, 2)  # in columns
+GRID_SLACK = 3  # horizontal slack around each grid position, in pixels
+GRID_ROWS = 8  # vertical slack per column stepped, in pixels, for roll
+GRID_MATCHES = 2  # grid positions that must hold a copy
+
+
+def grid_twins(gray: np.ndarray,
+               box: np.ndarray | tuple[float, float, float, float],
+               threshold: float = TWIN_SCORE,
+               columns: int = OSD_COLUMNS) -> int:
+    """How many of the positions +-1 and +-2 OSD columns away hold a copy of the box.
+
+    A copy is a normalised correlation of at least `threshold` within
+    `GRID_SLACK` px of the grid position horizontally and `GRID_ROWS` px per
+    column stepped vertically. Featureless boxes count none, as in `twin_score`.
+    """
+    height, width = gray.shape[:2]
+    column = width / columns
+    x, y, w, h = (float(v) for v in box)
+    x1 = max(int(round(x)) - TWIN_PAD, 0)
+    y1 = max(int(round(y)) - TWIN_PAD, 0)
+    x2 = min(int(round(x + w)) + TWIN_PAD, width)
+    y2 = min(int(round(y + h)) + TWIN_PAD, height)
+    template = gray[y1:y2, x1:x2].astype(np.float32)
+    if template.size == 0 or template.std() < TWIN_MIN_STD:
+        return 0
+
+    copies = 0
+    for step in GRID_STEPS:
+        dx = int(round(step * column))
+        dy = GRID_ROWS * abs(step)
+        strip = gray[max(y1 - dy, 0):min(y2 + dy, height),
+                     max(x1 + dx - GRID_SLACK, 0):min(x2 + dx + GRID_SLACK, width)]
+        if strip.shape[0] < template.shape[0] or strip.shape[1] < template.shape[1]:
+            continue
+        match = cv2.matchTemplate(strip.astype(np.float32), template,
+                                  cv2.TM_CCOEFF_NORMED)
+        copies += float(match.max()) >= threshold
+    return copies
+
+
+def on_osd_grid(gray: np.ndarray,
+                box: np.ndarray | tuple[float, float, float, float]) -> bool:
+    """Is this box a character in a row on the OSD grid, such as a horizon dash?"""
+    return grid_twins(gray, box) >= GRID_MATCHES
