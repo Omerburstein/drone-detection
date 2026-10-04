@@ -114,6 +114,12 @@ longer is not worse on analog — it is merely not better. What dominates is the
 1/k keeps the whole target at 167.6 candidates/frame and 2/k keeps 37% at ~20. There is no
 setting where persistence both filters and keeps the target.
 
+**Short windows (2026-10-04).** At k=3 and k=4 the loose end of the curve is 2/3 → 33% at
+13.8/frame and 2/4 → 34% at 16.4, against 2/5's 34% at 18.1. "Twice" is satisfied by the
+same target frames at every k, so the shortest window is the cheapest version of that gate.
+3/4 → 18% at 3.1 and 3/3 → 10% at 1.5. Videos for 2/3, 2/4, 2/5 and 3/5:
+`window{k}_need{m}_catch_2_441_800.mp4`.
+
 ### The fb gate, measured rather than assumed
 
 `usable residual steps per seed: median 0` at every k, against median 3 on O4. The analog

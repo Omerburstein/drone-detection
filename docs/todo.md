@@ -351,6 +351,13 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-04 — [algo] **EXP-024 on analog at 2/3, 2/4, 2/5 and 3/5, rendered for
+  viewing.** Four clean-look videos of `catch_2` 441-800, plus the first k=3 and k=4 curves
+  and dumps. At two appearances the window length barely matters to the target: 57, 60 and
+  60 of 174 frames at 13.8, 16.4 and 18.1 load/frame, so 2/3 is the cheapest of the three.
+  3/5 keeps 36 (21%) at 4.2. The sky branch beats every one of them at matched load by
+  1.6-1.8x, so the analog verdict stands. `docs/experiments.md` EXP-024 addendum.
+
 - [x] 2026-10-04 — [algo] **EXP-024's window gate against EXP-023's 2-frame sky branch, at
   matched load.** Recut both from dumps, no re-run, and **both out of the same 224 labelled
   frames** — EXP-024's printed recall divides by 174, which is the motion front-end's

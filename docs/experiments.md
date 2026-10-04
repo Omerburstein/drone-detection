@@ -3934,6 +3934,40 @@ beat long ones; EXP-024's own k=5/7/10/15 curves are the ablation, and they say 
 length barely matters here. What it says is that the whole motion-plus-persistence path is
 the weaker of the two on analog.
 
+### Added 2026-10-04: the loose end — 2/3, 2/4, 2/5 and 3/5 on analog, rendered for viewing
+
+The user asked for videos at these four gates. Same span, radius 9 px, fb gate 0.67 px, no
+direction test, clean look. k=3 and k=4 had not been run before; each one pass gives its
+whole curve, and their `--dump` CSVs reproduce those curves row for row. Drone frames are
+shown out of 174 (the motion front-end's ceiling, as the rest of this entry uses) and out of
+224 (every labelled frame, as the sky comparison above uses), with the sky branch recut from
+EXP-023's dump to the same load:
+
+| gate | load/frame | drone /174 | drone /224 | sky branch at that load |
+| ---: | ---: | ---: | ---: | ---: |
+| **2/3** | **13.8** | 57 (33%) | 25.4% | 95 (42.4%) at c>=4.46 |
+| **2/4** | **16.4** | 60 (34%) | 26.8% | 98 (43.8%) at c>=4.22 |
+| **2/5** | **18.1** | 60 (34%) | 26.8% | 99 (44.2%) at c>=4.09 |
+| 3/4 | 3.1 | 32 (18%) | 14.3% | 56 (25.0%) at c>=7.09 |
+| **3/5** | **4.2** | 36 (21%) | 16.1% | 63 (28.1%) at c>=6.58 |
+| 3/3 | 1.5 | 17 (10%) | 7.6% | 42 (18.8%) at c>=8.51 |
+| 4/4 | 0.4 | 8 (5%) | 3.6% | 13 (5.8%) at c>=12.05 |
+
+Bold rows are the four rendered. **At two appearances, shortening the window is close to
+free:** 2/3 sheds 24% of 2/5's load (13.8 against 18.1 per frame) for 3 drone frames
+(57 against 60). The same target frames satisfy "twice" whatever k is, and a shorter window
+gives clutter fewer chances to flash twice. That is the O4 mechanism above, here only at the
+loose end. **3/4 against 3/5 is a straight trade**, 4 frames for 1.1 load/frame, with
+nothing to choose between them.
+
+**None of it changes the analog verdict.** The sky branch is still 1.6-1.8x the recall at
+every one of these loads. The duplicates bite harder at short k by the same arithmetic as
+before: a duplicate lands in 3 of 6 windows at k=3 and 4 of 6 at k=4, so 3/3 and 4/4 are
+unreachable in half and two-thirds of windows respectively (not measured separately).
+Artifacts in `runs/sofa_analog/exp024_window_length/`:
+`window{3,4,5}_need2_catch_2_441_800.mp4` and `window5_need3_catch_2_441_800.mp4`, each with
+its `_analog.log`, plus `seeds_k3_` / `seeds_k4_catch_2_441_800.csv`.
+
 
 ### Standing recommendation
 
