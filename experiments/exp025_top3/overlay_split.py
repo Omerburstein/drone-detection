@@ -61,7 +61,15 @@ SPLIT_LINE = (60, 200, 230)
 SHOWN_FIELDS = ["frame", "rank", "section", "x", "y", "c", "diameter", "members",
                 "on_target"]
 DRONE_FIELDS = ["frame", "outcome", "rank", "section", "c"]
+FRAME_FIELDS = ["frame", "sky_fraction", "ranked_sky", "ranked_ground", "shown_sky",
+                "shown_ground", "folded", "osd_vetoed", "osd_vetoed_on_target"]
 OSD_BOX = (8, 14)  # the grid test's box side, px: blob diameter clamped to a dash's size
+
+
+def _blob(r: dict) -> dict:
+    return dict(x=float(r["x"]), y=float(r["y"]), c=float(r["c"]),
+                diameter=float(r["diameter"]), kept=r["kept"] == "1",
+                on_target=int(r["on_target"]))
 
 
 def load_dump(path: str) -> dict[int, list[dict]]:
@@ -69,13 +77,29 @@ def load_dump(path: str) -> dict[int, list[dict]]:
     by_frame = defaultdict(list)
     with open(path, encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
-            if r["reason"] == "cloud":
-                continue
-            by_frame[int(r["frame"])].append(dict(
-                x=float(r["x"]), y=float(r["y"]), c=float(r["c"]),
-                diameter=float(r["diameter"]), kept=r["kept"] == "1",
-                on_target=int(r["on_target"])))
+            if r["reason"] != "cloud":
+                by_frame[int(r["frame"])].append(_blob(r))
     return by_frame
+
+
+class DumpStream:
+    """`load_dump` one frame at a time, for dumps too big to hold (FIELD: ~5M rows).
+
+    `get(f)` must be called with increasing `f`, which is how `main` walks the span;
+    `overlay_sky` writes its dump in frame order, so one forward pass serves the run."""
+
+    def __init__(self, path: str) -> None:
+        self._fh = open(path, encoding="utf-8")
+        self._rows = csv.DictReader(self._fh)
+        self._next = next(self._rows, None)
+
+    def get(self, f: int, default=()) -> list[dict]:
+        out = []
+        while self._next is not None and int(self._next["frame"]) <= f:
+            r, self._next = self._next, next(self._rows, None)
+            if int(r["frame"]) == f and r["reason"] != "cloud":
+                out.append(_blob(r))
+        return out or list(default)
 
 
 def section_of(sky: np.ndarray, x: float, y: float) -> str:
@@ -97,16 +121,26 @@ def merge(blobs: list[dict], radius: float) -> list[dict]:
     """One frame's blobs as objects: strongest first, each anchor takes every remaining blob
     within `radius` px. The anchor keeps its centre, c and section; the diameter grows to
     cover the members, and the object is on the drone if any member is. `parts` keeps the
-    members for the sections' tests. `radius` 0 leaves every blob its own object."""
-    left = sorted(blobs, key=lambda b: (-b["c"], b["on_target"]))
+    members for the sections' tests. `radius` 0 leaves every blob its own object.
+
+    Vectorised per anchor: FIELD frames carry ~1400 candidates, where a pairwise Python
+    loop costs seconds a frame."""
+    order = sorted(blobs, key=lambda b: (-b["c"], b["on_target"]))
+    if not order:
+        return []
+    xy = np.array([[b["x"], b["y"]] for b in order])
+    half = np.array([b["diameter"] / 2 for b in order])
+    alive = np.ones(len(order), bool)
     out = []
-    while left:
-        a, rest = left[0], left[1:]
-        dist = [np.hypot(b["x"] - a["x"], b["y"] - a["y"]) for b in rest]
-        near = [b for b, d in zip(rest, dist) if d <= radius] if radius > 0 else []
-        left = [b for b, d in zip(rest, dist) if not (radius > 0 and d <= radius)]
-        reach = max([a["diameter"] / 2] + [np.hypot(b["x"] - a["x"], b["y"] - a["y"])
-                                           + b["diameter"] / 2 for b in near])
+    for i, a in enumerate(order):
+        if not alive[i]:
+            continue
+        alive[i] = False
+        d = np.hypot(xy[:, 0] - a["x"], xy[:, 1] - a["y"])
+        idx = np.nonzero(alive & (d <= radius))[0] if radius > 0 else np.array([], int)
+        alive[idx] = False
+        near = [order[k] for k in idx]
+        reach = max([a["diameter"] / 2, *(d[idx] + half[idx])])
         out.append(dict(a, diameter=2 * reach, members=1 + len(near), parts=[a, *near],
                         kept=any(b["kept"] for b in (a, *near)),
                         on_target=max(b["on_target"] for b in (a, *near))))
@@ -183,6 +217,9 @@ def main() -> None:
                     help="smallest circle drawn, px across; appearance only, never filters")
     ap.add_argument("--fps", type=float, default=10.0)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--report-only", action="store_true",
+                    help="no run: print the report from --out's existing _frames.csv and "
+                         "_drone.csv (how run_clips.py reports chunks it has joined)")
     a = ap.parse_args()
 
     span = f"{CLIP['name']}_{a.start}_{a.end}"
@@ -192,9 +229,12 @@ def main() -> None:
                            f"_{span}.mp4")
     stem = os.path.splitext(out)[0]
     os.makedirs(os.path.dirname(out), exist_ok=True)
+    if a.report_only:
+        report(a, out, stem, *read_tables(stem))
+        return
 
     survivors = load_survivors(wdump, a.min_appear)
-    blobs = load_dump(a.sky_dump)
+    blobs = DumpStream(a.sky_dump)
     boxes = load_boxes()
     stage0 = masks.Stage0()
     print("[stage 0] " + ", ".join(f"{k} {v:.2f}%" for k, v in stage0.coverage().items()))
@@ -209,11 +249,7 @@ def main() -> None:
     if not ok:
         raise SystemExit(f"cannot read frame {a.start - 1}")
     writer = cv2.VideoWriter(out, cv2.VideoWriter_fourcc(*"mp4v"), a.fps, (W, H))
-    shown_rows, drone_rows = [], []
-    load = dict.fromkeys(SECTIONS, 0)
-    shown_n = dict.fromkeys(SECTIONS, 0)
-    sky_frac, folded = [], 0
-    vetoed = dict(blobs=0, on_target=0)
+    shown_rows, drone_rows, frame_rows = [], [], []
     for f in range(a.start, a.end + 1):
         ok, cur = cap.read()
         if not ok:
@@ -221,23 +257,22 @@ def main() -> None:
         hmat = common.homography(common.prep(prev, 11), common.prep(cur, 11))
         prev = cur
         sl = skyline.split(cur, stage0.valid(hmat))
-        sky_frac.append(sl.sky_fraction)
         fb = [dict(b) for b in blobs.get(f, [])]
+        gone = []
         if a.osd_grid:
             gone = osd_vetoed(cv2.cvtColor(cur, cv2.COLOR_BGR2GRAY), fb)
-            vetoed["blobs"] += len(gone)
-            vetoed["on_target"] += sum(b["on_target"] for b in gone)
             fb = [b for b in fb if not any(b is g for g in gone)]
         for b in fb:
             b["section"] = section_of(sl.sky, b["x"], b["y"])
         objs = merge(fb, a.merge)
-        folded += len(fb) - len(objs)
         ranked = pool(objs, survivors.get(f), a.radius)
         shown = ranked[:a.top]
-        for b in ranked:
-            load[b["section"]] += 1
-        for b in shown:
-            shown_n[b["section"]] += 1
+        frame_rows.append(dict(
+            frame=f, sky_fraction=sl.sky_fraction,
+            **{f"{k}_{s}": sum(b["section"] == s for b in rows)
+               for k, rows in (("ranked", ranked), ("shown", shown)) for s in SECTIONS},
+            folded=len(fb) - len(objs), osd_vetoed=len(gone),
+            osd_vetoed_on_target=sum(b["on_target"] for b in gone)))
         shown_rows += [dict(frame=f, rank=i, section=b["section"], x=b["x"], y=b["y"],
                             c=b["c"], diameter=b["diameter"], members=b["members"],
                             on_target=b["on_target"])
@@ -258,16 +293,34 @@ def main() -> None:
     cap.release()
 
     for path, fields, rows in ((stem + ".csv", SHOWN_FIELDS, shown_rows),
-                               (stem + "_drone.csv", DRONE_FIELDS, drone_rows)):
+                               (stem + "_drone.csv", DRONE_FIELDS, drone_rows),
+                               (stem + "_frames.csv", FRAME_FIELDS, frame_rows)):
         with open(path, "w", newline="", encoding="utf-8") as fh:
             w = csv.DictWriter(fh, fieldnames=fields)
             w.writeheader()
             w.writerows(rows)
-    report(a, out, stem, load, shown_n, sky_frac, drone_rows, folded, vetoed)
+    report(a, out, stem, frame_rows, drone_rows)
 
 
-def report(a, out, stem, load, shown_n, sky_frac, drone_rows, folded, vetoed) -> None:
-    n = len(sky_frac)
+def read_tables(stem: str) -> tuple[list[dict], list[dict]]:
+    """The per-frame and drone tables a run wrote, typed as `main` builds them."""
+    with open(stem + "_frames.csv", encoding="utf-8") as fh:
+        frames = [{k: (float(v) if k == "sky_fraction" else int(v)) for k, v in r.items()}
+                  for r in csv.DictReader(fh)]
+    with open(stem + "_drone.csv", encoding="utf-8") as fh:
+        drone = [dict(r, frame=int(r["frame"]), rank=int(r["rank"]) if r["rank"] else "")
+                 for r in csv.DictReader(fh)]
+    return frames, drone
+
+
+def report(a, out, stem, frame_rows, drone_rows) -> None:
+    n = len(frame_rows)
+    sky_frac = [r["sky_fraction"] for r in frame_rows]
+    load = {s: sum(r[f"ranked_{s}"] for r in frame_rows) for s in SECTIONS}
+    shown_n = {s: sum(r[f"shown_{s}"] for r in frame_rows) for s in SECTIONS}
+    folded = sum(r["folded"] for r in frame_rows)
+    vetoed = dict(blobs=sum(r["osd_vetoed"] for r in frame_rows),
+                  on_target=sum(r["osd_vetoed_on_target"] for r in frame_rows))
     print(f"\n[video] {n} frames -> {out}\n[dump] every shown blob -> {stem}.csv"
           f"\n[dump] the drone, per labelled frame -> {stem}_drone.csv")
     print(f"\n  stage 1 sky fraction: median {np.median(sky_frac):.0%}, "

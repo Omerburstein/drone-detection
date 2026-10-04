@@ -64,9 +64,11 @@ CLOSE = max(3, int(round(px(15.0))) | 1)
 MAX_HOLE_PX = int(round(px(60.0)) ** 2)      # a 60x60 target must not punch out of sky
 UNCERTAIN_PX = max(4, int(round(px(24.0))))  # half-width of the band around the boundary
 
-# Percentiles, not grey levels. A frame decides its own thresholds.
-TEXTURE_PCTL = 45.0       # below this texture percentile a pixel may be sky
-LUMA_PCTL = 55.0          # and above this luminance percentile
+# Percentiles, not grey levels. A frame decides its own thresholds. A clip may override
+# both: on the FIELD capture deep blue sky is darker than sunlit ground, so "sky is bright"
+# is false there (EXP-025e sets luma 0, texture 60; colour carries the call instead).
+TEXTURE_PCTL = float(CLIP.get("sky_texture_pctl", 45.0))  # below this texture pctl: may be sky
+LUMA_PCTL = float(CLIP.get("sky_luma_pctl", 55.0))        # and above this luminance pctl
 MIN_SKY_FRAC = 0.004      # below this, call the frame skyless rather than invent a region
 
 
