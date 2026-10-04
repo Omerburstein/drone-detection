@@ -169,6 +169,11 @@ frames on catch_4 and 31 of 188 on catch_5, against 33 and 30 for the sky branch
 Stage 1 finds little sky on either (median 0% and 7%), so the window ranks nearly
 everything. The split pays off only where the sky mask works.
 
+FIELD (`run_clips.py field`, output in `runs/field/exp025_top3/`) has no labels. Its sky is
+darker than its ground, so its config turns stage 1's brightness test off. The sky branch
+shows 0.64–0.77/frame inside the drone episodes and 0.17 outside them; the ground section
+shows 0.01.
+
 ## Result
 
 See EXP-025 in `docs/experiments.md`, and its 2026-10-04 addendum for the gate.

@@ -369,6 +369,13 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-04 — [algo] **EXP-025e on the FIELD capture.** The split overlay (merge 20,
+  circles >= 20 px) over all 3,599 frames, with stage 1's brightness test off for FIELD
+  (`sky_luma_pctl` / `sky_texture_pctl`, new per-clip knobs in `skyline.py`). 0.31
+  shown/frame: 0.64 and 0.77 in the two main drone episodes, 0.17 outside them, and the
+  ground section is nearly silent. No labels, so no rank. Video in
+  `runs/field/exp025_top3/`.
+
 - [x] 2026-10-04 — [algo] **EXP-025e: the sky/ground split overlay on catch_4 and catch_5.**
   `experiments/exp025_top3/run_clips.py` (merge 20 px, circles >= 20 px), reusing EXP-023's
   sky dumps. Drone in the top 3: catch_4 14 of 82 (sky alone 33), catch_5 31 of 188 (sky

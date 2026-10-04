@@ -4506,3 +4506,43 @@ Artifacts in `runs/sofa_analog/exp025_top3/{catch_4,catch_5}/`:
 `split_sky_window2of4_top3_merge20_<clip>_<span>.mp4`, its `.csv`, `_drone.csv`,
 `_rank_hist.png`, `seeds_k4_<clip>_<span>.csv`, and `window_`/`split_<clip>.log`.
 `clips_summary.py` prints the per-clip table from the logs.
+
+### Added 2026-10-04: the split on the FIELD capture — the sky branch carries it, the ground stays quiet (EXP-025e)
+
+The same overlay (merge 20 px, circles at least 20 px) on all of
+`captured_raw_20260616_040253_004` (frames 2–3600), at the user's request. There are no
+labels, so there is no drone rank. Episodes are PROVENANCE's ranges (2–180, 1101–1553,
+3140–3600), which come from where GLAD fired, not from ground truth.
+
+**Stage 1 needed a per-clip setting.** "Sky is bright" (luminance above the frame's 55th
+percentile) is false here: the deep blue sky is darker than the sunlit hillside, and the
+drone in open sky landed in the ground section. `skyline.py` now reads `sky_luma_pctl`
+and `sky_texture_pctl` from the clip config, with defaults unchanged, so analog does not
+move. FIELD sets 0 and 60, and colour carries the call. Checked by eye on frames 50, 600,
+1111, 1300, 1500, 3200 and 3300; the line follows the ridge.
+
+| FIELD, frames | stage 1 sky, median | shown/frame, sky | shown/frame, ground |
+| --- | :---: | ---: | ---: |
+| all 3599 | 33% (no skyless frame) | 0.30 | 0.01 |
+| episode 2–180 | 39% | 0.08 | 0.01 |
+| episode 1101–1553 | 34% | 0.64 | 0.02 |
+| episode 3140–3600 | 48% | 0.77 | 0.00 |
+| outside the episodes (2506) | 29% | 0.17 | 0.02 |
+
+The sky branch fires mostly inside the drone episodes: 0.64 and 0.77 shown/frame there,
+against 0.17 outside. Frames 1300 and 3300 show the drone at #1 in the sky. The ground
+section is nearly silent at 0.01/frame. The hillside gives ~1,400 candidates/frame, 978
+of which the 20 px merge folds away, and the 2-of-4 window confirms almost none of the
+rest. Whether the 0.17/frame outside the episodes is clutter or a drone that GLAD missed
+needs labels (the open todo to annotate FIELD).
+
+Cost: the sky branch is ~4 s/frame here against ~0.7 on analog, because of the
+candidate count. `run_clips.py` runs it and the overlay in 4 parallel frame ranges and
+joins them exactly. A 20-frame field test of the join matched a single pass, and the
+chunked sky dump matched one byte for byte. A first single-pass overlay was killed at
+the 2 h background limit with an unplayable video.
+
+Artifacts in `runs/field/exp025_top3/`:
+`split_sky_window2of4_top3_merge20_captured_raw_20260616_040253_004_2_3600.mp4`, its
+`.csv`, `_frames.csv` (per-frame sky fraction and counts), the candidate and seed dumps,
+and `split_field.log`.

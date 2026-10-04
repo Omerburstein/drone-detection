@@ -40,7 +40,7 @@ def main() -> None:
             print(f"| {key} | not run | | | | | | |")
             continue
         r = parse(log)
-        drone = ("| | |" if not r["labelled"] else
+        drone = ("| | | |" if not r["labelled"] else
                  f"| {r['top3'][2]} of {r['labelled']} | {r['1'][2]} / {r['2'][2]} / "
                  f"{r['3'][2]} | {r['dropped'][0]}, {r['dropped'][1]} |")
         print(f"| {key} | {r['frames']} | {r['sky']}% / {r['skyless']} | {r['ranked'][2]} "
