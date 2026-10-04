@@ -21,7 +21,7 @@ drone if any member is; it passes the sky test if any member has c >= 6, the gro
 if a window survivor is within 9 px of any member. Drawn from EXP-023's candidate
 dump and EXP-024's `seeds_k4_` dump; only stage 1 is computed here, no detector re-run.
 
-The clean look: stage-0 tints, red circles at least 10 px across tagged `#rank c sky|gnd`,
+The clean look: stage-0 tints, red circles at least `--min-draw` px across (default 10) tagged `#rank c sky|gnd`,
 `#1` thicker, a two-line caption. The split is drawn as stage 1's horizon (lowest sky row
 per column), a thin line; `--no-split-line` drops it. Nothing is drawn from the labels.
 
@@ -43,7 +43,7 @@ import common
 import masks
 import skyline
 from clipcfg import CLIP
-from overlay_sky import KEPT, _draw_background, draw_radius
+from overlay_sky import KEPT, MIN_DRAW_DIAMETER, _draw_background
 from overlay_video import load_boxes, px, text_block
 from overlay_window_skyc import confirmed, load_survivors
 
@@ -123,14 +123,14 @@ def drone_row(f: int, ranked: list[dict], blobs: list[dict], box, sky) -> dict:
                 section=section_of(sky, bx + bw / 2, by + bh / 2), c="")
 
 
-def draw(img, shown: list[dict], sl: skyline.Skyline, line: bool) -> None:
+def draw(img, shown: list[dict], sl: skyline.Skyline, line: bool, min_draw: float) -> None:
     if line:
         xs = np.nonzero(sl.horizon >= 0)[0]
         if len(xs):
             pts = np.stack([xs, sl.horizon[xs]], axis=1).astype(np.int32)
             cv2.polylines(img, [pts], False, SPLIT_LINE, max(1, px(1)), cv2.LINE_AA)
     for i, b in enumerate(shown, 1):
-        p, r = (int(b["x"]), int(b["y"])), draw_radius(b["diameter"])
+        p, r = (int(b["x"]), int(b["y"])), int(round(max(b["diameter"], min_draw) / 2))
         cv2.circle(img, p, r, KEPT, max(1, px(1)) + (1 if i == 1 else 0))
         tag = f"#{i} {b['c']:.1f} {TAG[b['section']]}"
         org = (p[0] + r + 3, p[1] - r - 2)
@@ -159,6 +159,8 @@ def main() -> None:
                     default=RUNS + "exp023_sky_branch/candidates_catch_2_441_800.csv")
     ap.add_argument("--no-split-line", action="store_true",
                     help="do not draw stage 1's horizon")
+    ap.add_argument("--min-draw", type=float, default=MIN_DRAW_DIAMETER,
+                    help="smallest circle drawn, px across; appearance only, never filters")
     ap.add_argument("--fps", type=float, default=10.0)
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
@@ -218,7 +220,7 @@ def main() -> None:
 
         img = cur.copy()
         _draw_background(img, None, stage0, sky=False)
-        draw(img, shown, sl, not a.no_split_line)
+        draw(img, shown, sl, not a.no_split_line, a.min_draw)
         text_block(img, [f"frame {f}    sky: sky branch c>=6   ground: {a.min_appear} of "
                          f"{a.k} window    top {a.top} by sky c",
                          f"ranked  sky {sum(b['section'] == 'sky' for b in ranked)}"

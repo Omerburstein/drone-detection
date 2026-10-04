@@ -4353,3 +4353,26 @@ there.
 
 Artifacts in `runs/sofa_analog/exp025_top3/`: `split_sky_window2of4_top3_merge10_catch_2_441_800.mp4`,
 its `.csv` (adds `members`), `_drone.csv` and `_rank_hist.png`.
+
+### Added 2026-10-04: merge at 20 px (40 px across) — one clean gain, two loose ones
+
+The same run with `--merge 20`, and circles drawn at least 20 px across (`--min-draw 20`,
+appearance only; scoring and merging are unaffected).
+
+| catch_2 441–800 | candidates folded | ranked/frame | shown/frame | drone in top 3 (of 224) | #1 / #2 / #3 | dropped (sky, ground) |
+| --- | ---: | ---: | ---: | ---: | :---: | :---: |
+| EXP-025d, no merge | 0 | 2.00 | 1.66 | 66 | 52 / 10 / 4 | 9, 145 |
+| merge 10 px | 231 (0.64/frame) | 1.99 | 1.65 | 66 | 52 / 10 / 4 | 9, 145 |
+| **merge 20 px** | **1893 (5.26/frame)** | **1.95** | **1.62** | **68** | **53 / 10 / 5** | **9, 142** |
+
+Four frames change. **Only one is a clean gain**: in 585 the drone's own blob anchors a
+6-member merge and moves from #2 to #1. In 581 (ground, #3) and 590 (sky, #2) the anchor is
+a clutter blob that absorbed a drone blob within 20 px. The merged blob counts as the drone,
+and its grown circle covers the drone, but it is not centred on the drone. 782 moves from
+dropped to #5. Counting only anchors on the drone, the top 3 holds it in 66 frames, as
+without the merge, and #1 in 53. At 20 px the merge folds most candidates in a frame
+(5.26/frame) but changes the shown load by only 0.04/frame. The ground section's drops fall
+from 145 to 142, consistent with the motion window, not fragmentation, being the limit.
+
+Artifacts in `runs/sofa_analog/exp025_top3/`: `split_sky_window2of4_top3_merge20_catch_2_441_800.mp4`,
+its `.csv`, `_drone.csv` and `_rank_hist.png`.

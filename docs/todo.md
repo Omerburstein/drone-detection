@@ -369,6 +369,12 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-04 — [algo] **EXP-025d re-run with blobs merged at 20 px (40 px across),
+  circles drawn at least 20 px.** `overlay_split.py --merge 20 --min-draw 20`. The drone
+  is in the top 3 in 68 of 224 frames and #1 in 53, against 66 / 52 unmerged. Of the 3
+  new top-3 frames, 2 are a clutter anchor absorbing the drone. One clean gain (585, #2 to
+  #1).
+
 - [x] 2026-10-04 — [algo] **EXP-025d re-run with blobs merged at 10 px (20 px across).**
   `overlay_split.py --merge 10` folds every candidate within 10 px of a stronger one before
   the sections' tests (231 folded, 0.64/frame). The drone's result is unchanged: 66 of 224
