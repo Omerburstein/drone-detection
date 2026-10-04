@@ -4326,3 +4326,30 @@ Artifacts in `runs/sofa_analog/exp025_top3/`: `split_sky_window2of4_top3_catch_2
 its `.csv` (every shown blob: frame, rank, section, x, y, c, diameter, on_target),
 `_drone.csv` (per labelled frame: outcome, rank, section, c), `_rank_hist.png` and
 `split_analog.log`.
+
+### Added 2026-10-04: EXP-025d with blobs merged at 10 px (20 px across) — no change for the drone
+
+The user asked for the distance threshold at 20 px: every blob within a 10 px radius
+summed into one. `overlay_split.py --merge 10` does that **before either section's test**.
+Strongest blob first, each anchor takes every remaining non-cloud candidate within 10 px.
+The merged blob keeps the anchor's centre, c and section, and grows to cover its members.
+It passes the sky test if any member has c >= 6, and the ground test if a 2-of-4 survivor
+is within 9 px of any member. It is on the drone if any member is. With `--merge 0` the
+script reproduces EXP-025d exactly.
+
+| catch_2 441–800 | candidates folded | ranked/frame | shown/frame | drone in top 3 (of 224) | #1 / #2 / #3 | dropped (sky, ground) |
+| --- | ---: | ---: | ---: | ---: | :---: | :---: |
+| EXP-025d, no merge | 0 | 2.00 | 1.66 | 66 | 52 / 10 / 4 | 9, 145 |
+| **merge 10 px** | **231 (0.64/frame)** | **1.99** | **1.65** | **66** | **52 / 10 / 4** | **9, 145** |
+
+**The merge folds 231 candidates and changes the drone's outcome in no frame.** Ranked
+blobs are rarely close to each other: of 509 shown blobs, 6 have another shown blob within
+10 px and 41 within 20 px. A first version that merged after the tests, with a 20 px
+radius, also left the drone's rank unchanged everywhere. The ground section's 145 drops
+are not a fragmentation problem. In those frames the nearest 2-of-4 survivor is a median
+79 px from the drone's blob, and 32 frames have no survivor at all. Even a 20 px
+seed-to-blob radius would recover at most 13. The motion window does not fire on the drone
+there.
+
+Artifacts in `runs/sofa_analog/exp025_top3/`: `split_sky_window2of4_top3_merge10_catch_2_441_800.mp4`,
+its `.csv` (adds `members`), `_drone.csv` and `_rank_hist.png`.

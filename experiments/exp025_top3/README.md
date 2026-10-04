@@ -16,7 +16,7 @@ drone among them, and how often is it #1?
 | `overlay_gate.py` | EXP-025b: the same top N, after a persistence gate of `--min-appear` of `--k` frames (default 4 of 5). `--coords scene` (default) chains camera-compensated, `--coords image` in raw picture coordinates. Prints every threshold 1..k from one pass. Writes a CSV of every kept candidate (`frame, x, y, c, diameter, appearances, rank_all, on_target`). |
 | `drone_ranks.py` | reads `overlay_gate.py`'s CSV and writes a Markdown table of every frame the drone is in a top N, with its rank with and without the gate. Any threshold, no re-render. |
 | `overlay_window_skyc.py` | EXP-025c: EXP-024's 2-of-4 motion window decides what survives, the sky branch's `c` decides the order. Drawn from EXP-024's `seeds_k4_` dump and EXP-023's candidate dump, no detector re-run. A blob is ranked when a survivor lies within 9 px; no c threshold, cloud vetoes dropped (`--keep-cloud` keeps them). Writes a CSV of every shown blob. |
-| `overlay_split.py` | EXP-025d: stage 1 splits the frame; the sky branch (c >= 6) ranks on the sky, EXP-025c's 2-of-4 window on the ground, one pooled top 3 by c. Writes a CSV of every shown blob and a per-labelled-frame `_drone.csv`. |
+| `overlay_split.py` | EXP-025d: stage 1 splits the frame; the sky branch (c >= 6) ranks on the sky, EXP-025c's 2-of-4 window on the ground, one pooled top 3 by c. `--merge R` folds blobs within R px into one first. Writes a CSV of every shown blob and a per-labelled-frame `_drone.csv`. |
 | `split_rank_hist.py` | reads `overlay_split.py`'s `_drone.csv` and draws the drone's rank histogram, stacked by section. |
 
 The candidates come from EXP-023's `silhouette.detect` and the drawing helpers from its
@@ -145,6 +145,12 @@ histogram, stacked by section.
 
 The sky section ranks the drone in 36 frames, all at #1. The ground section ranks it in
 33 (16 / 10 / 4 in the top 3) and drops it in 145.
+
+`--merge 10` folds every candidate within 10 px of a stronger one into it before the
+sections' tests, so a 20 px-wide cluster is one blob: anchor's centre, c and section,
+grown to cover its members, passing a test if any member does. On catch_2 it folds 231
+candidates (0.64/frame) and leaves the drone's numbers unchanged: 66 in the top 3, 52 / 10
+/ 4. The outputs carry `_merge10` in their names, and the CSV has a `members` column.
 
 ## Result
 

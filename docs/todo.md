@@ -369,6 +369,12 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-04 — [algo] **EXP-025d re-run with blobs merged at 10 px (20 px across).**
+  `overlay_split.py --merge 10` folds every candidate within 10 px of a stronger one before
+  the sections' tests (231 folded, 0.64/frame). The drone's result is unchanged: 66 of 224
+  in the top 3, 52 at #1. The ground section's 145 drops have no 2-of-4 survivor near the
+  drone (median 79 px away), so the motion window, not fragmentation, is the bottleneck.
+
 - [x] 2026-10-04 — [algo] **EXP-025d: sky/ground split, the sky branch on the sky, the
   2-of-4 window on the ground, top 3 by sky c.** `experiments/exp025_top3/overlay_split.py`
   recomputes stage 1 per frame and pools both sections into one ranking. The drone is in

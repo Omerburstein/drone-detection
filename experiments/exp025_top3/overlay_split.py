@@ -13,7 +13,12 @@ stage 1 called.
     blob (any c, cloud vetoes dropped) confirmed by a window survivor within 9 px.
 
 Both sections are pooled and ranked by the sky branch's contrast `c`, and the top `--top`
-are drawn: **one ranking per frame, not one per section.** Drawn from EXP-023's candidate
+are drawn: **one ranking per frame, not one per section.** `--merge R` first folds every blob
+within R px of a stronger one into it, before either section's test (the strongest blob
+anchors, the rest of its 2R-wide circle joins it), so one object is one candidate. A merged
+blob keeps the anchor's centre, c and section, grows to cover its members, and is on the
+drone if any member is; it passes the sky test if any member has c >= 6, the ground test
+if a window survivor is within 9 px of any member. Drawn from EXP-023's candidate
 dump and EXP-024's `seeds_k4_` dump; only stage 1 is computed here, no detector re-run.
 
 The clean look: stage-0 tints, red circles at least 10 px across tagged `#rank c sky|gnd`,
@@ -47,7 +52,8 @@ W, H = CLIP["width"], CLIP["height"]
 SECTIONS = ("sky", "ground")
 TAG = {"sky": "sky", "ground": "gnd"}
 SPLIT_LINE = (60, 200, 230)
-SHOWN_FIELDS = ["frame", "rank", "section", "x", "y", "c", "diameter", "on_target"]
+SHOWN_FIELDS = ["frame", "rank", "section", "x", "y", "c", "diameter", "members",
+                "on_target"]
 DRONE_FIELDS = ["frame", "outcome", "rank", "section", "c"]
 
 
@@ -70,13 +76,35 @@ def section_of(sky: np.ndarray, x: float, y: float) -> str:
     return "sky" if sky[yi, xi] else "ground"
 
 
-def pool(blobs: list[dict], seeds: np.ndarray | None, sky: np.ndarray,
-         radius: float) -> list[dict]:
-    """Both sections' candidates, highest c first. Ties put clutter ahead of the drone."""
-    for b in blobs:
-        b["section"] = section_of(sky, b["x"], b["y"])
-    upper = [b for b in blobs if b["section"] == "sky" and b["kept"]]
-    lower = confirmed([b for b in blobs if b["section"] == "ground"], seeds, radius)
+def merge(blobs: list[dict], radius: float) -> list[dict]:
+    """One frame's blobs as objects: strongest first, each anchor takes every remaining blob
+    within `radius` px. The anchor keeps its centre, c and section; the diameter grows to
+    cover the members, and the object is on the drone if any member is. `parts` keeps the
+    members for the sections' tests. `radius` 0 leaves every blob its own object."""
+    left = sorted(blobs, key=lambda b: (-b["c"], b["on_target"]))
+    out = []
+    while left:
+        a, rest = left[0], left[1:]
+        dist = [np.hypot(b["x"] - a["x"], b["y"] - a["y"]) for b in rest]
+        near = [b for b, d in zip(rest, dist) if d <= radius] if radius > 0 else []
+        left = [b for b, d in zip(rest, dist) if not (radius > 0 and d <= radius)]
+        reach = max([a["diameter"] / 2] + [np.hypot(b["x"] - a["x"], b["y"] - a["y"])
+                                           + b["diameter"] / 2 for b in near])
+        out.append(dict(a, diameter=2 * reach, members=1 + len(near), parts=[a, *near],
+                        kept=any(b["kept"] for b in (a, *near)),
+                        on_target=max(b["on_target"] for b in (a, *near))))
+    return out
+
+
+def pool(objs: list[dict], seeds: np.ndarray | None, radius: float) -> list[dict]:
+    """Both sections' objects, highest c first. Ties put clutter ahead of the drone. A sky
+    object passes when any member is kept (c >= 6), a ground object when a window survivor
+    is within `radius` of any member."""
+    upper = [o for o in objs if o["section"] == "sky" and o["kept"]]
+    ground = [o for o in objs if o["section"] == "ground"]
+    parts = [dict(p, obj=k) for k, o in enumerate(ground) for p in o["parts"]]
+    hit = {p["obj"] for p in confirmed(parts, seeds, radius)}
+    lower = [o for k, o in enumerate(ground) if k in hit]
     return sorted(upper + lower, key=lambda b: (-b["c"], b["on_target"]))
 
 
@@ -121,6 +149,10 @@ def main() -> None:
     ap.add_argument("--top", type=int, default=3, help="at most this many per frame, pooled")
     ap.add_argument("--radius", type=float, default=9.0,
                     help="seed-to-blob distance that confirms a ground blob, px")
+    ap.add_argument("--merge", type=float, default=0.0,
+                    help="fold blobs within this many px of a stronger one into it, before "
+                         "the sections' tests "
+                         "(0: off, EXP-025d)")
     ap.add_argument("--window-dump", default=None,
                     help="EXP-024 seed dump (default: its seeds_k{k}_ CSV for this span)")
     ap.add_argument("--sky-dump",
@@ -134,7 +166,8 @@ def main() -> None:
     span = f"{CLIP['name']}_{a.start}_{a.end}"
     wdump = a.window_dump or RUNS + f"exp024_window_length/seeds_k{a.k}_{span}.csv"
     out = a.out or RUNS + (f"exp025_top3/split_sky_window{a.min_appear}of{a.k}"
-                           f"_top{a.top}_{span}.mp4")
+                           f"_top{a.top}{f'_merge{a.merge:g}' if a.merge else ''}"
+                           f"_{span}.mp4")
     stem = os.path.splitext(out)[0]
     os.makedirs(os.path.dirname(out), exist_ok=True)
 
@@ -144,7 +177,8 @@ def main() -> None:
     stage0 = masks.Stage0()
     print("[stage 0] " + ", ".join(f"{k} {v:.2f}%" for k, v in stage0.coverage().items()))
     print(f"[sky section] {a.sky_dump}, c >= 6\n[ground section] {a.min_appear} of {a.k} "
-          f"from {wdump}, blob within {a.radius:g} px, any c\n[rank] pooled by c, top {a.top}")
+          f"from {wdump}, blob within {a.radius:g} px, any c\n[rank] pooled by c, top {a.top}"
+          + (f", blobs within {a.merge:g} px merged" if a.merge else ""))
 
     cap = cv2.VideoCapture(CLIP["video"])
     cap.set(cv2.CAP_PROP_POS_FRAMES, a.start - 2)
@@ -155,7 +189,7 @@ def main() -> None:
     shown_rows, drone_rows = [], []
     load = dict.fromkeys(SECTIONS, 0)
     shown_n = dict.fromkeys(SECTIONS, 0)
-    sky_frac = []
+    sky_frac, folded = [], 0
     for f in range(a.start, a.end + 1):
         ok, cur = cap.read()
         if not ok:
@@ -165,17 +199,22 @@ def main() -> None:
         sl = skyline.split(cur, stage0.valid(hmat))
         sky_frac.append(sl.sky_fraction)
         fb = [dict(b) for b in blobs.get(f, [])]
-        ranked = pool(fb, survivors.get(f), sl.sky, a.radius)
+        for b in fb:
+            b["section"] = section_of(sl.sky, b["x"], b["y"])
+        objs = merge(fb, a.merge)
+        folded += len(fb) - len(objs)
+        ranked = pool(objs, survivors.get(f), a.radius)
         shown = ranked[:a.top]
         for b in ranked:
             load[b["section"]] += 1
         for b in shown:
             shown_n[b["section"]] += 1
         shown_rows += [dict(frame=f, rank=i, section=b["section"], x=b["x"], y=b["y"],
-                            c=b["c"], diameter=b["diameter"], on_target=b["on_target"])
+                            c=b["c"], diameter=b["diameter"], members=b["members"],
+                            on_target=b["on_target"])
                        for i, b in enumerate(shown, 1)]
         if f in boxes:
-            drone_rows.append(drone_row(f, ranked, fb, boxes[f], sl.sky))
+            drone_rows.append(drone_row(f, ranked, objs, boxes[f], sl.sky))
 
         img = cur.copy()
         _draw_background(img, None, stage0, sky=False)
@@ -195,10 +234,10 @@ def main() -> None:
             w = csv.DictWriter(fh, fieldnames=fields)
             w.writeheader()
             w.writerows(rows)
-    report(a, out, stem, load, shown_n, sky_frac, drone_rows)
+    report(a, out, stem, load, shown_n, sky_frac, drone_rows, folded)
 
 
-def report(a, out, stem, load, shown_n, sky_frac, drone_rows) -> None:
+def report(a, out, stem, load, shown_n, sky_frac, drone_rows, folded) -> None:
     n = len(sky_frac)
     print(f"\n[video] {n} frames -> {out}\n[dump] every shown blob -> {stem}.csv"
           f"\n[dump] the drone, per labelled frame -> {stem}_drone.csv")
@@ -208,6 +247,9 @@ def report(a, out, stem, load, shown_n, sky_frac, drone_rows) -> None:
           f"  total {sum(load.values()) / n:5.2f}")
     print(f"  shown/frame   sky {shown_n['sky'] / n:5.2f}  ground {shown_n['ground'] / n:5.2f}"
           f"  total {sum(shown_n.values()) / n:5.2f}")
+    if a.merge:
+        print(f"  merge {a.merge:g} px folded {folded} candidates ({folded / n:.2f}/frame) "
+              f"into stronger ones, before the sections' tests")
     print(f"\n  drone, of {len(drone_rows)} labelled frames      sky  ground  total")
     for name, keep in (("ranked", lambda r: r["outcome"] == "ranked"),
                        (f"in the top {a.top}", lambda r: r["outcome"] == "ranked"
