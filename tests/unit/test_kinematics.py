@@ -269,3 +269,100 @@ class TestEvidence:
     def test_a_candidate_on_no_track_has_no_evidence(self):
         r = step(tracker(), 0, (100, 100), strong=[False])
         assert r.evidence.tolist() == [0.0]
+
+
+# --- the moving factor: the limit from below -------------------------------------------
+#
+# The speed limit passes anything that stays put, so these cover the other side. The two
+# failures that matter mirror the ones above: a factor that is too loose keeps static
+# clutter forever, and one that is too tight drops the drone -- here by being applied
+# before the track has enough history to measure, or by charging the target for the
+# camera's own motion.
+
+
+def test_min_move_zero_changes_nothing():
+    """The default must be inert: EXP-028's measured behaviour has to survive untouched."""
+    a, b = tracker(), tracker(min_move=50.0, move_window=3)
+    for f in range(1, 8):
+        ra = step(a, f, (100.0, 100.0))
+        rb = step(b, f, (100.0, 100.0))
+        assert ra.reason[0] == OK if f >= 2 else True
+        if f < 1 + 3:                      # before the window spans, both agree
+            assert ra.reason[0] == rb.reason[0]
+
+
+def test_static_clutter_is_overruled_once_the_window_spans():
+    """A point that never moves is shown until its history spans the window, then dropped."""
+    t = tracker(min_move=5.0, move_window=3)
+    reasons = [step(t, f, (100.0, 100.0)).reason[0] for f in range(1, 7)]
+    assert reasons[0] == NEW                     # born, not yet confirmed
+    assert reasons[1] == OK                      # confirmed, no span yet
+    assert reasons[2] == OK                      # span 2 < window 3
+    assert reasons[3:] == ["too-still"] * 3      # span reaches 3: overruled from here on
+
+
+def test_a_mover_passes_the_same_factor():
+    """4 px/frame over a 3 frame window is 12 px of travel, above a 5 px factor."""
+    t = tracker(min_move=5.0, move_window=3)
+    out = [step(t, f, (100.0 + 4.0 * f, 100.0)).reason[0] for f in range(1, 7)]
+    assert out[1:] == [OK] * 5
+    assert "too-still" not in out
+
+
+def test_the_factor_is_measured_against_the_scene_not_the_picture():
+    """A still object under a panning camera must not be credited with the camera's motion.
+
+    The anchors are carried by the homography, so a point that tracks the pan exactly has
+    zero scene displacement even though its picture position moved 24 px.
+    """
+    t = tracker(min_move=5.0, move_window=3)
+    reason = None
+    for f in range(1, 7):
+        x = 100.0 + 8.0 * (f - 1)            # the point moves with the pan
+        r = step(t, f, (x, 100.0), hmat=shift(8.0, 0.0) if f > 1 else None)
+        reason, moved = r.reason[0], r.moved[0]
+    assert reason == "too-still"
+    assert moved == pytest.approx(0.0, abs=1e-6)
+
+
+def test_a_real_mover_under_a_panning_camera_still_passes():
+    """The mirror of the test above: motion on top of the pan is kept."""
+    t = tracker(min_move=5.0, move_window=3)
+    for f in range(1, 7):
+        x = 100.0 + 8.0 * (f - 1) + 3.0 * (f - 1)   # pan plus 3 px/frame of its own
+        r = step(t, f, (x, 100.0), hmat=shift(8.0, 0.0) if f > 1 else None)
+    assert r.reason[0] == OK
+    assert r.moved[0] == pytest.approx(9.0, abs=1e-6)   # 3 px/frame across 3 frames
+
+
+def test_moved_and_span_are_reported_and_counted():
+    """The report needs the measurement itself, not just the verdict."""
+    t = tracker(min_move=5.0, move_window=2)
+    step(t, 1, (100.0, 100.0))
+    step(t, 2, (100.0, 100.0))
+    r = step(t, 3, (100.0, 100.0))
+    assert r.move_span[0] == 2
+    assert r.moved[0] == pytest.approx(0.0)
+    assert r.too_still == 1
+    assert not r.shown[0]
+
+
+def test_move_vector_points_the_way_the_track_travelled():
+    """EXP-029's direction test needs the vector, so it has to come out intact."""
+    t = tracker(min_move=1.0, move_window=2)
+    step(t, 1, (100.0, 100.0))
+    step(t, 2, (103.0, 104.0))
+    r = step(t, 3, (106.0, 108.0))
+    assert r.move_vec[0] == pytest.approx([6.0, 8.0])
+    assert r.moved[0] == pytest.approx(10.0)
+
+
+def test_a_coasting_track_does_not_measure_across_a_stale_anchor():
+    """Anchors older than the window are dropped, so a gap cannot inflate the travel."""
+    t = tracker(min_move=5.0, move_window=3)
+    step(t, 1, (100.0, 100.0))
+    step(t, 2, (100.0, 100.0))
+    step(t, 6, (100.0, 100.0))          # seen again after 4 missed frames
+    r = step(t, 7, (100.0, 100.0))
+    assert r.move_span[0] == 1           # only the frame-6 anchor is inside the window
+    assert r.reason[0] == OK             # and with no span, it is not yet judged

@@ -33,8 +33,25 @@ scores cross. Each track therefore carries `evidence`, a decayed sum of its cand
 scores (`decay` per frame, so a track missed for a frame loses some of it). Ranking by
 evidence keeps #1 on the object with the stronger recent history.
 
-What this does not do: it stops answers *jumping*. A piece of clutter that stays put moves
-plausibly by definition, and this gate passes it.
+**The moving factor, the limit from below.** The speed limit is an upper bound, so a piece
+of clutter that stays put moves plausibly by definition and passes it. `min_move` adds the
+other side: a confirmed track must have travelled at least that far **against the static
+scene** over the last `move_window` frames, or it is overruled as `too-still`. Each track
+keeps its past sightings as `anchors` and carries every one of them forward through each
+frame's homography, so differencing the current sighting against the oldest anchor removes
+ego-motion and leaves motion relative to the scene. Measured on `catch_2` (EXP-024,
+2026-10-04): the target's ego-compensated travel over 5 frames is a median 28.4 px with a
+p10 of 13.9, against the background field's median 3.18 px and p90 5.60 — tails that do not
+overlap, which is what makes a threshold between them possible.
+
+A track is held to it only once its history actually spans `move_window` frames. Before
+that there is no measurement, and refusing would kill every track at birth. `min_move = 0`
+disables the test, and then this module behaves exactly as EXP-028 measured it.
+
+What this still does not do: judge *where* the motion points. Static clutter off the
+homography's plane moves by parallax, and parallax is constrained to lie along the line to
+the epipole while independent motion is not. That test needs an epipole, which needs the
+residual field, so it lives in the experiment layer (EXP-029) rather than here.
 """
 
 from __future__ import annotations
@@ -49,6 +66,7 @@ OK = "ok"                    # on a confirmed track: shown
 NEW = "new"                  # strong, no track within reach: started one, overruled
 UNCONFIRMED = "unconfirmed"  # continued a track that has not yet earned `confirm` hits
 WEAK_ORPHAN = "weak-orphan"  # weak, no confirmed track within reach: never starts one
+TOO_STILL = "too-still"      # on a confirmed track that has not moved enough to be a flyer
 
 
 @dataclass(frozen=True)
@@ -101,6 +119,9 @@ class _Track:
     hits: int = 1
     confirmed: bool = False
     evidence: float = 0.0
+    # Past sightings, each carried forward by every camera motion since, so all of them
+    # live in the CURRENT frame's coordinates and differencing them removes ego-motion.
+    anchors: list = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -118,10 +139,14 @@ class GateResult:
     shown: np.ndarray
     reason: np.ndarray
     evidence: np.ndarray
+    moved: np.ndarray | None = None       # ego-compensated distance over the move window
+    move_span: np.ndarray | None = None   # frames that distance was measured across
+    move_vec: np.ndarray | None = None    # (N, 2) the same displacement as a vector
     born: int = 0
     continued_weak: int = 0
     coasting: int = 0
     died: int = 0
+    too_still: int = 0
 
 
 @dataclass
@@ -136,6 +161,8 @@ class KinematicTracker:
     confirm: int = 2
     max_coast: int = 5
     decay: float = 0.8
+    min_move: float = 0.0   # the moving factor: 0 disables it and nothing below changes
+    move_window: int = 5
     _tracks: list[_Track] = field(default_factory=list, init=False, repr=False)
     _next_id: int = field(default=0, init=False, repr=False)
     _frame: int | None = field(default=None, init=False, repr=False)
@@ -163,9 +190,13 @@ class KinematicTracker:
         track_id = np.full(n, -1)
         reason = np.full(n, WEAK_ORPHAN, dtype=object)
         evidence = np.zeros(n)
+        moved = np.full(n, np.nan)
+        move_span = np.zeros(n, int)
+        move_vec = np.full((n, 2), np.nan)
         if prev_to_cur is not None:
             for t in self._tracks:
                 t.scene = _apply(prev_to_cur, t.scene)
+                t.anchors = [(fr, _apply(prev_to_cur, p)) for fr, p in t.anchors]
 
         free = np.ones(n, bool)
         confirmed = [t for t in self._tracks if t.confirmed]
@@ -173,8 +204,18 @@ class KinematicTracker:
         hit = self._match(confirmed, xy, score, free, frame) \
             | self._match(tentative, xy, score, free & strong, frame)
 
-        continued_weak = 0
+        continued_weak, too_still = 0, 0
         for t, j in hit.items():
+            # Every anchor has been carried forward by each camera motion since it was
+            # taken, so this difference is displacement against the static scene.
+            kept = [(fr, p) for fr, p in t.anchors if frame - fr <= self.move_window]
+            if kept:
+                fr0, p0 = kept[0]
+                vec = xy[j] - p0
+                moved[j] = float(np.hypot(vec[0], vec[1]))
+                move_vec[j] = vec
+                move_span[j] = frame - fr0
+            t.anchors = kept + [(frame, xy[j].copy())]
             t.pos = t.scene = xy[j].copy()
             t.evidence = t.evidence * self.decay ** (frame - t.last) + score[j]
             evidence[j] = t.evidence
@@ -182,6 +223,13 @@ class KinematicTracker:
             t.confirmed = t.confirmed or t.hits >= self.confirm
             track_id[j], free[j] = t.tid, False
             reason[j] = OK if t.confirmed else UNCONFIRMED
+            # Held to the moving factor only once the history actually spans the window;
+            # before that there is no measurement, and refusing would kill every new track.
+            if (reason[j] == OK and self.min_move > 0.0
+                    and move_span[j] >= self.move_window
+                    and moved[j] < self.min_move):
+                reason[j] = TOO_STILL
+                too_still += 1
             continued_weak += t.confirmed and not strong[j]
 
         before = len(self._tracks)
@@ -195,14 +243,16 @@ class KinematicTracker:
             t = _Track(self._next_id, xy[j].copy(), xy[j].copy(), frame,
                        confirmed=self.confirm <= 1, evidence=float(score[j]))
             evidence[j] = t.evidence
+            t.anchors = [(frame, xy[j].copy())]
             self._next_id += 1
             self._tracks.append(t)
             track_id[j], reason[j], born = t.tid, OK if t.confirmed else NEW, born + 1
 
         return GateResult(track_id=track_id, shown=reason == OK, reason=reason,
-                          evidence=evidence, born=born,
+                          evidence=evidence, moved=moved, move_span=move_span,
+                          move_vec=move_vec, born=born,
                           continued_weak=int(continued_weak), coasting=int(coasting),
-                          died=died)
+                          died=died, too_still=int(too_still))
 
     def _match(self, tracks: list[_Track], xy: np.ndarray, score: np.ndarray,
                eligible: np.ndarray, frame: int) -> dict[_Track, int]:
