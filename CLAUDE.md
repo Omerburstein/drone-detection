@@ -51,7 +51,8 @@ dataset work and model work do not collide. Four packages, each owning one decis
 src/data/    getting pixels and labels in: source classification, video decode and
              striding, crops, HUD masks, the annotation tools, dataset preparation
 src/algo/    the detection path: configuration, tiling, masking, duty-cycle
-             schedules, and `glad/` -- the ported GLAD pipeline and its motion module
+             schedules, the kinematic gate (answers held to a drone's top speed), and
+             `glad/` -- the ported GLAD pipeline and its motion module
 src/output/  everything a run emits: the JSONL record, annotated video and stills,
              the scored overlay, the contact sheet, the live window
 src/eval/    scoring a recorded run against labels, and every cut taken from it:

@@ -30,6 +30,14 @@ OSD's grid -- the artificial horizon's white dashes, which slide with pitch and 
 static mask holds them. `src.algo.masking.on_osd_grid` on the current frame: copies of the
 blob at two of the positions +-1 and +-2 columns away. Off by default.
 
+`--kinematic` (EXP-028) then overrules every answer that moves faster than a drone can
+(`src.algo.kinematics`). The pool's objects are *strong* and may start a track; merged
+objects outside it at c >= `--c-keep` are *weak* and may only continue a confirmed one. Only
+objects on a confirmed track are ranked, by c or (`--rank-by track`) by the track's decayed
+sum of c, so a circle cannot appear somewhere new without a plausible history, and cannot
+jump further than the speed limit allows. Off by
+default; without it every output is byte-identical to EXP-027.
+
 Writes a CSV of every shown blob and one row per frame for the drone (`--hist` input to
 `split_rank_hist.py`): its best rank in the pooled ranking, the section that ranked it, or
 why it was not ranked.
@@ -48,6 +56,7 @@ import common
 import masks
 import skyline
 from clipcfg import CLIP
+from src.algo.kinematics import KinematicTracker, SpeedLimit
 from src.algo.masking import on_osd_grid
 from overlay_sky import KEPT, MIN_DRAW_DIAMETER, _draw_background
 from overlay_video import load_boxes, px, text_block
@@ -63,6 +72,8 @@ SHOWN_FIELDS = ["frame", "rank", "section", "x", "y", "c", "diameter", "members"
 DRONE_FIELDS = ["frame", "outcome", "rank", "section", "c"]
 FRAME_FIELDS = ["frame", "sky_fraction", "ranked_sky", "ranked_ground", "shown_sky",
                 "shown_ground", "folded", "osd_vetoed", "osd_vetoed_on_target"]
+KINEMATIC_SHOWN = ["track", "reason", "evidence"]
+KINEMATIC_FRAMES = ["born", "overruled", "continued_weak", "coasting"]
 OSD_BOX = (8, 14)  # the grid test's box side, px: blob diameter clamped to a dash's size
 
 
@@ -159,12 +170,18 @@ def pool(objs: list[dict], seeds: np.ndarray | None, radius: float) -> list[dict
     return sorted(upper + lower, key=lambda b: (-b["c"], b["on_target"]))
 
 
-def drone_row(f: int, ranked: list[dict], blobs: list[dict], box, sky) -> dict:
-    """Where the drone landed this frame: ranked (best rank, its section), `dropped` (a blob
-    on it existed but its section's detector did not pass it), or `no blob`."""
+def drone_row(f: int, ranked: list[dict], blobs: list[dict], box, sky,
+              overruled: list[dict] = ()) -> dict:
+    """Where the drone landed this frame: ranked (best rank, its section), `overruled` (the
+    kinematic gate held a blob on it back), `dropped` (a blob on it existed but its section's
+    detector did not pass it), or `no blob`."""
     for i, b in enumerate(ranked, 1):
         if b["on_target"]:
             return dict(frame=f, outcome="ranked", rank=i, section=b["section"], c=b["c"])
+    on = [b for b in overruled if b["on_target"]]
+    if on:
+        best = max(on, key=lambda b: b["c"])
+        return dict(frame=f, outcome="overruled", rank="", section=best["section"], c=best["c"])
     on = [b for b in blobs if b["on_target"]]
     if on:
         best = max(on, key=lambda b: b["c"])
@@ -172,6 +189,41 @@ def drone_row(f: int, ranked: list[dict], blobs: list[dict], box, sky) -> dict:
     bx, by, bw, bh = box
     return dict(frame=f, outcome="no blob", rank="",
                 section=section_of(sky, bx + bw / 2, by + bh / 2), c="")
+
+
+def speed_limit(a) -> SpeedLimit:
+    """The `--kinematic` limit from the command line, at this clip's width and fps."""
+    return SpeedLimit(width_px=W, fps=CLIP["fps"], v_max_ms=a.v_max, min_range_m=a.min_range,
+                      hfov_deg=a.hfov, ceiling_px=a.ceiling)
+
+
+def gate(tracker: KinematicTracker, f: int, ranked: list[dict], objs: list[dict],
+         c_keep: float, prev_to_cur: np.ndarray,
+         rank_by: str = "c") -> tuple[list[dict], list[dict], object]:
+    """One frame through the kinematic gate: the objects it passes, best first by `rank_by`
+    (`c`, or `track` for the track's evidence), and the ones it overruled. `ranked` is
+    strong; the rest of `objs` at c >= `c_keep` is weak. Each object is tagged with its
+    `track`, the gate's `reason` and the track's `evidence`."""
+    pooled = {id(o) for o in ranked}
+    cands = ranked + [o for o in objs if id(o) not in pooled and o["c"] >= c_keep]
+    xy = np.array([[o["x"], o["y"]] for o in cands], float).reshape(-1, 2)
+    res = tracker.step(f, xy, np.array([o["c"] for o in cands], float),
+                       np.arange(len(cands)) < len(ranked), prev_to_cur)
+    for o, tid, why, ev in zip(cands, res.track_id, res.reason, res.evidence):
+        o["track"], o["reason"], o["evidence"] = int(tid), why, round(float(ev), 3)
+    passed = [o for o, ok in zip(cands, res.shown) if ok]
+    held = [o for o, ok in zip(cands, res.shown) if not ok]
+    key = "evidence" if rank_by == "track" else "c"
+    return sorted(passed, key=lambda b: (-b[key], b["on_target"])), held, res
+
+
+def top_jumps(rows: list[dict], reach: float) -> tuple[int, int]:
+    """How often #1 moved further than `reach` between consecutive frames that both had
+    one: (jumps, consecutive pairs). The user's complaint, counted."""
+    first = {int(r["frame"]): (float(r["x"]), float(r["y"])) for r in rows
+             if int(r["rank"]) == 1}
+    pairs = [(first[f - 1], first[f]) for f in first if f - 1 in first]
+    return sum(np.hypot(p[0] - q[0], p[1] - q[1]) > reach for p, q in pairs), len(pairs)
 
 
 def draw(img, shown: list[dict], sl: skyline.Skyline, line: bool, min_draw: float) -> None:
@@ -207,6 +259,28 @@ def main() -> None:
     ap.add_argument("--osd-grid", action="store_true",
                     help="drop blobs in a row on the OSD character grid (the horizon "
                          "dashes) before merging (EXP-027)")
+    ap.add_argument("--kinematic", action="store_true",
+                    help="overrule answers that move faster than a drone can, and pops with "
+                         "no plausible history (EXP-028)")
+    ap.add_argument("--v-max", type=float, default=40.0,
+                    help="--kinematic: the drone's top closing speed, m/s")
+    ap.add_argument("--min-range", type=float, default=10.0,
+                    help="--kinematic: the closest range the limit is computed at, m")
+    ap.add_argument("--hfov", type=float, default=130.0,
+                    help="--kinematic: the camera's horizontal field of view, degrees")
+    ap.add_argument("--ceiling", type=float, default=25.0,
+                    help="--kinematic: the limit never exceeds this, px/frame")
+    ap.add_argument("--c-keep", type=float, default=6.0,
+                    help="--kinematic: the weakest c that may continue a confirmed track")
+    ap.add_argument("--confirm", type=int, default=2,
+                    help="--kinematic: hits a track needs before it is shown")
+    ap.add_argument("--max-coast", type=int, default=5,
+                    help="--kinematic: missed frames a confirmed track survives")
+    ap.add_argument("--rank-by", choices=("c", "track"), default="track",
+                    help="--kinematic: rank by this frame's c, or by the track's decayed sum "
+                         "of c (steadier #1)")
+    ap.add_argument("--decay", type=float, default=0.8,
+                    help="--kinematic: per-frame decay of a track's evidence")
     ap.add_argument("--window-dump", default=None,
                     help="EXP-024 seed dump (default: its seeds_k{k}_ CSV for this span)")
     ap.add_argument("--sky-dump",
@@ -233,6 +307,7 @@ def main() -> None:
         report(a, out, stem, *read_tables(stem))
         return
 
+    limit = speed_limit(a)
     survivors = load_survivors(wdump, a.min_appear)
     blobs = DumpStream(a.sky_dump)
     boxes = load_boxes()
@@ -241,7 +316,16 @@ def main() -> None:
     print(f"[sky section] {a.sky_dump}, c >= 6\n[ground section] {a.min_appear} of {a.k} "
           f"from {wdump}, blob within {a.radius:g} px, any c\n[rank] pooled by c, top {a.top}"
           + (f", blobs within {a.merge:g} px merged" if a.merge else "")
-          + ("\n[osd grid] blobs in a row on the OSD grid dropped first" if a.osd_grid else ""))
+          + ("\n[osd grid] blobs in a row on the OSD grid dropped first" if a.osd_grid else "")
+          + (f"\n[kinematic] {limit.v_max_ms:g} m/s at {limit.min_range_m:g} m through "
+             f"{limit.hfov_deg:g} deg = {limit.physical_px:.1f} px/frame, ceiling "
+             f"{limit.ceiling_px:g} -> {limit.px_per_frame:.1f} px/frame + {limit.slack_px:g} "
+             f"slack; confirm {a.confirm}, coast {a.max_coast}, weak c >= {a.c_keep:g}; "
+             f"ranked by {'track evidence, decay ' + format(a.decay, 'g') if a.rank_by == 'track' else 'c'}"
+             if a.kinematic else ""))
+    tracker = KinematicTracker(limit, a.confirm, a.max_coast, a.decay)
+    shown_fields = SHOWN_FIELDS + (KINEMATIC_SHOWN if a.kinematic else [])
+    frame_fields = FRAME_FIELDS + (KINEMATIC_FRAMES if a.kinematic else [])
 
     cap = cv2.VideoCapture(CLIP["video"])
     cap.set(cv2.CAP_PROP_POS_FRAMES, a.start - 2)
@@ -266,25 +350,36 @@ def main() -> None:
             b["section"] = section_of(sl.sky, b["x"], b["y"])
         objs = merge(fb, a.merge)
         ranked = pool(objs, survivors.get(f), a.radius)
+        held, extra = [], {}
+        if a.kinematic:
+            ranked, held, res = gate(tracker, f, ranked, objs, a.c_keep, np.linalg.inv(hmat),
+                                     a.rank_by)
+            extra = dict(born=res.born, overruled=sum(o["reason"] != "weak-orphan"
+                                                      for o in held),
+                         continued_weak=res.continued_weak, coasting=res.coasting)
         shown = ranked[:a.top]
         frame_rows.append(dict(
             frame=f, sky_fraction=sl.sky_fraction,
             **{f"{k}_{s}": sum(b["section"] == s for b in rows)
                for k, rows in (("ranked", ranked), ("shown", shown)) for s in SECTIONS},
             folded=len(fb) - len(objs), osd_vetoed=len(gone),
-            osd_vetoed_on_target=sum(b["on_target"] for b in gone)))
+            osd_vetoed_on_target=sum(b["on_target"] for b in gone), **extra))
         shown_rows += [dict(frame=f, rank=i, section=b["section"], x=b["x"], y=b["y"],
                             c=b["c"], diameter=b["diameter"], members=b["members"],
-                            on_target=b["on_target"])
+                            on_target=b["on_target"],
+                            **({k: b[k] for k in KINEMATIC_SHOWN} if a.kinematic else {}))
                        for i, b in enumerate(shown, 1)]
         if f in boxes:
-            drone_rows.append(drone_row(f, ranked, objs, boxes[f], sl.sky))
+            drone_rows.append(drone_row(f, ranked, objs, boxes[f], sl.sky,
+                                        [o for o in held if o["reason"] != "weak-orphan"]))
 
         img = cur.copy()
         _draw_background(img, None, stage0, sky=False)
         draw(img, shown, sl, not a.no_split_line, a.min_draw)
         text_block(img, [f"frame {f}    sky: sky branch c>=6   ground: {a.min_appear} of "
-                         f"{a.k} window    top {a.top} by sky c",
+                         f"{a.k} window    top {a.top} by sky c"
+                         + (f"    kinematic {limit.px_per_frame:.0f} px/frame"
+                            if a.kinematic else ""),
                          f"ranked  sky {sum(b['section'] == 'sky' for b in ranked)}"
                          f"  ground {sum(b['section'] == 'ground' for b in ranked)}"
                          f"    shown {len(shown)}"])
@@ -292,9 +387,9 @@ def main() -> None:
     writer.release()
     cap.release()
 
-    for path, fields, rows in ((stem + ".csv", SHOWN_FIELDS, shown_rows),
+    for path, fields, rows in ((stem + ".csv", shown_fields, shown_rows),
                                (stem + "_drone.csv", DRONE_FIELDS, drone_rows),
-                               (stem + "_frames.csv", FRAME_FIELDS, frame_rows)):
+                               (stem + "_frames.csv", frame_fields, frame_rows)):
         with open(path, "w", newline="", encoding="utf-8") as fh:
             w = csv.DictWriter(fh, fieldnames=fields)
             w.writeheader()
@@ -335,12 +430,27 @@ def report(a, out, stem, frame_rows, drone_rows) -> None:
     if a.osd_grid:
         print(f"  osd grid dropped {vetoed['blobs']} candidates ({vetoed['blobs'] / n:.2f}/frame), "
               f"{vetoed['on_target']} of them on the drone")
+    if a.kinematic:
+        k = {key: sum(r[key] for r in frame_rows) for key in KINEMATIC_FRAMES}
+        print(f"  kinematic gate ({speed_limit(a).px_per_frame:.1f} px/frame): {k['born']} "
+              f"tracks born, {k['overruled']} candidates overruled "
+              f"({k['overruled'] / n:.2f}/frame), {k['continued_weak']} weak continuations, "
+              f"{k['coasting'] / n:.2f} confirmed tracks coasting/frame. 'ranked' above is "
+              f"after the gate")
+    if os.path.exists(stem + ".csv"):
+        reach = speed_limit(a).reach(1)
+        with open(stem + ".csv", encoding="utf-8") as fh:
+            jumps, pairs = top_jumps(list(csv.DictReader(fh)), reach)
+        print(f"  #1 jumped more than {reach:.0f} px in {jumps} of {pairs} consecutive frame "
+              f"pairs that both had a #1")
     print(f"\n  drone, of {len(drone_rows)} labelled frames      sky  ground  total")
     for name, keep in (("ranked", lambda r: r["outcome"] == "ranked"),
                        (f"in the top {a.top}", lambda r: r["outcome"] == "ranked"
                         and r["rank"] <= a.top),
                        *((f"  #{i}", (lambda i: lambda r: r["rank"] == i)(i))
                          for i in range(1, a.top + 1)),
+                       *((("overruled by the kinematic gate",
+                           lambda r: r["outcome"] == "overruled"),) if a.kinematic else ()),
                        ("dropped by its section", lambda r: r["outcome"] == "dropped"),
                        ("no blob on it", lambda r: r["outcome"] == "no blob")):
         c = {s: sum(keep(r) and r["section"] == s for r in drone_rows) for s in SECTIONS}

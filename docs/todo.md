@@ -15,6 +15,13 @@ dates, not priorities.
 
 ## Open
 
+- [ ] 2026-10-05 — [algo] **Take the EXP-028 kinematic gate out of sample, then into the
+  CLIs.** Its c-keep 6 and 25 px ceiling were picked on catch_2 441-800 only. Run
+  `overlay_kinematic` on catch_4/5 (`run_clips.py`) and O4 (whose fps and lens differ, so
+  the limit must be re-derived) before trusting it. Then wire `KinematicTracker` into
+  `baseline_detect` / `glad_detect` / `live_detect` on box centres, behind an off-by-default
+  flag. Check the 16 frames where it held the drone back for a pattern first.
+
 - [ ] 2026-10-04 — [algo] **Put the persistence gate on the sky branch's candidates instead
   of the motion branch's.** Measured in EXP-024's 2026-10-04 addendum: on `catch_2` 441-800,
   recut to the common 224 labelled frames, EXP-023's 2-frame sky branch beats the 5-frame
@@ -29,6 +36,9 @@ dates, not priorities.
   proximity already does this without flow, and EXP-024 established LK is unusable on analog
   at median 0 usable steps). Compare against EXP-023's c>=6 and EXP-025's top-3 cap at
   matched load, on the 224 denominator.
+  **2026-10-05:** EXP-028's kinematic gate is a form of this, on the pooled answers: a
+  2-hit confirmation with a speed-gated chain. At matched-or-lower load it holds recall
+  (69 vs 67 in the top 3), so persistence-by-track does not cost what EXP-025b's 4-of-5 did.
 
 - [ ] 2026-10-04 — [algo] **Chain candidate peaks instead of tracking pixels, and use the
   accumulated displacement as the statistic.** Measured in EXP-024's 2026-10-04 addendum:
@@ -86,6 +96,8 @@ dates, not priorities.
   false-alarm lever than any threshold, and it costs the branch's zero-latency property
   only if the single-frame hits are withheld — report them immediately and mark them
   confirmed on persistence instead. `window.py` already has the machinery.
+  **2026-10-05:** `src/algo/kinematics.KinematicTracker` (EXP-028) is now the reusable
+  machinery: tracks with a speed limit, hysteresis and evidence.
 
 - [ ] 2026-09-29 — [algo] **Make the stage-1 uncertain-band policy a per-clip operating
   point.** EXP-023 measured both settings at matched false-alarm rate and **neither
@@ -368,6 +380,15 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-29 — [algo] **Score a HUD mask against labels, not against its coverage percentage.** EXP-020: the tool prints `7.71% of the frame`, which is the wrong number — 13.15% sounded acceptable and was 20% of the ground truth. Add `--labels <dir>` to `src.data.hud_mask` so the build reports how many labelled boxes the mask would veto at `HUD_VETO_FRACTION`, and refuse silently-expensive masks. Cheap: the scoring loop is `overlap_fraction` over YOLO txt files, ~20 lines, and it is the only check that would have caught this.
 
 ## Done
+
+- [x] 2026-10-05 — [algo] **EXP-028: the kinematic gate — answers held to a drone's top
+  speed.** `src/algo/kinematics.py` (`SpeedLimit`, `KinematicTracker`, unit-tested), run as
+  `overlay_split.py --kinematic` through `experiments/exp028_kinematic/`. The m/s limit is
+  converted at an assumed minimum range (40 m/s, 10 m, 130 deg = 29.8 px/frame), capped at
+  25 px/frame. Tracks use hysteresis (strong births, weak continues, 5-frame coast), and
+  #1 is ranked by track evidence. On catch_2 441-800 against EXP-027's top 3: 0.93 vs 1.08
+  shown/frame, 264 vs 318 FAs, drone top 3 69 vs 67, #1 60 vs 57, and #1 jumps > 29 px
+  43 vs 103. Off by default, and byte-identical to EXP-027 when off.
 
 - [x] 2026-10-04 — [algo] **EXP-025e on the FIELD capture.** The split overlay (merge 20,
   circles >= 20 px) over all 3,599 frames, with stage 1's brightness test off for FIELD

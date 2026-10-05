@@ -4545,3 +4545,86 @@ Artifacts in `runs/field/exp025_top3/`:
 `split_sky_window2of4_top3_merge20_captured_raw_20260616_040253_004_2_3600.mp4`, its
 `.csv`, `_frames.csv` (per-frame sky fraction and counts), the candidate and seed dumps,
 and `split_field.log`.
+
+## EXP-028 — the kinematic gate: answers held to a drone's top speed
+
+The user asked for answers that do not pop up anywhere on screen: a real drone has a top
+speed, so a candidate that moves like nothing a drone can do should be overruled. In
+EXP-027's top 3, #1 moved more than 29 px between consecutive frames in **103 of 156**
+frame pairs that both had a #1.
+
+**Method.** `src/algo/kinematics.py` (new, unit-tested, numpy only):
+
+- **`SpeedLimit` converts m/s to px/frame at an *assumed minimum range*.** It uses 40 m/s
+  (edge-budget's closing-speed assumption) at 10 m, through the R1 Mini's 130° lens. On
+  catch_2 (960 px wide, 30 fps) that is 29.8 px/frame, capped by a 25 px/frame ceiling
+  (2× the labelled drone's p90 step of 12.67 px), plus 4 px of slack.
+  - The range is not observable from one camera.
+  - EXP-016's size-based range was inert, and the blob sizes are 0.05–0.16× the airframe
+    (the 2026-09-30 correction). So the ceiling is what actually binds here.
+- **`KinematicTracker` is a hysteresis track.** EXP-025b's hard 4-of-5 gate halved
+  recall, so this design keeps tracks alive instead.
+  - A strong candidate (the pool: sky c >= 6 or ground 2-of-4) starts a track, which is
+    shown from its 2nd hit.
+  - Once confirmed, any candidate at c >= `--c-keep` inside the reach continues it.
+  - It coasts through up to 5 misses, with the reach growing by 25 px each frame.
+  - A strong pop with no track in reach is overruled (`new`). A weak one never starts a track.
+- **Displacement is the smaller of raw and camera-compensated.** Raw picture coordinates
+  keep the target the camera follows (EXP-025b). The homography still excuses a host
+  whip-turn.
+- **Each track carries evidence**, the sum of c decayed by 0.8 per frame. `--rank-by track`
+  orders the shown answers by evidence instead of this frame's c.
+
+It runs as `overlay_split.py --kinematic`. `experiments/exp028_kinematic/overlay_kinematic.py`
+runs it on top of EXP-027's top-3 settings. With the flag off, the CSVs are byte-identical
+to EXP-027's (re-run and compared).
+
+| catch_2 441–800, top 3, merge 20, osd-grid | shown/frame | FA shown | drone in top 3 (of 224) | drone #1 | #1 jumps > 29 px |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| EXP-027 | 1.08 | 318 | 67 | 57 | 103 / 156 (66%) |
+| gate, c-keep 3, rank by c | 2.47 | 796 | 89 | 72 | 165 / 318 (52%) |
+| gate, c-keep 3, rank by track | 2.47 | 791 | 95 | 78 | 82 / 318 (26%) |
+| gate, no weak continuation | 0.44 | 107 | 49 | 48 | 22 / 71 (31%) |
+| gate, c-keep 6, rank by c | 0.93 | 264 | 69 | 58 | 65 / 165 (39%) |
+| **gate, c-keep 6, rank by track** | **0.93** | **264** | **69** | **60** | **43 / 165 (26%)** |
+
+**Reading.**
+
+- **At c-keep 6 with track ranking, the gate is better than EXP-027 on every column at
+  lower load:**
+  - 14% fewer answers shown, and 17% fewer false alarms;
+  - the drone in the top 3 in 69 frames (from 67), and #1 in 60 (from 57);
+  - #1 jumps cut from 103 to 43.
+  
+  It is the default (`--c-keep 6 --rank-by track`).
+- **The c-keep 3 rows are not comparable to EXP-027.** They show 2.3× the load, because
+  weak continuation keeps persistent ground clutter alive (1,607 weak continuations).
+  Their recall gain (95 in the top 3) is bought with load, and is stated only to show
+  where that knob goes.
+- **Most of the remaining flicker was ranking, not motion.** With c ranking, #1 changed
+  track in 62 of 165 pairs. A single track cannot jump by construction, so those were
+  swaps between two plausible objects whose c crossed. Evidence ranking cut that to 41.
+  The 43 jumps left are swaps of this kind, for example a track dying and the next one up
+  taking #1. A speed limit cannot remove them.
+- **Cost: the gate held the drone back in 16 frames** (3 sky, 13 ground) as `new` or
+  `unconfirmed`. These are frames where its track had just been born, or re-born after a
+  break longer than 5 frames or a step larger than the reach.
+- **What it does not do: persistent clutter passes**, because clutter that sits still
+  moves plausibly by definition. This gate stops answers jumping. Clutter rejection is
+  still the sections' tests' job.
+
+**Caveats.**
+
+- One clip, one span. The 25 px ceiling and c-keep 6 were chosen on this span, so the
+  c-keep choice is in-sample. The physical constants are assumptions, not measurements;
+  edge-budget lists closing speed as user-owned.
+- The 1-in-6 duplicate frames are still in. A duplicate is a zero step and is harmless
+  here, but it is a free hit toward confirmation.
+- Not yet on catch_4/5, on O4, or wired into `baseline_detect`, `glad_detect` or `live_detect`.
+
+Artifacts in `runs/sofa_analog/exp028_kinematic/`:
+
+- `split_top3_merge20_osdgrid_kinematic_catch_2_441_800` is the default run, with
+  `.mp4`/`.csv`/`_drone.csv`/`_frames.csv` and `kinematic_top3.log`.
+- `v_ckeep3_c`, `v_track`, `v_noweak` and `v_ckeep6` are the other rows.
+- `regress_exp027_top3` is the byte-identity check.
