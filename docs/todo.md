@@ -15,10 +15,9 @@ dates, not priorities.
 
 ## Open
 
-- [ ] 2026-10-05 — [algo] **Take the EXP-028 kinematic gate out of sample, then into the
-  CLIs.** Its c-keep 6 and 25 px ceiling were picked on catch_2 441-800 only. Run
-  `overlay_kinematic` on catch_4/5 (`run_clips.py`) and O4 (whose fps and lens differ, so
-  the limit must be re-derived) before trusting it. Then wire `KinematicTracker` into
+- [ ] 2026-10-05 — [algo] **Take the EXP-028 kinematic gate to O4, then into the CLIs.**
+  catch_4/5 are done (2026-10-05, the default holds; see Done). O4 remains: its fps and
+  lens differ, so the limit must be re-derived. Then wire `KinematicTracker` into
   `baseline_detect` / `glad_detect` / `live_detect` on box centres, behind an off-by-default
   flag. Check the 16 frames where it held the drone back for a pattern first.
 
@@ -380,6 +379,12 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-29 — [algo] **Score a HUD mask against labels, not against its coverage percentage.** EXP-020: the tool prints `7.71% of the frame`, which is the wrong number — 13.15% sounded acceptable and was 20% of the ground truth. Add `--labels <dir>` to `src.data.hud_mask` so the build reports how many labelled boxes the mask would veto at `HUD_VETO_FRACTION`, and refuse silently-expensive masks. Cheap: the scoring loop is `overlap_fraction` over YOLO txt files, ~20 lines, and it is the only check that would have caught this.
 
 ## Done
+
+- [x] 2026-10-05 — [algo] **EXP-028 out of sample on catch_4 and catch_5.**
+  `experiments/exp028_kinematic/run_clips.py` (no gate / gate / c-keep 3 / no weak, from
+  EXP-025e's dumps). The default holds:
+  - catch_5: 0.37 vs 0.71 shown/frame, drone top 3 37 vs 29, #1 31 vs 16, #1 jumps 30% vs 71%.
+  - catch_4: 1.21 vs 1.11 shown/frame (9% more), top 3 22 vs 12, #1 18 vs 8, jumps 51% vs 82%.
 
 - [x] 2026-10-05 — [algo] **EXP-028: the kinematic gate — answers held to a drone's top
   speed.** `src/algo/kinematics.py` (`SpeedLimit`, `KinematicTracker`, unit-tested), run as

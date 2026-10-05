@@ -50,4 +50,24 @@ that both have a #1.
 | **gate, c-keep 6, rank by track (default)** | **0.93** | **264** | **69** | **60** | **43 / 165 (26%)** |
 
 Without `--kinematic`, `overlay_split` reproduces EXP-027's CSVs byte for byte (checked).
+
+## Out of sample: catch_4 and catch_5
+
+```bash
+py -3.13 experiments/exp028_kinematic/run_clips.py          # resumable; --jobs 4
+```
+
+`run_clips.py` renders four overlays per clip from EXP-025e's dumps: `nogate`, `gate`
+(the default), `ckeep3` and `noweak`. It writes them to
+`runs/sofa_analog/exp028_kinematic/<clip>/` and prints the table below.
+
+| clip | run | shown/frame | FA shown | drone in top 3 | drone #1 | #1 jumps > 29 px |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| catch_4 (82 labelled) | no gate | 1.11 | 169 | 12 | 8 | 82% |
+| catch_4 | **gate** | **1.21** | **177** | **22** | **18** | **51%** |
+| catch_5 (188 labelled) | no gate | 0.71 | 235 | 29 | 16 | 71% |
+| catch_5 | **gate** | **0.37** | **100** | **37** | **31** | **30%** |
+
+On these clips, c-keep 3 shows 2.2–3.6× as many answers, and no weak continuation drops
+the drone to 3 (catch_4) and 16 (catch_5) top-3 frames. Full table in `docs/experiments.md`.
 See EXP-028 in `docs/experiments.md` for the reading.

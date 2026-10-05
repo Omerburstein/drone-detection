@@ -4628,3 +4628,52 @@ Artifacts in `runs/sofa_analog/exp028_kinematic/`:
   `.mp4`/`.csv`/`_drone.csv`/`_frames.csv` and `kinematic_top3.log`.
 - `v_ckeep3_c`, `v_track`, `v_noweak` and `v_ckeep6` are the other rows.
 - `regress_exp027_top3` is the byte-identity check.
+
+### Added 2026-10-05: out of sample on catch_4 and catch_5
+
+The user asked for the overlays on the other two labelled analog clips. These are
+`experiments/exp028_kinematic/run_clips.py` over EXP-025e's dumps, with no detector re-run.
+
+The user named three of the six catch_2 variants: the default gate, c-keep 3, and no weak
+continuation. A no-gate run was added at the same settings (`--osd-grid`), because
+EXP-025e's catch_4/5 videos predate it and are not the comparison. All runs are top 3,
+merge 20, and use the same constants. Nothing was re-tuned per clip.
+
+| clip | run | shown/frame | FA shown | drone in top 3 | drone #1 | held back by gate | #1 jumps > 29 px |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| catch_4 (82 labelled) | no gate | 1.11 | 169 | 12 | 8 | – | 42 / 51 (82%) |
+| catch_4 | **gate (default)** | **1.21** | **177** | **22** | **18** | 8 | **47 / 92 (51%)** |
+| catch_4 | c-keep 3 | 2.46 | 376 | 35 | 15 | 6 | 67 / 147 (46%) |
+| catch_4 | no weak continuation | 0.35 | 56 | 3 | 3 | 10 | 6 / 15 (40%) |
+| catch_5 (188 labelled) | no gate | 0.71 | 235 | 29 | 16 | – | 67 / 94 (71%) |
+| catch_5 | **gate (default)** | **0.37** | **100** | **37** | **31** | 16 | **20 / 66 (30%)** |
+| catch_5 | c-keep 3 | 2.54 | 901 | 51 | 23 | 10 | 124 / 346 (36%) |
+| catch_5 | no weak continuation | 0.19 | 54 | 16 | 11 | 16 | 15 / 34 (44%) |
+
+**The default holds out of sample.**
+
+- **catch_5 is a clean win.** The gate shows about half the answers (0.37 vs 0.71/frame,
+  100 vs 235 FAs). It puts the drone in the top 3 in more frames (37 vs 29) and at #1 in
+  almost twice as many (31 vs 16). #1 jumps fall from 71% to 30% of frame pairs.
+- **catch_4 is not quite at matched load.** The gate shows 9% more (1.21 vs 1.11/frame,
+  177 vs 169 FAs). For that, the drone is in the top 3 in 22 frames instead of 12 and at #1
+  in 18 instead of 8, and the jump rate falls from 82% to 51%.
+  - The absolute jump count rises (42 → 47) because #1 exists in nearly twice as many
+    frame pairs (92 vs 51). The per-pair rate is the comparable figure.
+
+**The other two settings fail the same way they did on catch_2.**
+
+- **c-keep 3 is not comparable.** It shows 2.2–3.6× the load, because weak continuation
+  keeps clutter tracks alive.
+- **No weak continuation collapses recall.** catch_4's drone is in the top 3 in 3 frames,
+  because its strong firings are too sparse to chain.
+
+The gate's cost recurs on both clips: the drone is held back in 8 (catch_4) and 16
+(catch_5) labelled frames, mostly ground section, as a new or unconfirmed track.
+
+Caveat: these spans are short. catch_4 has 82 labelled frames, and its counts move in
+single digits.
+
+Artifacts in `runs/sofa_analog/exp028_kinematic/catch_4/` and `catch_5/`:
+`{nogate,gate,ckeep3,noweak}_<clip>_<start>_<end>` with `.mp4`, `.csv`, `_drone.csv`,
+`_frames.csv` and a log each. The batch log is `run_clips.log` one level up.
