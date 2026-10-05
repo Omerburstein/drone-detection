@@ -18,7 +18,9 @@ within R px of a stronger one into it, before either section's test (the stronge
 anchors, the rest of its 2R-wide circle joins it), so one object is one candidate. A merged
 blob keeps the anchor's centre, c and section, grows to cover its members, and is on the
 drone if any member is; it passes the sky test if any member has c >= 6, the ground test
-if a window survivor is within 9 px of any member. Drawn from EXP-023's candidate
+if a window survivor is within 9 px of any member. `--merge-score sum` (EXP-030) scores
+the object by the sum of its members' c instead of the anchor's; the tests are unchanged.
+Drawn from EXP-023's candidate
 dump and EXP-024's `seeds_k4_` dump; only stage 1 is computed here, no detector re-run.
 
 The clean look: stage-0 tints, red circles at least `--min-draw` px across (default 10) tagged `#rank c sky|gnd`,
@@ -128,11 +130,14 @@ def osd_vetoed(gray: np.ndarray, blobs: list[dict]) -> list[dict]:
     return out
 
 
-def merge(blobs: list[dict], radius: float) -> list[dict]:
+def merge(blobs: list[dict], radius: float, score: str = "max") -> list[dict]:
     """One frame's blobs as objects: strongest first, each anchor takes every remaining blob
     within `radius` px. The anchor keeps its centre, c and section; the diameter grows to
     cover the members, and the object is on the drone if any member is. `parts` keeps the
     members for the sections' tests. `radius` 0 leaves every blob its own object.
+
+    `score` "sum" (EXP-030) gives the object the sum of its members' c instead of the
+    anchor's, keeping the anchor's own as `c_max`. Anchors are still chosen by their own c.
 
     Vectorised per anchor: FIELD frames carry ~1400 candidates, where a pairwise Python
     loop costs seconds a frame."""
@@ -152,9 +157,12 @@ def merge(blobs: list[dict], radius: float) -> list[dict]:
         alive[idx] = False
         near = [order[k] for k in idx]
         reach = max([a["diameter"] / 2, *(d[idx] + half[idx])])
-        out.append(dict(a, diameter=2 * reach, members=1 + len(near), parts=[a, *near],
-                        kept=any(b["kept"] for b in (a, *near)),
-                        on_target=max(b["on_target"] for b in (a, *near))))
+        obj = dict(a, diameter=2 * reach, members=1 + len(near), parts=[a, *near],
+                   kept=any(b["kept"] for b in (a, *near)),
+                   on_target=max(b["on_target"] for b in (a, *near)))
+        if score == "sum":
+            obj.update(c=sum(b["c"] for b in (a, *near)), c_max=a["c"])
+        out.append(obj)
     return out
 
 
@@ -256,6 +264,9 @@ def main() -> None:
                     help="fold blobs within this many px of a stronger one into it, before "
                          "the sections' tests "
                          "(0: off, EXP-025d)")
+    ap.add_argument("--merge-score", choices=("max", "sum"), default="max",
+                    help="a merged object's c: its anchor's (the strongest member's), or the "
+                         "sum of every member's (EXP-030)")
     ap.add_argument("--osd-grid", action="store_true",
                     help="drop blobs in a row on the OSD character grid (the horizon "
                          "dashes) before merging (EXP-027)")
@@ -324,7 +335,8 @@ def main() -> None:
              f"ranked by {'track evidence, decay ' + format(a.decay, 'g') if a.rank_by == 'track' else 'c'}"
              if a.kinematic else ""))
     tracker = KinematicTracker(limit, a.confirm, a.max_coast, a.decay)
-    shown_fields = SHOWN_FIELDS + (KINEMATIC_SHOWN if a.kinematic else [])
+    shown_fields = (SHOWN_FIELDS + (KINEMATIC_SHOWN if a.kinematic else [])
+                    + (["c_max"] if a.merge_score == "sum" else []))
     frame_fields = FRAME_FIELDS + (KINEMATIC_FRAMES if a.kinematic else [])
 
     cap = cv2.VideoCapture(CLIP["video"])
@@ -348,7 +360,7 @@ def main() -> None:
             fb = [b for b in fb if not any(b is g for g in gone)]
         for b in fb:
             b["section"] = section_of(sl.sky, b["x"], b["y"])
-        objs = merge(fb, a.merge)
+        objs = merge(fb, a.merge, a.merge_score)
         ranked = pool(objs, survivors.get(f), a.radius)
         held, extra = [], {}
         if a.kinematic:
@@ -367,7 +379,8 @@ def main() -> None:
         shown_rows += [dict(frame=f, rank=i, section=b["section"], x=b["x"], y=b["y"],
                             c=b["c"], diameter=b["diameter"], members=b["members"],
                             on_target=b["on_target"],
-                            **({k: b[k] for k in KINEMATIC_SHOWN} if a.kinematic else {}))
+                            **({k: b[k] for k in KINEMATIC_SHOWN} if a.kinematic else {}),
+                            **({"c_max": b["c_max"]} if a.merge_score == "sum" else {}))
                        for i, b in enumerate(shown, 1)]
         if f in boxes:
             drone_rows.append(drone_row(f, ranked, objs, boxes[f], sl.sky,
@@ -377,7 +390,8 @@ def main() -> None:
         _draw_background(img, None, stage0, sky=False)
         draw(img, shown, sl, not a.no_split_line, a.min_draw)
         text_block(img, [f"frame {f}    sky: sky branch c>=6   ground: {a.min_appear} of "
-                         f"{a.k} window    top {a.top} by sky c"
+                         f"{a.k} window    top {a.top} by "
+                         f"{'summed ' if a.merge_score == 'sum' else ''}sky c"
                          + (f"    kinematic {limit.px_per_frame:.0f} px/frame"
                             if a.kinematic else ""),
                          f"ranked  sky {sum(b['section'] == 'sky' for b in ranked)}"
