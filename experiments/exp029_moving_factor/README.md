@@ -99,8 +99,68 @@ Outputs go to `runs/sofa_analog/exp029_moving_factor/`. The video is drawn in th
 EXP-023 look: stage-0 tints, kept tracks as red circles at least 10 px across, a two-line
 caption.
 
-## Result
+## Result — catch_2 441-800, 224 labelled frames
 
-Filled in from the run; see `docs/experiments.md` EXP-029 for the full entry. Recall is
-quoted on the **224 labelled frames** of the span — EXP-024's 174 is a motion front-end
-ceiling, not a denominator.
+Recall is quoted on the **224 labelled frames** of the span; EXP-024's 174 is a motion
+front-end ceiling, not a denominator.
+
+### The direction half adds nothing
+
+| mode | kept/frame | false alarms | drone kept |
+| :--- | ---: | ---: | ---: |
+| `off` (magnitude alone) | 16.14 | 5626 | **105 (46.9%)** |
+| `veto` (+ direction) | 14.59 | 5071 | 104 (46.4%) |
+| `require` | 12.93 | 4494 | 96 (42.9%) |
+
+The veto drops 555 false alarms for a single drone frame, which looks like a win until the
+load is matched: **magnitude alone at `--min-move 15` reaches 14.57/frame and the identical
+104 drone frames.** The epipole buys exactly zero, consistent with its measured agreement
+of 28.9% against a ~23% chance floor. `require` is worse on both axes, as EXP-021 predicted.
+
+**So ship `--mode off`.** The direction test is kept only because `require` is the evidence
+for not using it.
+
+### Against plain EXP-023 thresholding, at matched load
+
+| load/frame | EXP-029 chain + factor | EXP-023 plain `c` | winner |
+| ---: | ---: | ---: | :--- |
+| 21.01 | **108 (48.2%)** | 102 (45.5%) | EXP-029 |
+| 16.14 | **105 (46.9%)** | 97 (43.3%) | EXP-029 |
+| 14.57 | **104 (46.4%)** | 96 (42.9%) | EXP-029 |
+| 12.05 | **96 (42.9%)** | 94 (42.0%) | EXP-029 |
+| 10.06 | 71 (31.7%) | **89 (39.7%)** | EXP-023 |
+| 8.30 | 65 (29.0%) | **83 (37.1%)** | EXP-023 |
+| 6.69 | 60 (26.8%) | **78 (34.8%)** | EXP-023 |
+
+**The gain is real but lives in the wrong place.** Above ~12 candidates/frame chaining plus
+the moving factor beats plain thresholding by 2-8 drone frames. Below it the curve collapses
+and plain EXP-023 wins outright. EXP-023 ships at 5.59/frame and EXP-028 at 0.93 shown/frame
+— both below the crossover, so **as built this is not an improvement at any load the project
+wants.**
+
+Two reasons, both measured here rather than assumed:
+
+- **A floor of 5.42 kept/frame.** 1950 of 7564 confirmed-track rows (25.8%) have no span
+  yet, and `off`/`veto` keep what they cannot judge. Raising `--min-move` cannot push below
+  that floor, and those rows carry 42 of the drone frames.
+- **The separation is far weaker than the prediction.** Measured travel over 5 frames:
+
+  | | p10 | median | p90 |
+  | :--- | ---: | ---: | ---: |
+  | on the drone | 15.63 | 63.33 | 131.25 px |
+  | everything else | 1.98 | 19.97 | 76.06 px |
+
+  EXP-024 predicted target p10 13.9 against a **background-field** p90 of 5.60 — tails that
+  do not overlap. The clutter's real median is 19.97 px, so they overlap heavily. That is
+  the caveat EXP-024 filed coming true: the background grid is not the false alarms.
+  Chained clutter genuinely moves, from parallax and from association error — the 25 px/frame
+  speed limit permits 125 px of travel across a 5-frame window, so a chain that hops between
+  two objects banks the hop as travel.
+
+### What this says
+
+The moving factor is sound and cheap, and its own prediction was over-optimistic by the
+exact amount EXP-024 warned. The honest next step is not a better statistic but a tighter
+**chain**: the speed limit that makes association permissive is what lets clutter accumulate
+travel. A cap (`--top`) is also untried here and is how EXP-028 reaches 0.93/frame; without
+it these loads are not comparable to the shipping pipeline.

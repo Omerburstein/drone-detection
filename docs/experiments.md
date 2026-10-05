@@ -4677,3 +4677,105 @@ single digits.
 Artifacts in `runs/sofa_analog/exp028_kinematic/catch_4/` and `catch_5/`:
 `{nogate,gate,ckeep3,noweak}_<clip>_<start>_<end>` with `.mp4`, `.csv`, `_drone.csv`,
 `_frames.csv` and a log each. The batch log is `run_clips.log` one level up.
+
+## EXP-029 — the moving factor: the direction test adds nothing once magnitude is measured
+
+The user asked, after EXP-024, why a candidate's travel across the k frames is not used as
+evidence rather than only the direction it points. Mostly it was already computed and
+discarded: `window.Track.total_mu` is the ego-compensated displacement over the window, and
+`criteria.epipolar_direction` reduces its magnitude to a 2 px veto (`min_displacement`)
+before testing only direction. EXP-029 promotes the magnitude and measures what the
+direction test still contributes.
+
+- **Method.** `src/algo/kinematics.py` gains the **moving factor**, the exact complement of
+  the speed limit already there — that docstring closed "a piece of clutter that stays put
+  moves plausibly by definition, and this gate passes it". A confirmed track must now also
+  have travelled `min_move` px against the static scene over `move_window` frames. Each
+  track keeps its sightings as `anchors` and carries every one forward through each frame's
+  homography, so differencing newest against oldest removes ego-motion. `min_move = 0` is
+  inert and EXP-028's 32 tests pass untouched; 8 new tests cover clutter kept forever and
+  the target dropped by premature judging or by being charged for the camera's own pan.
+- **It runs on the sky branch, not the motion window**, because EXP-024 measured the window
+  losing to it at every load and LK dying at a median 0 usable steps on analog. Association
+  is EXP-028's `KinematicTracker` chaining candidate peaks: no texture needed, and a
+  duplicated frame contributes no candidate rather than killing a tracker.
+- **The direction half is in `experiments/exp029_moving_factor/moving.py`**, not `src/`,
+  since it needs an epipole and `src/` must not depend on `experiments/`. `--mode` is
+  `off` / `veto` / `require`; `veto` is the default because a test rejecting at chance must
+  never reject *by default*, which is what `require` allows. `still`, `parallax`, `unjudged`
+  and `moving` stay four outcomes — collapsing `unjudged` into `rejected` is how the
+  direction test's cost stayed hidden in EXP-017.
+- **Data.** `catch_2` 441–800, 360 frames, **224 labelled**. Labels on this clip run
+  491–785. Sky strong at c >= 6, continued at c >= 3, speed limit 25 px/frame, confirm 2,
+  coast 5, `--min-move 8`, `--move-window 5`, no `--top` cap.
+- **Scripts.** `experiments/exp029_moving_factor/` (`moving.py` with a 9-of-9 self-check,
+  `overlay_moving.py`, `analog_catch_2/clipcfg.py`). Artifacts in
+  `runs/sofa_analog/exp029_moving_factor/`: `moving_m8_w5_veto_catch_2_441_800.mp4` (the
+  clean look), `veto.log`, `off.log`, `require.log`, and `judged_veto.csv` /
+  `judged_off.csv`, one row per judged track per frame with `moved`, `span`, `sin`,
+  `outcome` and `on_target`, so any threshold recuts without re-running.
+
+### Result
+
+| mode | kept/frame | false alarms | drone kept (of 224) |
+| :--- | ---: | ---: | ---: |
+| `off` (magnitude alone) | 16.14 | 5626 | **105 (46.9%)** |
+| `veto` (+ direction) | 14.59 | 5071 | 104 (46.4%) |
+| `require` | 12.93 | 4494 | 96 (42.9%) |
+
+**The direction test contributes nothing at matched load.** The veto drops 555 false alarms
+for one drone frame, which looks like a gain until the loads are equalised: magnitude alone
+at `--min-move 15` gives 14.57/frame and the **identical 104** drone frames. The epipole buys
+exactly zero, consistent with its measured agreement of 28.9% against a ~23% chance floor.
+`require` is worse on both axes, as EXP-021 predicted. **Ship `--mode off`**; the direction
+test is retained only because `require` is the evidence against it.
+
+### Against plain EXP-023 thresholding, at matched load
+
+| load/frame | EXP-029 chain + factor | EXP-023 plain `c` | winner |
+| ---: | ---: | ---: | :--- |
+| 21.01 | **108 (48.2%)** | 102 (45.5%) | EXP-029 |
+| 16.14 | **105 (46.9%)** | 97 (43.3%) | EXP-029 |
+| 14.57 | **104 (46.4%)** | 96 (42.9%) | EXP-029 |
+| 12.05 | **96 (42.9%)** | 94 (42.0%) | EXP-029 |
+| 10.06 | 71 (31.7%) | **89 (39.7%)** | EXP-023 |
+| 8.30 | 65 (29.0%) | **83 (37.1%)** | EXP-023 |
+| 6.69 | 60 (26.8%) | **78 (34.8%)** | EXP-023 |
+
+**The gain is real and in the wrong place.** Above ~12 candidates/frame the chain plus the
+factor beats plain thresholding by 2–8 drone frames; below it the curve collapses. EXP-023
+ships at 5.59/frame and EXP-028 at 0.93 shown/frame, both under the crossover, so **as built
+this is not an improvement at any load the project wants.**
+
+### Read with
+
+- **The prediction was optimistic by the amount EXP-024 warned.** Measured travel over 5
+  frames: on the drone p10 15.63, median 63.33; everything else p10 1.98, **median 19.97**.
+  EXP-024 predicted the target's p10 13.85 against a *background-field* p90 of 5.60 — tails
+  that do not overlap. They overlap heavily against the real false alarms. That is EXP-024's
+  own filed caveat coming true: the background grid is not the clutter that survives.
+- **Chained clutter genuinely moves**, from parallax and from association error. The
+  25 px/frame speed limit permits 125 px of travel across a 5-frame window, so a chain that
+  hops between two objects banks the hop as travel. The permissiveness that makes
+  association work is what lets clutter accumulate displacement.
+- **A floor of 5.42 kept/frame.** 1950 of 7564 confirmed-track rows (25.8%) have no span
+  yet, and `off`/`veto` keep what they cannot judge, so `--min-move` cannot push the load
+  below that. Those rows carry 42 of the drone frames, so refusing them is not free either.
+- **Not comparable to EXP-028's 0.93 shown/frame**, which uses a `--top 3` cap this run does
+  not. The `--top` flag exists and is untried.
+- The epipole here is **one pair's**, not a window's; EXP-019 measured per-pair epipoles
+  hopping 99–127 px. Pooling might rescue the direction test, but it would have to beat a
+  statistic that already costs nothing to compute.
+
+### Standing recommendation
+
+**Keep the moving factor, run it with `--mode off`, and do not spend more on the direction
+test.** Two measurements now say the same thing from opposite directions: EXP-021 found it
+rejecting at chance, and here it adds nothing at matched load even when handed a
+well-separated magnitude to refine.
+
+**The next lever is the chain, not the statistic.** Clutter accumulates travel because
+association is permissive; tightening it — a smaller reach, or requiring consistent
+direction *along the chain* rather than against an epipole — attacks the measured cause.
+Then re-run with `--top 3` so the numbers sit at EXP-028's operating point instead of 15x
+above it.

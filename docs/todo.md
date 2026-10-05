@@ -15,6 +15,21 @@ dates, not priorities.
 
 ## Open
 
+- [ ] 2026-10-05 — [algo] **Tighten the chain, then re-run EXP-029 at EXP-028's operating
+  point.** EXP-029 measured the moving factor working as designed and still not helping below
+  ~12 candidates/frame. Two specific causes, both to attack:
+  1. **Clutter accumulates travel through permissive association.** The 25 px/frame speed
+     limit allows 125 px across a 5-frame window, so a chain that hops between two objects
+     banks the hop as displacement — measured clutter median 19.97 px against the target's
+     p10 of 15.63. Try a smaller reach, and requiring direction consistency *along the chain*
+     (successive steps roughly collinear) rather than against an epipole, which EXP-029 and
+     EXP-021 both found worthless.
+  2. **A 5.42 kept/frame floor.** 25.8% of confirmed-track rows have no span yet and are kept
+     as `unjudged`, so `--min-move` cannot reduce load past that. Those rows carry 42 of the
+     drone frames, so refusing them outright is not free — needs a graded treatment.
+  Then re-run with `--top 3` so the load sits at EXP-028's 0.93 shown/frame rather than 15x
+  above it; EXP-029's numbers are not comparable to the shipping pipeline without it.
+
 - [ ] 2026-10-05 — [algo] **Take the EXP-028 kinematic gate to O4, then into the CLIs.**
   catch_4/5 are done (2026-10-05, the default holds; see Done). O4 remains: its fps and
   lens differ, so the limit must be re-derived. Then wire `KinematicTracker` into
@@ -379,6 +394,25 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-29 — [algo] **Score a HUD mask against labels, not against its coverage percentage.** EXP-020: the tool prints `7.71% of the frame`, which is the wrong number — 13.15% sounded acceptable and was 20% of the ground truth. Add `--labels <dir>` to `src.data.hud_mask` so the build reports how many labelled boxes the mask would veto at `HUD_VETO_FRACTION`, and refuse silently-expensive masks. Cheap: the scoring loop is `overlap_fraction` over YOLO txt files, ~20 lines, and it is the only check that would have caught this.
 
 ## Done
+
+- [x] 2026-10-05 — [algo] **EXP-029: the moving factor, and the direction test measured out
+  of the pipeline.** Added the moving factor to `src/algo/kinematics.py` — the complement of
+  EXP-028's speed limit, a lower bound on how far a confirmed track must travel against the
+  static scene, with anchors carried through each frame's homography. `min_move = 0` is inert
+  so EXP-028's 32 tests pass untouched; 8 new tests cover clutter kept forever and the target
+  dropped by premature judging or by being charged for the camera's pan. The direction half
+  is in `experiments/exp029_moving_factor/moving.py` (off / veto / require, 9-of-9
+  self-check) because it needs an epipole and `src/` must not import `experiments/`.
+  **Result: the direction test adds nothing.** `veto` drops 555 false alarms for one drone
+  frame, but magnitude alone at `--min-move 15` reaches the same 14.57/frame load and the
+  identical 104 of 224 drone frames; its epipole agreement is 28.9% against a ~23% floor.
+  `require` is worse on both axes. Against plain EXP-023 thresholding the chain+factor wins
+  by 2-8 drone frames above ~12 candidates/frame and loses below it, and EXP-023 ships at
+  5.59/frame — so **as built it is not an improvement at any load the project wants.** The
+  cause is measured: clutter's real travel is a median 19.97 px against the target's p10 of
+  15.63, so EXP-024's predicted non-overlapping tails do not survive contact with the actual
+  false alarms — the filed caveat that the background grid is not the clutter. Video and
+  dumps in `runs/sofa_analog/exp029_moving_factor/`; full entry in `docs/experiments.md`.
 
 - [x] 2026-10-05 — [algo] **EXP-028 out of sample on catch_4 and catch_5.**
   `experiments/exp028_kinematic/run_clips.py` (no gate / gate / c-keep 3 / no weak, from
