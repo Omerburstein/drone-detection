@@ -15,6 +15,11 @@ dates, not priorities.
 
 ## Open
 
+- [ ] 2026-10-05 — [algo] **EXP-030 at matched load.** The gated summed-c run shows 32–73%
+  more answers than EXP-028, because clusters of sub-threshold blobs clear c-keep 6. Raise
+  `--c-keep` under `--merge-score sum` until shown/frame returns to EXP-028's (0.93 / 1.21 /
+  0.37 on catch_2 / 4 / 5), then compare recall. If the sum still wins, make it the default.
+
 - [ ] 2026-10-05 — [algo] **Tighten the chain, then re-run EXP-029 at EXP-028's operating
   point.** EXP-029 measured the moving factor working as designed and still not helping below
   ~12 candidates/frame. Two specific causes, both to attack:
@@ -394,6 +399,15 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-29 — [algo] **Score a HUD mask against labels, not against its coverage percentage.** EXP-020: the tool prints `7.71% of the frame`, which is the wrong number — 13.15% sounded acceptable and was 20% of the ground truth. Add `--labels <dir>` to `src.data.hud_mask` so the build reports how many labelled boxes the mask would veto at `HUD_VETO_FRACTION`, and refuse silently-expensive masks. Cheap: the scoring loop is `overlap_fraction` over YOLO txt files, ~20 lines, and it is the only check that would have caught this.
 
 ## Done
+
+- [x] 2026-10-05 — [algo] **EXP-030: merged objects scored by the sum of their members' c.**
+  `overlay_split.py --merge-score sum` (default `max`, byte-identical when off), run by
+  `experiments/exp030_merge_sum/run_clips.py` on catch_2/4/5 at merge 20, with and without
+  the kinematic gate.
+  - Without the gate, at identical load, the drone is #1 in 90 frames vs 81, because the
+    drone fragments into 2–3 blobs and clutter does not.
+  - With the gate, the load rises 32–73% (summed clusters clear c-keep 6), so it is not
+    comparable to EXP-028. Next: the same at matched load.
 
 - [x] 2026-10-05 — [algo] **EXP-029: the moving factor, and the direction test measured out
   of the pipeline.** Added the moving factor to `src/algo/kinematics.py` — the complement of

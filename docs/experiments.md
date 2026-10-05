@@ -4779,3 +4779,74 @@ association is permissive; tightening it — a smaller reach, or requiring consi
 direction *along the chain* rather than against an epipole — attacks the measured cause.
 Then re-run with `--top 3` so the numbers sit at EXP-028's operating point instead of 15x
 above it.
+
+## EXP-030 — merged objects scored by the sum of their members' c
+
+The user asked whether `--merge 20` takes the max or the sum of the blobs it folds. It
+took the max: the anchor's `c` alone. This run scores the object by the **sum** of every
+member's `c` instead (`overlay_split.py --merge-score sum`).
+
+**What is unchanged.**
+
+- Anchors are still chosen by their own `c`.
+- The sections' tests still pass on any member.
+- The summed `c` feeds the ranking, the gate's c-keep 6 test and the track evidence.
+- Every member counts, including sub-threshold blobs at c 3–4.
+
+**Comparison.** Each clip was run four ways, max/sum with and without EXP-028's default
+gate. The settings are EXP-028's: top 3, merge 20, circles >= 20 px, `--osd-grid`. The
+`max_` runs re-create EXP-028's rows: all 18 CSVs are byte-identical. Runner:
+`experiments/exp030_merge_sum/run_clips.py`.
+
+| clip | run | shown/frame | FA shown | drone in top 3 | drone #1 | #1 jumps > 29 px |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| catch_2 (224 labelled) | max, no gate | 1.08 | 318 | 67 | 57 | 103 / 156 (66%) |
+| catch_2 | sum, no gate | 1.08 | 318 | 67 | **58** | 103 / 156 (66%) |
+| catch_2 | max, gate (EXP-028 default) | 0.93 | 264 | 69 | 60 | 43 / 165 (26%) |
+| catch_2 | sum, gate | 1.23 | 353 | 88 | 72 | 57 / 200 (28%) |
+| catch_4 (82 labelled) | max, no gate | 1.11 | 169 | 12 | 8 | 42 / 51 (82%) |
+| catch_4 | sum, no gate | 1.11 | 167 | 13 | **11** | 40 / 51 (78%) |
+| catch_4 | max, gate | 1.21 | 177 | 22 | 18 | 47 / 92 (51%) |
+| catch_4 | sum, gate | 1.80 | 243 | 42 | 35 | 73 / 132 (55%) |
+| catch_5 (188 labelled) | max, no gate | 0.71 | 235 | 29 | 16 | 67 / 94 (71%) |
+| catch_5 | sum, no gate | 0.71 | 235 | 29 | **21** | 68 / 94 (72%) |
+| catch_5 | max, gate | 0.37 | 100 | 37 | 31 | 20 / 66 (30%) |
+| catch_5 | sum, gate | 0.64 | 173 | 66 | 40 | 31 / 96 (32%) |
+
+**Reading.**
+
+- **Without the gate, the sum is a clean win at identical load.** The pool's membership
+  is unchanged, since the tests are, so the load is the same. Only the order changes. The
+  drone is #1 in 90 frames across the three clips, against 81 with the max (58/57, 11/8,
+  21/16). Top-3 recall is unchanged (one frame more on catch_4).
+- **The reason is structural: the drone fragments, clutter does not.** In the shown sum
+  objects, a drone object holds 2.2–3.0 blobs on average, and a false alarm holds
+  1.1–1.6. The median lift from summing is +1.5 to +4.0 c on the drone, and 0 on false
+  alarms on catch_2 and catch_4. catch_5's gated false alarms are the exception, with a
+  +3.1 median lift.
+- **With the gate, the sum rows are not comparable to EXP-028.** They show 32% (catch_2),
+  49% (catch_4) and 73% (catch_5) more answers.
+  - The mechanism is c-keep 6: a cluster of two or three sub-threshold blobs now clears
+    it, so weak continuations rise from 178 to 280, 176 to 329 and 65 to 179.
+  - The recall gain is large (drone in top 3: 69→88, 22→42, 37→66), but it is bought
+    partly with load.
+  - Top-3 hits per false alarm shown are about level: catch_2 0.26 vs 0.25, catch_4 0.12
+    vs 0.17, catch_5 0.37 vs 0.38. So this is not yet evidence of a better operating
+    point.
+  - The gate also holds the drone back less often (16→11, 8→4, 16→12).
+- **The #1 jump rate is unchanged within a couple of points.** Summing does not destabilise
+  the ranking.
+
+**Caveats.** The spans are short (catch_4 counts move in single digits). c-keep 6 was set
+for a per-blob `c` and means something looser for a summed one. The sum also has no cap,
+so a large cluster of weak clutter could in principle outrank a crisp drone; that has not
+shown up on these clips.
+
+**Next.** Compare the gated sum at matched load. Raise `--c-keep` under the sum until
+shown/frame returns to EXP-028's (0.93 / 1.21 / 0.37), then read recall. If the sum still
+wins there, make it the default.
+
+Artifacts in `runs/sofa_analog/exp030_merge_sum/<clip>/`:
+`{max,sum}_{nogate,gate}_<clip>_<start>_<end>` with `.mp4`, `.csv` (`c_max` on the sum
+runs), `_drone.csv`, `_frames.csv` and a log each. The overlay is `sum_gate_*.mp4`. The
+batch log is `runs/sofa_analog/exp030_merge_sum.log`.
