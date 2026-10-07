@@ -37,6 +37,21 @@ Outputs go to `runs/sofa_analog/exp031_combined/merge<R>/<clip>/{variant}_<clip>
 `.mp4`, `.csv`, `_drone.csv`, `_frames.csv` and a `.log`. The batch log and the table are
 in `runs/sofa_analog/exp031_combined/run_all.log`.
 
+## The FIELD `.raw`, at the sensor's resolution
+
+```bash
+py -3.13 experiments/exp031_combined/run_field_raw.py            # 4128 wide; --width, --jobs 5
+```
+
+`all` on the FIELD capture's `.raw`: 4128x3008 Bayer, the same 3600 frames as the mp4 at 4x
+the resolution (`src/data/raw_bayer.py`). There are no EXP-030 dumps for it, so the driver
+builds the sky-branch and window dumps first. It runs over the three episodes in
+`data/raw/FIELD/PROVENANCE.md`, 2–180, 1090–1553 and 3130–3600, at merge 20 and 30.
+`field_raw/clipcfg.py` is the clip config. It routes the `.raw` path in `cv2.VideoCapture`
+to `RawBayerCapture`, and `FIELD_RAW_WIDTH` sets the working width. Outputs go to
+`runs/field/exp031_combined/raw<W>/<a>_<b>/`: `sky_candidates.csv`, `window_seeds_k4.csv`,
+and `all_merge<R>_<a>_<b>` with `.mp4`, `.csv`, `_frames.csv` and `.log`.
+
 ## Result
 
 See EXP-031 in `docs/experiments.md`. In short, pooled over the three clips:
