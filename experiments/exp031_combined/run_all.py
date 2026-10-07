@@ -16,6 +16,7 @@ Variants per clip, so each stage's contribution is the difference between two ro
 
   * `exp028`     -- max, gate.                    At merge 20 = EXP-028's default;
   * `exp029`     -- max, gate, min-move 20.       At merge 20 on catch_2 = EXP-029 stacked;
+  * `exp030`     -- sum, gate.                    = EXP-030's `sum_gate` at the same radius;
   * `all`        -- sum, gate, min-move 20.       Everything, at c-keep 6;
   * `all_ck<N>`  -- the same at c-keep N, the matched-load sweep EXP-030 left open.
 
@@ -45,6 +46,7 @@ C_KEEP = (8, 10, 12, 15)
 VARIANTS = {
     "exp028": [],
     "exp029": MOVE,
+    "exp030": SUM,
     "all": [*MOVE, *SUM],
     **{f"all_ck{k}": [*MOVE, *SUM, "--c-keep", str(k)] for k in C_KEEP},
 }
