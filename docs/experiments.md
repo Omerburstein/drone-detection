@@ -4678,7 +4678,7 @@ Artifacts in `runs/sofa_analog/exp028_kinematic/catch_4/` and `catch_5/`:
 `{nogate,gate,ckeep3,noweak}_<clip>_<start>_<end>` with `.mp4`, `.csv`, `_drone.csv`,
 `_frames.csv` and a log each. The batch log is `run_clips.log` one level up.
 
-## EXP-029 — the moving factor: the direction test adds nothing once magnitude is measured
+## EXP-029 — the moving factor, and where the direction test starts to earn its place
 
 The user asked, after EXP-024, why a candidate's travel across the k frames is not used as
 evidence rather than only the direction it points. Mostly it was already computed and
@@ -4707,7 +4707,8 @@ direction test still contributes.
   direction test's cost stayed hidden in EXP-017.
 - **Data.** `catch_2` 441–800, 360 frames, **224 labelled**. Labels on this clip run
   491–785. Sky strong at c >= 6, continued at c >= 3, speed limit 25 px/frame, confirm 2,
-  coast 5, `--min-move 8`, `--move-window 5`, no `--top` cap.
+  coast 5, `--move-window 5`, no `--top` cap. `--min-move` **20** since 2026-10-07; the
+  first runs used 8 and both are reported below.
 - **Scripts.** `experiments/exp029_moving_factor/` (`moving.py` with a 9-of-9 self-check,
   `overlay_moving.py`, `analog_catch_2/clipcfg.py`). Artifacts in
   `runs/sofa_analog/exp029_moving_factor/`: `moving_m8_w5_veto_catch_2_441_800.mp4` (the
@@ -4723,12 +4724,38 @@ direction test still contributes.
 | `veto` (+ direction) | 14.59 | 5071 | 104 (46.4%) |
 | `require` | 12.93 | 4494 | 96 (42.9%) |
 
-**The direction test contributes nothing at matched load.** The veto drops 555 false alarms
-for one drone frame, which looks like a gain until the loads are equalised: magnitude alone
-at `--min-move 15` gives 14.57/frame and the **identical 104** drone frames. The epipole buys
-exactly zero, consistent with its measured agreement of 28.9% against a ~23% chance floor.
-`require` is worse on both axes, as EXP-021 predicted. **Ship `--mode off`**; the direction
-test is retained only because `require` is the evidence against it.
+**At `--min-move 8` the direction test contributes nothing at matched load.** The veto drops
+555 false alarms for one drone frame, which looks like a gain until the loads are equalised:
+magnitude alone at `--min-move 15` gives 14.57/frame and the **identical 104** drone frames.
+`require` is worse on both axes, as EXP-021 predicted.
+
+### Correction, 2026-10-07: that holds only at a threshold too low to matter
+
+The paragraph above was measured at one `--min-move` and generalised, which was wrong. The
+first version of this entry concluded "ship `--mode off`". Swept properly, the veto is worth
+nothing up to 12 and then grows:
+
+| `--min-move` | load/frame | veto drone | magnitude alone, same load | delta |
+| ---: | ---: | ---: | ---: | ---: |
+| 8 | 14.59 | 104 | 104 (at 14.9) | **+0** |
+| 12 | 13.76 | 104 | 104 (at 18.7) | +0 |
+| 16 | 13.04 | 103 | 102 (at 22.9) | +1 |
+| **20** | 12.33 | **103** | 99 (at 27.7) | **+4** |
+| 24 | 11.80 | 100 | 90 (at 31.8) | +10 |
+| 30 | 11.11 | 95 | 77 (at 36.9) | **+18** |
+| 40 | 9.97 | 73 | 71 (at 45.6) | +2 |
+
+**Why the two disagree.** At 8 the magnitude cut and the direction cut remove overlapping
+sets, so the second is redundant. Past ~16 magnitude pushed harder starts cutting *the
+target* — its travel distribution overlaps the clutter's, measured below — while the veto
+removes clutter by a criterion uncorrelated with travel. The direction test does carry
+information; it only becomes visible once magnitude is exhausted. Its epipole agreement of
+28.9% against a ~23% floor is weak but not nothing, and this is where that shows up.
+
+**The default moved from 8 to 20** (2026-10-07, at the user's suggestion). Recall is flat
+across that move — 105 then 104 of 224 — while load falls 16.14 to 13.52/frame and false
+alarms fall **5626 to 4686**. 940 fewer false alarms for one drone frame. With the veto on,
+20 also dominates 16: the same 103 frames at 12.33/frame instead of 13.04.
 
 ### Against plain EXP-023 thresholding, at matched load
 
@@ -4769,10 +4796,17 @@ this is not an improvement at any load the project wants.**
 
 ### Standing recommendation
 
-**Keep the moving factor, run it with `--mode off`, and do not spend more on the direction
-test.** Two measurements now say the same thing from opposite directions: EXP-021 found it
-rejecting at chance, and here it adds nothing at matched load even when handed a
-well-separated magnitude to refine.
+**Keep the moving factor. Run it at `--min-move 20 --mode veto`** (both are now the
+defaults): 12.33 kept/frame, 103 of 224 drone frames, **+9 over EXP-023 at matched load**.
+Superseded 2026-10-07 — the first version of this line said `--mode off`, from a sweep taken
+at `--min-move 8` only, where the veto is genuinely worth nothing. It is worth +4 frames at
+20 and +18 at 30.
+
+**It is still not usable at the project's operating loads, and that has not changed.**
+EXP-029 wins against plain EXP-023 thresholding only above ~10-11 candidates/frame; below
+that EXP-023 wins outright (73 against 89 at 9.97/frame). The **5.42/frame floor** of
+unjudged tracks means EXP-029 cannot reach EXP-023's shipping 5.59/frame or EXP-028's 0.93
+at all. The gain is real and lives in a band above where anything ships.
 
 **The next lever is the chain, not the statistic.** Clutter accumulates travel because
 association is permissive; tightening it — a smaller reach, or requiring consistent

@@ -402,6 +402,20 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-07 — [algo] **EXP-029's moving factor defaulted to 20 px, and the direction
+  test's verdict corrected.** At the user's suggestion `--min-move` went from 8 to 20:
+  **940 fewer false alarms (5626 -> 4686) for one drone frame** (105 -> 104 of 224), load
+  16.14 -> 13.52/frame. Sweeping the combination properly then overturned the 2026-10-05
+  conclusion that the epipolar direction test "adds nothing": that was measured at
+  `--min-move 8` alone, where the magnitude and direction cuts remove overlapping sets. Past
+  ~16 it is worth +1, **+4 at 20** and **+18 at 30** drone frames at matched load, because
+  magnitude pushed harder starts cutting the target while the veto removes clutter by an
+  uncorrelated criterion. **Shipping config is now `--min-move 20 --mode veto`:** 12.33
+  kept/frame, 103 of 224, +9 over EXP-023 at matched load. Unchanged: the 5.42/frame
+  unjudged floor still keeps EXP-029 away from EXP-023's 5.59/frame and EXP-028's 0.93, so
+  it remains a gain in a band above where anything ships. Ledger entry retitled and its
+  recommendation replaced.
+
 - [x] 2026-10-07 — [algo] **EXP-030 at merge 30.** `run_clips.py --merge 30`; outputs in
   `runs/sofa_analog/exp030_merge_sum/merge30/`, with merge 20 moved to `merge20/`.
   - Without the gate, the summed score at 30 px is the best #1 at identical load so far:

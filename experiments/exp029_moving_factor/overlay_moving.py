@@ -85,10 +85,14 @@ def parse() -> argparse.Namespace:
     ap.add_argument("--c-keep", type=float, default=3.0,
                     help="a confirmed track may be continued by a candidate at or above "
                          "this, weak or strong (EXP-028's --c-keep)")
-    ap.add_argument("--min-move", type=float, default=8.0,
+    ap.add_argument("--min-move", type=float, default=20.0,
                     help="the moving factor, px of ego-compensated travel over the "
-                         "window. Default 8 sits between the background field's p90 of "
-                         "5.60 and the target's p10 of 13.9 (EXP-024, 2026-10-04)")
+                         "window. Default 20 is where the sweep puts the knee: recall is "
+                         "flat from 8 to 20 (105 then 104 of 224 drone frames) while load "
+                         "falls 16.14 to 13.52/frame, and past 30 it collapses (96 at 30, "
+                         "71 at 45). An earlier default of 8 came from the predicted "
+                         "background-field p90 of 5.60, which EXP-029 measured as "
+                         "optimistic -- the real clutter travels a median 19.97 px")
     ap.add_argument("--move-window", type=int, default=5,
                     help="frames the travel is measured across")
     ap.add_argument("--mode", default="veto", choices=moving.MODES,

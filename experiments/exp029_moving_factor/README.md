@@ -112,13 +112,33 @@ front-end ceiling, not a denominator.
 | `veto` (+ direction) | 14.59 | 5071 | 104 (46.4%) |
 | `require` | 12.93 | 4494 | 96 (42.9%) |
 
-The veto drops 555 false alarms for a single drone frame, which looks like a win until the
-load is matched: **magnitude alone at `--min-move 15` reaches 14.57/frame and the identical
-104 drone frames.** The epipole buys exactly zero, consistent with its measured agreement
-of 28.9% against a ~23% chance floor. `require` is worse on both axes, as EXP-021 predicted.
+Those rows are at `--min-move 8`, the original default. There the veto drops 555 false
+alarms for a single drone frame and is worth nothing at matched load: magnitude alone at
+`--min-move 15` reaches 14.57/frame and the identical 104 drone frames. `require` is worse
+on both axes, as EXP-021 predicted.
 
-**So ship `--mode off`.** The direction test is kept only because `require` is the evidence
-for not using it.
+### The default moved to 20, and that changes the verdict on the direction test
+
+`--min-move 20` (2026-10-07): **13.52 kept/frame and 4686 false alarms against 8's 16.14
+and 5626 — 940 fewer false alarms for one drone frame.** Recall is flat across the move and
+collapses only past 30 (96 at 30, 71 at 45).
+
+Swept at matched load, the veto is worth nothing up to 12 and then grows:
+
+| `--min-move` | load/frame | veto drone | magnitude alone, same load | delta |
+| ---: | ---: | ---: | ---: | ---: |
+| 8 | 14.59 | 104 | 104 | **+0** |
+| 12 | 13.76 | 104 | 104 | +0 |
+| 16 | 13.04 | 103 | 102 | +1 |
+| **20** | 12.33 | **103** | 99 | **+4** |
+| 24 | 11.80 | 100 | 90 | +10 |
+| 30 | 11.11 | 95 | 77 | **+18** |
+
+At 8 the magnitude cut and the direction cut remove overlapping sets. Past ~16 magnitude
+starts cutting *the target*, whose travel overlaps the clutter's, while the veto removes
+clutter by a criterion uncorrelated with travel. **So `--mode veto` is right after all** —
+an earlier version of this file said `--mode off`, generalised from the single threshold
+above.
 
 ### Against plain EXP-023 thresholding, at matched load
 
