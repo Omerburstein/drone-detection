@@ -15,13 +15,6 @@ dates, not priorities.
 
 ## Open
 
-- [ ] 2026-10-05 — [algo] **EXP-030 at matched load.** The gated summed-c run shows 32–73%
-  more answers than EXP-028, because clusters of sub-threshold blobs clear c-keep 6. Raise
-  `--c-keep` under `--merge-score sum` until shown/frame returns to EXP-028's (0.93 / 1.21 /
-  0.37 on catch_2 / 4 / 5), then compare recall. If the sum still wins, make it the default.
-  **2026-10-07:** do it at both merge 20 and merge 30. At 30 px the gated load rises
-  65–83%, and clutter clusters start to gain from the sum too.
-
 - [ ] 2026-10-05 — [algo] **Tighten the chain, then re-run EXP-029 at EXP-028's operating
   point.** EXP-029 measured the moving factor working as designed and still not helping below
   ~12 candidates/frame. Two specific causes, both to attack:
@@ -36,6 +29,10 @@ dates, not priorities.
      drone frames, so refusing them outright is not free — needs a graded treatment.
   Then re-run with `--top 3` so the load sits at EXP-028's 0.93 shown/frame rather than 15x
   above it; EXP-029's numbers are not comparable to the shipping pipeline without it.
+  **2026-10-07, EXP-031:** a third cause, found out of sample. On catch_5 the camera chases
+  the drone, and measuring travel against the static scene removes it: 13 drone frames lost
+  (37 → 24 in the top 3). Measure travel in raw picture coordinates, or take the larger of
+  raw and compensated, before re-running.
 
 - [ ] 2026-10-05 — [algo] **Take the EXP-028 kinematic gate to O4, then into the CLIs.**
   catch_4/5 are done (2026-10-05, the default holds; see Done). O4 remains: its fps and
@@ -231,6 +228,10 @@ dates, not priorities.
   is the one clip where the motion test actually acquires. This item stays open — analog
   remains the user's priority for deployment — but it is no longer the cheapest thing that
   could change the motion branch's verdict.)*
+  *(2026-10-07, EXP-031: catch_4 and catch_5 are labelled now, and both were used to pick
+  EXP-031's `--merge 30 --merge-score sum --c-keep 10`. A fourth labelled analog clip is
+  the only held-out test of that setting, and defaults stay unchanged until it exists. Run
+  `experiments/exp031_combined/run_all.py` on it first.)*
 
 ### EXP-012: measure whether the O4 fixes actually work
 
@@ -401,6 +402,18 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-29 — [algo] **Score a HUD mask against labels, not against its coverage percentage.** EXP-020: the tool prints `7.71% of the frame`, which is the wrong number — 13.15% sounded acceptable and was 20% of the ground truth. Add `--labels <dir>` to `src.data.hud_mask` so the build reports how many labelled boxes the mask would veto at `HUD_VETO_FRACTION`, and refuse silently-expensive masks. Cheap: the scoring loop is `overlap_fraction` over YOLO txt files, ~20 lines, and it is the only check that would have caught this.
 
 ## Done
+
+- [x] 2026-10-07 — [algo] **EXP-031: every stage at once, and EXP-030 at matched load.**
+  `experiments/exp031_combined/run_all.py` runs EXP-025d to EXP-030 together on catch_2/4/5
+  at merge 20 and 30, with c-keep swept 6–15. The `exp028`/`exp030` rows match EXP-030's CSVs
+  byte for byte.
+  - Pooled, **`--merge 30 --merge-score sum --c-keep 10` beats EXP-028 on every column**:
+    0.65 against 0.75 shown/frame, 434 against 541 false alarms, drone top 3 142 against 128,
+    #1 123 against 109. catch_2 and catch_4 win, but catch_5 loses #1 (21 against 31).
+    The c-keep was chosen in-sample, so the defaults are unchanged.
+  - **The moving factor fails out of sample:** on catch_5, `--min-move 20` loses 13 drone
+    frames where the camera chases the drone. Once c-keep is calibrated it adds nothing.
+    EXP-029's shipping recommendation is withdrawn.
 
 - [x] 2026-10-07 — [algo] **The moving factor stacked on EXP-028's gate: strictly better on
   every column.** The user pointed out the stages are meant to come one on top of the other.

@@ -4843,6 +4843,10 @@ at `--min-move 8` only, where the veto is genuinely worth nothing. It is worth +
 **Superseded 2026-10-07 by the stacked run above: `overlay_stacked.py --min-move 20` is
 strictly better than EXP-028 on every column and is the configuration to ship.**
 
+**Withdrawn 2026-10-07 by EXP-031.** That held on catch_2 only. On catch_5 `--min-move 20`
+drops the drone from the top 3 in 13 frames (37 → 24), where the camera chases it and
+compensation removes its travel. Once c-keep is calibrated it adds nothing pooled.
+
 The paragraph this replaces said the gain was unusable because it lived above ~10-11
 candidates/frame, and that the 5.42/frame floor of unjudged tracks kept EXP-029 away from
 EXP-028's 0.93 shown/frame. Both were properties of `overlay_moving.py`'s standalone
@@ -4979,3 +4983,143 @@ matched-load comparison in `docs/todo.md` now applies to both radii.
 
 Artifacts in `runs/sofa_analog/exp030_merge_sum/merge30/<clip>/`, named as for merge 20.
 The batch log is `runs/sofa_analog/exp030_merge_sum/merge30.log`.
+
+## EXP-031 — every stage at once, and EXP-030 at matched load
+
+- **Date:** 2026-10-07
+- **Question:** the user asked for the past experiments combined into one. EXP-025d to
+  EXP-030 each added one flag to `overlay_split.py` and were measured one on top of the
+  previous, but never all on together. EXP-029's moving factor had only been run on catch_2.
+  Does the full stack beat EXP-028, and what does each stage add to it? This also answers
+  EXP-030's open question: is the summed score still better once its load is brought back
+  to EXP-028's?
+- **Stages:** the sky/ground split with a pooled top 3 (EXP-025d), `--merge` (EXP-025d),
+  `--osd-grid` (EXP-027), `--kinematic` with evidence ranking (EXP-028), `--min-move 20`
+  (EXP-029) and `--merge-score sum` (EXP-030). Circles are drawn at least 20 px across.
+- **Data:** the three labelled analog clips, catch_2 441–800 (224 labelled), catch_4
+  159–326 (82) and catch_5 69–444 (188), 494 labelled frames in all. Merge radius 20 and 30.
+- **Hardware / cost:** i7-1255U CPU, 72 overlays from EXP-030's dumps, with no detector
+  re-run, 4 in parallel.
+- **Scripts:** `experiments/exp031_combined/run_all.py`. Artifacts in
+  `runs/sofa_analog/exp031_combined/merge{20,30}/<clip>/`: `{variant}_<clip>_<start>_<end>`
+  with `.mp4`, `.csv`, `_drone.csv`, `_frames.csv` and `.log`. The full per-clip table is in
+  `run_all.log` one level up.
+- **Variants:** `exp028` (max score, gate), `exp029` (+ `--min-move 20`), `exp030`
+  (+ `--merge-score sum`, no moving factor), `all` (both), and `exp030_ck{8,10,12,15}` and
+  `all_ck{8,10,12,15}`, the last two at a stricter `--c-keep`.
+
+**The reproduced rows are exact.** `exp028` and `exp030` match EXP-030's `max_gate` and
+`sum_gate` byte for byte at both radii, on all three clips: 36 CSVs. The only difference is
+the `too_still` column, which EXP-029 added to `_frames.csv` later. `exp029` on catch_2 at
+merge 20 matches EXP-029's stacked run. Combining the stages changes none of them.
+
+### Result — pooled over the three clips
+
+One configuration for all three clips. Choosing a c-keep per clip would be tuning on the test.
+
+| merge | run | shown/frame | FA shown | drone in top 3 (of 494) | drone #1 | top 3 per FA |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 20 | `exp028` (EXP-028 default) | 0.75 | 541 | 128 | 109 | 0.24 |
+| 20 | `exp029` + moving factor | 0.65 | 468 | 115 | 102 | 0.25 |
+| 20 | `exp030` + summed score | 1.09 | 769 | 196 | 147 | 0.25 |
+| 20 | `all` | 0.95 | 671 | 171 | 140 | 0.25 |
+| 20 | `exp030_ck8` | 0.68 | 461 | 141 | 120 | 0.31 |
+| 20 | `all_ck8` | 0.62 | 422 | 128 | 111 | 0.30 |
+| 20 | `exp030_ck10` | 0.56 | 373 | 120 | 104 | 0.32 |
+| 30 | `exp028` | 0.74 | 531 | 128 | 115 | 0.24 |
+| 30 | `exp030_ck8` | 0.78 | 530 | 165 | 142 | 0.31 |
+| 30 | `all_ck8` | 0.70 | 474 | 146 | 133 | 0.31 |
+| **30** | **`exp030_ck10`** | **0.65** | **434** | **142** | **123** | **0.33** |
+| 30 | `exp030_ck12` | 0.53 | 353 | 124 | 117 | 0.35 |
+
+The c-keep 12 and 15 rows of every sweep are in `run_all.log`.
+
+**At matched load the summed score wins, pooled.** Raising c-keep from 6 to 8 or 10 removes
+the load the sum added, and keeps most of its recall:
+
+- **Merge 30, sum, c-keep 10 beats EXP-028 on every pooled column.** Load is 13% lower
+  (0.65 against 0.75 shown/frame), false alarms 20% fewer (434 against 541), the drone is in
+  the top 3 in 142 frames against 128 and #1 in 123 against 109.
+- Merge 20, sum, c-keep 8 does the same at 0.68/frame: 461 false alarms, 141 / 120.
+- Merge 30, sum, c-keep 8 has EXP-028's false-alarm count (530 against 541) and **+37 top-3
+  and +33 #1 frames**. That is the largest gain at equal false alarms.
+
+**Merge 30 beats merge 20 once c-keep is raised.** EXP-030 found the 30 px bubble worse
+with the gate on, because clusters of weak clutter cleared c-keep 6. At c-keep 8 the two
+radii tie on top-3 hits per false alarm (0.31), and from c-keep 10 up the 30 px row is ahead
+(0.33, 0.35, 0.39 against 0.32, 0.33, 0.34). It also reaches more recall at each c-keep. The bubble still collects more of the drone's fragments, and the stricter
+c-keep now stops the clutter.
+
+**The moving factor adds nothing once c-keep is calibrated.** At merge 20, `all_ck8` sits at
+0.62/frame with 128 / 111. The summed-score sweep without it, interpolated to the same
+load, gives about 130 / 112. At merge 30, `all_ck8` (0.70/frame, 146 / 133) against about
+151 / 130 interpolated. Raising c-keep removes load as well as the moving factor does, without
+its out-of-sample failure below.
+
+### Result — per clip, at the recommended setting
+
+| clip | run | shown/frame | FA shown | drone in top 3 | drone #1 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| catch_2 (224) | EXP-028 | 0.93 | 264 | 69 | 60 |
+| catch_2 | **merge 30, sum, c-keep 10** | **0.75** | **189** | **82** | **78** |
+| catch_4 (82) | EXP-028 | 1.21 | 177 | 22 | 18 |
+| catch_4 | **merge 30, sum, c-keep 10** | **0.99** | **134** | **26** | **24** |
+| catch_5 (188) | EXP-028 | 0.37 | 100 | 37 | 31 |
+| catch_5 | merge 30, sum, c-keep 10 | 0.39 | 111 | 34 | **21** |
+
+**Two clips win and one loses.** catch_2 and catch_4 improve on every column at lower load.
+catch_5 loses 10 #1 frames at about the same load, and no summed-score setting near
+EXP-028's load recovers them. At or below 0.37 shown/frame the best is 24 #1 (c-keep 12,
+either radius), and 27 at 0.44 (merge 30, c-keep 8), against 31 under the max. Only c-keep 6
+beats it (40 at merge 20), at 73% more load.
+EXP-030 already measured why: catch_5 is the one clip where the gate's false alarms gain
+from summing (median lift +3.1 c), so the sum lifts its clutter as much as its drone.
+
+### The moving factor fails out of sample on catch_5
+
+EXP-029's `--min-move 20` was chosen on catch_2. This is its first run elsewhere, on top of
+EXP-028:
+
+| clip | EXP-028: top 3 / #1 | + `--min-move 20`: top 3 / #1 | load |
+| --- | :---: | :---: | :---: |
+| catch_2 | 69 / 60 | 69 / 62 | 0.93 → 0.78 |
+| catch_4 | 22 / 18 | 22 / 19 | 1.21 → 1.17 |
+| catch_5 | 37 / 31 | **24 / 21** | 0.37 → 0.30 |
+
+On catch_2 and catch_4 it gains nothing and loses nothing. On catch_5 the drone is overruled in
+13 frames that EXP-028 ranked, all in one pass, frames 150–178, and gains none. From the
+labels, the box centre moved 20–52 px in the picture across the 5-frame window in 7 of
+those 13 frames (150–153, 158, 161, 162). The factor measures travel against the static
+scene, after removing the camera's motion, and the camera is following the drone. That
+removes most of the drone's own motion: **EXP-025b's lesson again**, that compensation
+suits static clutter and not a chased target. In the other 6 (157, 173–178) the drone was
+genuinely slow in the picture, 7–20 px.
+
+### Read with
+
+- **The c-keep choice is in-sample.** c-keep 8 and 10 were picked from these runs on these
+  three clips, and they are every labelled analog clip there is. catch_3/6/7/8 and
+  miss_1/2 are unlabelled. The pooled gain is measured, but the setting that achieves it has
+  not been tested on anything held out.
+- c-keep under the sum means something different from c-keep under the max: it thresholds a
+  cluster's total, not a blob's.
+- "Drone" is EXP-023's grown-box `on_target`, as in every entry since EXP-023. The spans are
+  short: catch_4's counts move in single digits.
+- The per-clip loads are not matched exactly: catch_5 runs 5% above EXP-028 at the
+  recommended setting.
+
+### Recommendation
+
+- **The combined pipeline is EXP-028 plus `--merge 30 --merge-score sum --c-keep 10`,
+  without the moving factor.** Pooled, it beats EXP-028 on every column at 13% less load,
+  but catch_5 loses #1 frames. Defaults are left unchanged until it has been run on a
+  held-out labelled clip.
+- **Withdraw `--min-move 20` as a shipping setting.** EXP-029's recommendation came from
+  catch_2 alone. Out of sample it costs a third of catch_5's drone frames and adds nothing
+  that a c-keep rise does not. If it comes back, it should measure travel in raw picture
+  coordinates, or take the larger of raw and compensated, the opposite of the speed limit's
+  smaller-of rule.
+- **Next: label a fourth analog clip** to test the c-keep 10 / merge 30 setting held out.
+
+Video: `runs/sofa_analog/exp031_combined/merge30/<clip>/exp030_ck10_<clip>_<start>_<end>.mp4`
+is the recommended setting. `all_<clip>_*.mp4` has every stage on at c-keep 6.

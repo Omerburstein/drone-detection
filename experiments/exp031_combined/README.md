@@ -39,4 +39,7 @@ in `runs/sofa_analog/exp031_combined/run_all.log`.
 
 ## Result
 
-See EXP-031 in `docs/experiments.md`.
+See EXP-031 in `docs/experiments.md`. In short, pooled over the three clips:
+`--merge 30 --merge-score sum --c-keep 10` (the `exp030_ck10` row at merge 30) beats EXP-028
+on every column at 13% less load, and catch_5 is the one clip that loses #1 frames. The
+moving factor costs catch_5 13 drone frames and adds nothing once c-keep is raised.
