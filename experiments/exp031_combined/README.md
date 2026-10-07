@@ -19,16 +19,19 @@ the previous, but never all on together, and the EXP-029 stack was only ever run
 py -3.13 experiments/exp031_combined/run_all.py --merge 20 30   # resumable; --jobs 4
 ```
 
-Eight overlays per clip and radius, on catch_2, catch_4 and catch_5, from EXP-030's dumps
+Twelve overlays per clip and radius, on catch_2, catch_4 and catch_5, from EXP-030's dumps
 (no detector re-run):
 
 - `exp028` — max score, gate. At merge 20 this is EXP-028's default.
 - `exp029` — `exp028` plus `--min-move 20`. At merge 20 on catch_2 this is EXP-029's stacked run.
 - `exp030` — `exp028` plus `--merge-score sum`, without the moving factor. This is EXP-030's
   `sum_gate`, and it must match that run byte for byte at both radii.
+- `exp030_ck{8,10,12,15}` — `exp030` with a stricter `--c-keep`. This is the matched-load
+  sweep EXP-030 left open: under the sum, clusters of weak blobs clear c-keep 6 and raise
+  the load.
 - `all` — `exp029` plus `--merge-score sum`. Everything, at c-keep 6.
-- `all_ck{8,10,12,15}` — `all` with a stricter `--c-keep`. This is the matched-load sweep
-  EXP-030 left open: under the sum, clusters of weak blobs clear c-keep 6 and raise the load.
+- `all_ck{8,10,12,15}` — `all` with the same sweep, so the two sweeps differ by the moving
+  factor alone.
 
 Outputs go to `runs/sofa_analog/exp031_combined/merge<R>/<clip>/{variant}_<clip>_<start>_<end>`:
 `.mp4`, `.csv`, `_drone.csv`, `_frames.csv` and a `.log`. The batch log and the table are
