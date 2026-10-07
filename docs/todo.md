@@ -15,6 +15,13 @@ dates, not priorities.
 
 ## Open
 
+- [ ] 2026-10-07 — [algo] **Scale `overlay_split`'s pixel constants with frame width.**
+  `--merge`, `--kinematic`'s 25 px/frame ceiling, `--min-move` and `--min-draw` are absolute
+  pixels. The detectors' constants scale by width/1440, but these do not. On the FIELD `.raw`
+  at 4128 wide this made merge 20 and 30 identical, and made the speed ceiling 4x stricter
+  in mp4 terms. Quote them at 1440 like the rest before comparing runs across resolutions,
+  and before re-running the `.raw` at another width. EXP-031 FIELD addendum.
+
 - [ ] 2026-10-05 — [algo] **Tighten the chain, then re-run EXP-029 at EXP-028's operating
   point.** EXP-029 measured the moving factor working as designed and still not helping below
   ~12 candidates/frame. Two specific causes, both to attack:
@@ -402,6 +409,16 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-29 — [algo] **Score a HUD mask against labels, not against its coverage percentage.** EXP-020: the tool prints `7.71% of the frame`, which is the wrong number — 13.15% sounded acceptable and was 20% of the ground truth. Add `--labels <dir>` to `src.data.hud_mask` so the build reports how many labelled boxes the mask would veto at `HUD_VETO_FRACTION`, and refuse silently-expensive masks. Cheap: the scoring loop is `overlap_fraction` over YOLO txt files, ~20 lines, and it is the only check that would have caught this.
 
 ## Done
+
+- [x] 2026-10-07 — [algo] [data] **EXP-031 `all` on the FIELD `.raw`, at 4128x3008.** The new
+  `.raw` is the FIELD mp4's recording before encoding: headerless 8-bit BG Bayer, upside
+  down, 4x the resolution, aligned frame for frame. `src/data/raw_bayer.py` reads it as a
+  `cv2.VideoCapture` stand-in. `experiments/exp031_combined/run_field_raw.py` ran `all` over
+  the three episodes, 1,114 frames in 5 h 14 min. No labels, so no score. Eyeballed: the #1 is
+  on the drone in 59 of 70 crops sampled from the #1 runs. Long tracks: 1113–1302,
+  1331–1494, 3246–3556. Exceptions: a tree at 27–31, and 3224–3245 beside a small object that
+  could not be identified. Merge 20 and 30 are byte-identical, because `overlay_split`'s
+  pixel constants do not scale with width (open item below). Ledger: EXP-031 addendum.
 
 - [x] 2026-10-07 — [algo] **Removed old experiment files.** `git rm` of
   `experiments/exp011_field_glad_scaled`, `exp012_field_glad_inverted`, `exp012b_motion_check`

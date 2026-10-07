@@ -5123,3 +5123,73 @@ genuinely slow in the picture, 7–20 px.
 
 Video: `runs/sofa_analog/exp031_combined/merge30/<clip>/exp030_ck10_<clip>_<start>_<end>.mp4`
 is the recommended setting. `all_<clip>_*.mp4` has every stage on at c-keep 6.
+
+### Added 2026-10-07: `all` on the FIELD `.raw`, at the sensor's 4128x3008
+
+The user added `data/raw/FIELD/videos/captured_raw_20260616_040253_004.raw` and asked for
+the `all` row run on it. The file is the FIELD mp4's own recording before it was encoded:
+headerless 8-bit BG Bayer, 4128x3008, mounted upside down, the same 3600 frames, aligned frame
+for frame. The mp4 is this file shrunk 4x in each direction. `src/data/raw_bayer.py` reads it,
+and `data/raw/FIELD/PROVENANCE.md` records how the layout was measured.
+
+- **Spans:** the three episodes in PROVENANCE, 2–180, 1090–1553 and 3130–3600 (1,114 frames),
+  at full resolution. The user chose this over the whole clip at 2064 wide.
+- **Settings:** `all` exactly as `run_all.py` runs it: top 3, `--osd-grid`, `--kinematic`,
+  `--min-move 20`, `--merge-score sum`, c-keep 6, at merge 20 and 30. Stage 1 uses FIELD's
+  colour settings. The sky-branch and window dumps were built fresh, because no dump exists
+  at this width.
+- **Hardware / cost:** i7-1255U, 5 jobs, 13:41–18:55, **5 h 14 min**. The sky branch took
+  about 55 s per frame per process. It is the cost, and its 4,000-candidate cap binds at this
+  size.
+- **Scripts:** `experiments/exp031_combined/run_field_raw.py`, with the clip config in
+  `field_raw/clipcfg.py`. Artifacts in `runs/field/exp031_combined/raw4128/<a>_<b>/`:
+  `all_merge{20,30}_<a>_<b>` with `.mp4`, `.csv`, `_frames.csv` and `.log`, the two dumps,
+  and `first_by_run_<a>_<b>.png`.
+
+**No labels, so no score.** Everything below is load, plus an eyeballed sheet.
+
+| span | frames | shown/frame | frames with a #1 | #1 runs | #1 jumps > 29 px |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2–180 | 179 | 0.14 | 25 | 2 | 0 / 23 |
+| 1090–1553 | 464 | 0.96 | 383 | 5 | 18 / 374 |
+| 3130–3600 | 471 | 0.95 | 416 | 6 | 33 / 414 |
+
+**Merge 20 and 30 are byte-identical in every shown CSV.** The merge radius is in absolute
+pixels and is not rescaled by width, and at 4128 wide both radii sit well inside a target
+that is 40–100 px across. So are `--kinematic`'s 25 px/frame ceiling, `--min-move 20` and
+`--min-draw`. In mp4 pixels the ceiling is about 6 px/frame, four times stricter than on the
+analog clips. Only the detectors' own constants (sky branch, window) scale with width/1440.
+The gate held the tracks anyway, because at these ranges the drone moves slowly in the
+picture.
+
+**Eyeballed: the #1 is on the drone in 59 of 70 crops.** Each #1 run was cut at up to 6
+evenly spaced frames, with no random seed, and every crop was taken from the `.raw` at
+1:1. 12 of the 13 runs were sampled; the 3-frame run 3213–3215 was not. Judged by eye;
+not a precision.
+
+- **On the drone, 59 crops in 10 of the 12 runs sampled.** At this resolution the target is
+  unmistakable: a hexacopter with a slung payload, rotors resolved, against sky and against
+  the ridge (1517–1542, c 3–6, ground section). The three long runs follow it, 1113–1302 (189 frames),
+  1331–1494 (164) and 3246–3556 (311). At 1098–1112 and 3216–3223 the circle sits on the
+  payload or just off the body, because the drone fills most of a 192 px crop.
+- **A tree, 5 crops, run 27–31** (ground section, c 9–10). The drone is in the same crops,
+  dark against the slope just below and left of the circle, and is not the #1.
+- **Beside a small object, 6 crops, run 3224–3245** (22 frames, mostly ground section, clear
+  sky). The circle sits about 60 px from a small dark object that moves with it. The sheet
+  cannot say whether that object is a bird or a second, distant drone. Undetermined.
+
+By run length, about 794 of the 824 #1 frames belong to runs whose sampled crops are on the
+drone. This is a judgement on sampled runs, not a count of frames.
+
+**Read with:**
+- The spans are where EXP-010's detector fired and was right on the mp4, so they are chosen
+  by a detector. A quiet stretch outside them says nothing.
+- No comparison to EXP-025e's FIELD mp4 run is valid: that run had a different width,
+  had none of EXP-027 to EXP-030, and ran over the whole clip.
+- At full resolution the target is large: the close passes are 60–100 px across. The small,
+  distant case this project is built around appears only at the ends of the runs
+  (3494–3556: about 20 px here, about 5 px in the mp4).
+
+**Next:** labelling FIELD (the open todo) would turn this run into a score with no re-run.
+The pixel constants in `overlay_split` (merge, ceiling, min-move, min-draw) should scale with
+width like the detector's do, before any comparison across resolutions.
