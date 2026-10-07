@@ -10,7 +10,8 @@ builds them first. Per span:
   2. EXP-024's window at k=4, 2 appearances, 9 px, `--no-video`, one pass per span (it
      carries a window across frames, so it is not chunked);
   3. `overlay_split` with `run_all.py`'s `all` flags -- top 3, OSD grid, kinematic gate,
-     moving factor, summed c, c-keep 6 -- at each `--merge` radius.
+     moving factor, summed c, c-keep 6 -- at each `--merge` radius;
+  4. an H.264 copy of each overlay at 1080 rows, `_1080p.mp4`, the one a Windows player opens.
 
 Every step is skipped when its output exists, so a killed batch resumes. The spans are the
 three episodes in `data/raw/FIELD/PROVENANCE.md`, with a lead-in for the gate to confirm a
@@ -26,11 +27,14 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
+import cv2
+
 sys.path.insert(0, "experiments/exp031_combined")
 from run_all import BASE, VARIANTS  # noqa: E402
 
 SPANS = ((2, 180), (1090, 1553), (3130, 3600))
 SKY_CHUNK = 60
+PLAY_HEIGHT = 1080
 CFG = "experiments/exp031_combined/field_raw"
 TAIL = "experiments/exp017_motion_first;experiments/exp015_normalised_motion;."
 STACKS = {
@@ -51,6 +55,35 @@ def step(stack: str, args: list[str], done: str, log: str, width: int) -> None:
     with open(log, "w", encoding="utf-8") as fh:
         subprocess.run([sys.executable, "-m", *args], env=env, stdout=fh,
                        stderr=subprocess.STDOUT, check=True)
+
+
+def playable(video: str, height: int = PLAY_HEIGHT) -> None:
+    """An H.264 copy of `video` at `height` px, `<stem>_<height>p.mp4`, skipped when present.
+
+    `overlay_split` writes `mp4v`, which Windows players will not decode at 4128x3008 (the
+    files are intact: OpenCV reads every frame). Windows' own Media Foundation encoder
+    writes H.264 without an OpenH264 or ffmpeg install; 1080 rows keeps it in H.264's
+    common levels. `INTER_AREA` keeps the circles and the caption legible."""
+    out = f"{os.path.splitext(video)[0]}_{height}p.mp4"
+    if os.path.exists(out):
+        print(f"have {out}", flush=True)
+        return
+    cap = cv2.VideoCapture(video)
+    w0, h0 = cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    size = (int(round(w0 * height / h0 / 2)) * 2, height)
+    writer = cv2.VideoWriter(out + ".tmp.mp4", cv2.CAP_MSMF, cv2.VideoWriter_fourcc(*"H264"),
+                             cap.get(cv2.CAP_PROP_FPS), size)
+    if not writer.isOpened():
+        raise RuntimeError(f"no H.264 writer for {out}")
+    while True:
+        ok, img = cap.read()
+        if not ok:
+            break
+        writer.write(cv2.resize(img, size, interpolation=cv2.INTER_AREA))
+    cap.release()
+    writer.release()
+    os.replace(out + ".tmp.mp4", out)
+    print(f"wrote {out}", flush=True)
 
 
 def chunks(a: int, b: int) -> list[tuple[int, int]]:
@@ -111,6 +144,7 @@ def main() -> None:
                            "--merge", str(m), *VARIANTS["all"], "--sky-dump", sky[s],
                            "--window-dump", seeds[s], "--out", out + ".mp4"],
                  out + "_frames.csv", out + ".log", a.width)
+            playable(out + ".mp4")
     print(f"done -> {root}", flush=True)
 
 

@@ -50,7 +50,9 @@ builds the sky-branch and window dumps first. It runs over the three episodes in
 `field_raw/clipcfg.py` is the clip config. It routes the `.raw` path in `cv2.VideoCapture`
 to `RawBayerCapture`, and `FIELD_RAW_WIDTH` sets the working width. Outputs go to
 `runs/field/exp031_combined/raw<W>/<a>_<b>/`: `sky_candidates.csv`, `window_seeds_k4.csv`,
-and `all_merge<R>_<a>_<b>` with `.mp4`, `.csv`, `_frames.csv` and `.log`.
+and `all_merge<R>_<a>_<b>` with `.mp4`, `.csv`, `_frames.csv` and `.log`. **Watch
+`_1080p.mp4`:** the full-size `.mp4` is `mp4v` at 4128x3008, which Windows players will not
+open. The driver writes an H.264 copy at 1080 rows through Media Foundation.
 
 ## Result
 
