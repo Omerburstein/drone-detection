@@ -139,7 +139,10 @@ def main() -> None:
     if a.min_move < 0:
         raise SystemExit("--min-move cannot be negative")
     out = a.out or os.path.join(
-        CLIP["out"], f"moving_m{a.min_move:g}_w{a.move_window}_{a.mode}_"
+        CLIP["out"], f"moving_m{a.min_move:g}_w{a.move_window}_{a.mode}"
+                     # Without this a capped run would overwrite the uncapped one: same
+                     # min-move, window and mode, a different pipeline.
+                     f"{f'_top{a.top}' if a.top else ''}_"
                      f"{CLIP['name']}_{a.start}_{a.end}.mp4")
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
 
