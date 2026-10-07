@@ -5144,8 +5144,9 @@ and `data/raw/FIELD/PROVENANCE.md` records how the layout was measured.
 - **Scripts:** `experiments/exp031_combined/run_field_raw.py`, with the clip config in
   `field_raw/clipcfg.py`. Artifacts in `runs/field/exp031_combined/raw4128/<a>_<b>/`:
   `all_merge{20,30}_<a>_<b>` with `.mp4`, `.csv`, `_frames.csv` and `.log`, the two dumps,
-  and `first_by_run_<a>_<b>.png`. **The video to watch is `_1080p.mp4`**, an H.264 copy at
-  1482x1080. Windows players will not open the full-size `mp4v` at 4128x3008.
+  and `first_by_run_<a>_<b>.png`. **The video is `_1080p.mp4`**, an H.264 copy at 1482x1080.
+  The full-size `mp4v` at 4128x3008, which Windows players will not open, was deleted on
+  2026-10-07. Delete the `_frames.csv` and re-run the driver to rebuild it.
 
 **No labels, so no score.** Everything below is load, plus an eyeballed sheet.
 

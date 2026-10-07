@@ -52,7 +52,8 @@ to `RawBayerCapture`, and `FIELD_RAW_WIDTH` sets the working width. Outputs go t
 `runs/field/exp031_combined/raw<W>/<a>_<b>/`: `sky_candidates.csv`, `window_seeds_k4.csv`,
 and `all_merge<R>_<a>_<b>` with `.mp4`, `.csv`, `_frames.csv` and `.log`. **Watch
 `_1080p.mp4`:** the full-size `.mp4` is `mp4v` at 4128x3008, which Windows players will not
-open. The driver writes an H.264 copy at 1080 rows through Media Foundation.
+open. The driver writes an H.264 copy at 1080 rows through Media Foundation. The full-size
+copies of the 4128 run were deleted; deleting a `_frames.csv` and re-running rebuilds one.
 
 ## Result
 
