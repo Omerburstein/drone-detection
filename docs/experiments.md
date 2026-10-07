@@ -4846,7 +4846,7 @@ shown up on these clips.
 shown/frame returns to EXP-028's (0.93 / 1.21 / 0.37), then read recall. If the sum still
 wins there, make it the default.
 
-Artifacts in `runs/sofa_analog/exp030_merge_sum/<clip>/`:
+Artifacts in `runs/sofa_analog/exp030_merge_sum/merge20/<clip>/`:
 `{max,sum}_{nogate,gate}_<clip>_<start>_<end>` with `.mp4`, `.csv` (`c_max` on the sum
 runs), `_drone.csv`, `_frames.csv` and a log each. The overlay is `sum_gate_*.mp4`. The
 batch log is `runs/sofa_analog/exp030_merge_sum.log`.
