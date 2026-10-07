@@ -4850,3 +4850,56 @@ Artifacts in `runs/sofa_analog/exp030_merge_sum/merge20/<clip>/`:
 `{max,sum}_{nogate,gate}_<clip>_<start>_<end>` with `.mp4`, `.csv` (`c_max` on the sum
 runs), `_drone.csv`, `_frames.csv` and a log each. The overlay is `sum_gate_*.mp4`. The
 batch log is `runs/sofa_analog/exp030_merge_sum.log`.
+
+### Added 2026-10-07: merge 30 (60 px across)
+
+The user asked for the same four runs at a 30 px merge radius, in a separate subfolder
+(`run_clips.py --merge 30`). The settings are otherwise identical. The `max_` rows are
+merge 30's own baseline; EXP-028 has nothing at this radius.
+
+| clip | run | shown/frame | FA shown | drone in top 3 | drone #1 | #1 jumps > 29 px |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| catch_2 (224 labelled) | max, no gate | 1.07 | 316 | 67 | 57 | 103 / 156 (66%) |
+| catch_2 | sum, no gate | 1.07 | 316 | 67 | **60** | 99 / 156 (63%) |
+| catch_2 | max, gate | 0.92 | 260 | 69 | 64 | 46 / 165 (28%) |
+| catch_2 | sum, gate | 1.52 | 440 | 105 | 86 | 82 / 243 (34%) |
+| catch_4 (82 labelled) | max, no gate | 1.10 | 166 | 13 | 9 | 40 / 49 (82%) |
+| catch_4 | sum, no gate | 1.10 | 166 | 13 | **11** | 39 / 49 (80%) |
+| catch_4 | max, gate | 1.20 | 175 | 22 | 18 | 45 / 90 (50%) |
+| catch_4 | sum, gate | 2.00 | 280 | 46 | 36 | 78 / 140 (56%) |
+| catch_5 (188 labelled) | max, no gate | 0.71 | 235 | 29 | 17 | 66 / 94 (70%) |
+| catch_5 | sum, no gate | 0.71 | 233 | 30 | **23** | 72 / 94 (77%) |
+| catch_5 | max, gate | 0.36 | 96 | 37 | 33 | 23 / 66 (35%) |
+| catch_5 | sum, gate | 0.66 | 191 | 54 | 32 | 24 / 99 (24%) |
+
+**Reading.**
+
+- **The radius alone barely matters under the max.** Going from merge 20 to merge 30
+  leaves the load within 0.01/frame. The drone is #1 in 83 frames vs 81 without the gate,
+  and 115 vs 109 with it.
+- **Without the gate, the sum at 30 px is the best #1 at identical load so far.** The
+  drone is #1 in 94 frames across the three clips (60 + 11 + 23), against 90 for the sum
+  at 20 px and 81 for EXP-027's max. Top-3 recall is 110, against 108 for EXP-027's max.
+  - The wider bubble catches more of the drone's fragments: 3.8–4.0 members per drone
+    object vs 2.2–2.6 at 20 px, and a median lift of +4.3 to +5.6 c.
+  - Clutter in the no-gate rows still gains nothing (median lift 0).
+- **With the gate, 30 px is worse than 20 px. The bubble starts adding up clutter too.**
+  - The load rises further over the max: 65% (catch_2), 67% (catch_4) and 83% (catch_5),
+    against 32/49/73% at 20 px.
+  - Weak continuations rise to 407, 416 and 198.
+  - Gated false alarms now gain from summing: their median lift is +3.6 on catch_4 and
+    +3.4 on catch_5, with about 2 members each.
+  - catch_5 is the out-of-sample warning. The drone is in the top 3 in 54 frames (66 at
+    20 px), and #1 in 32, below the max gate's 33.
+  - Top-3 hits per false alarm shown fall below the max gate on catch_2 (0.24 vs 0.27)
+    and catch_5 (0.28 vs 0.39). catch_4 is the exception, at 0.16 vs 0.13.
+- **The #1 jump rate stays within 7 points of the max rows**, except catch_5 with the gate,
+  where it falls from 35% to 24%.
+
+So the radius trades two ways. A bigger bubble collects more of the drone, which pays
+when the ranking is the only consumer (no gate). It also lets a cluster of sub-threshold
+clutter clear the gate's per-blob c-keep 6, which costs when the gate is on. The
+matched-load comparison in `docs/todo.md` now applies to both radii.
+
+Artifacts in `runs/sofa_analog/exp030_merge_sum/merge30/<clip>/`, named as for merge 20.
+The batch log is `runs/sofa_analog/exp030_merge_sum/merge30.log`.

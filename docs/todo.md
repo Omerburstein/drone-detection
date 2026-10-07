@@ -19,6 +19,8 @@ dates, not priorities.
   more answers than EXP-028, because clusters of sub-threshold blobs clear c-keep 6. Raise
   `--c-keep` under `--merge-score sum` until shown/frame returns to EXP-028's (0.93 / 1.21 /
   0.37 on catch_2 / 4 / 5), then compare recall. If the sum still wins, make it the default.
+  **2026-10-07:** do it at both merge 20 and merge 30. At 30 px the gated load rises
+  65–83%, and clutter clusters start to gain from the sum too.
 
 - [ ] 2026-10-05 — [algo] **Tighten the chain, then re-run EXP-029 at EXP-028's operating
   point.** EXP-029 measured the moving factor working as designed and still not helping below
@@ -399,6 +401,14 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-29 — [algo] **Score a HUD mask against labels, not against its coverage percentage.** EXP-020: the tool prints `7.71% of the frame`, which is the wrong number — 13.15% sounded acceptable and was 20% of the ground truth. Add `--labels <dir>` to `src.data.hud_mask` so the build reports how many labelled boxes the mask would veto at `HUD_VETO_FRACTION`, and refuse silently-expensive masks. Cheap: the scoring loop is `overlap_fraction` over YOLO txt files, ~20 lines, and it is the only check that would have caught this.
 
 ## Done
+
+- [x] 2026-10-07 — [algo] **EXP-030 at merge 30.** `run_clips.py --merge 30`; outputs in
+  `runs/sofa_analog/exp030_merge_sum/merge30/`, with merge 20 moved to `merge20/`.
+  - Without the gate, the summed score at 30 px is the best #1 at identical load so far:
+    94 frames vs 90 (sum, 20 px) and 81 (EXP-027's max).
+  - With the gate it is worse than 20 px: load +65–83% over the max, and on catch_5 the
+    drone is #1 in 32 frames, below the max gate's 33.
+  - The max alone barely moves between 20 and 30 px.
 
 - [x] 2026-10-05 — [algo] **EXP-030: merged objects scored by the sum of their members' c.**
   `overlay_split.py --merge-score sum` (default `max`, byte-identical when off), run by
