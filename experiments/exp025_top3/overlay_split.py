@@ -75,7 +75,7 @@ DRONE_FIELDS = ["frame", "outcome", "rank", "section", "c"]
 FRAME_FIELDS = ["frame", "sky_fraction", "ranked_sky", "ranked_ground", "shown_sky",
                 "shown_ground", "folded", "osd_vetoed", "osd_vetoed_on_target"]
 KINEMATIC_SHOWN = ["track", "reason", "evidence"]
-KINEMATIC_FRAMES = ["born", "overruled", "continued_weak", "coasting"]
+KINEMATIC_FRAMES = ["born", "overruled", "continued_weak", "coasting", "too_still"]
 OSD_BOX = (8, 14)  # the grid test's box side, px: blob diameter clamped to a dash's size
 
 
@@ -292,6 +292,14 @@ def main() -> None:
                          "of c (steadier #1)")
     ap.add_argument("--decay", type=float, default=0.8,
                     help="--kinematic: per-frame decay of a track's evidence")
+    ap.add_argument("--min-move", type=float, default=0.0,
+                    help="--kinematic: the MOVING FACTOR (EXP-029), the limit from below. "
+                         "A confirmed track must have travelled this many px against the "
+                         "static scene over --move-window frames or it is overruled as "
+                         "too-still. 0 disables it, and then nothing here changes. 20 is "
+                         "EXP-029's measured setting on catch_2")
+    ap.add_argument("--move-window", type=int, default=5,
+                    help="--min-move: frames the travel is measured across")
     ap.add_argument("--window-dump", default=None,
                     help="EXP-024 seed dump (default: its seeds_k{k}_ CSV for this span)")
     ap.add_argument("--sky-dump",
@@ -334,7 +342,8 @@ def main() -> None:
              f"slack; confirm {a.confirm}, coast {a.max_coast}, weak c >= {a.c_keep:g}; "
              f"ranked by {'track evidence, decay ' + format(a.decay, 'g') if a.rank_by == 'track' else 'c'}"
              if a.kinematic else ""))
-    tracker = KinematicTracker(limit, a.confirm, a.max_coast, a.decay)
+    tracker = KinematicTracker(limit, a.confirm, a.max_coast, a.decay,
+                               min_move=a.min_move, move_window=a.move_window)
     shown_fields = (SHOWN_FIELDS + (KINEMATIC_SHOWN if a.kinematic else [])
                     + (["c_max"] if a.merge_score == "sum" else []))
     frame_fields = FRAME_FIELDS + (KINEMATIC_FRAMES if a.kinematic else [])
@@ -368,6 +377,7 @@ def main() -> None:
                                      a.rank_by)
             extra = dict(born=res.born, overruled=sum(o["reason"] != "weak-orphan"
                                                       for o in held),
+                         too_still=res.too_still,
                          continued_weak=res.continued_weak, coasting=res.coasting)
         shown = ranked[:a.top]
         frame_rows.append(dict(
@@ -451,6 +461,11 @@ def report(a, out, stem, frame_rows, drone_rows) -> None:
               f"({k['overruled'] / n:.2f}/frame), {k['continued_weak']} weak continuations, "
               f"{k['coasting'] / n:.2f} confirmed tracks coasting/frame. 'ranked' above is "
               f"after the gate")
+        if a.min_move > 0:
+            print(f"  moving factor ({a.min_move:g} px over {a.move_window} frames): "
+                  f"{k['too_still']} of those overrulings were too-still "
+                  f"({k['too_still'] / n:.2f}/frame) -- tracks that moved plausibly but "
+                  f"not enough to be flying")
     if os.path.exists(stem + ".csv"):
         reach = speed_limit(a).reach(1)
         with open(stem + ".csv", encoding="utf-8") as fh:

@@ -99,7 +99,49 @@ Outputs go to `runs/sofa_analog/exp029_moving_factor/`. The video is drawn in th
 EXP-023 look: stage-0 tints, kept tracks as red circles at least 10 px across, a two-line
 caption.
 
-## Result — catch_2 441-800, 224 labelled frames
+## Stacked on EXP-028's gate — the configuration that actually wins
+
+`overlay_stacked.py`, added 2026-10-07 at the user's request: the stages go **one on top of
+the other** rather than competing. EXP-028's shipping pipeline (`--top 3 --merge 20
+--min-draw 20 --osd-grid --kinematic`, c-keep 6, evidence ranking) plus `--min-move 20`
+inside the *same* `KinematicTracker` — the speed limit bounding motion from above and the
+moving factor from below.
+
+`--min-move` is a new flag on `experiments/exp025_top3/overlay_split.py`, defaulting to 0.
+At 0 it is inert: the shown and drone CSVs come out **byte-identical to EXP-028's**, which
+is the check EXP-028 used on itself.
+
+catch_2 441-800, 224 labelled frames:
+
+| `--min-move` | shown/frame | FA shown | drone in top 3 | drone #1 | too-still/frame |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 (= EXP-028) | 0.93 | 264 | 69 (30.8%) | 60 (26.8%) | 0.00 |
+| 12 | 0.82 | 224 | 69 (30.8%) | 62 (27.7%) | 0.12 |
+| **20** | **0.78** | **209** | **69 (30.8%)** | **62 (27.7%)** | 0.17 |
+| 30 | 0.74 | 197 | 66 (29.5%) | 59 (26.3%) | 0.21 |
+| 45 | 0.67 | 186 | 52 (23.2%) | 45 (20.1%) | 0.28 |
+
+**At `--min-move 20` it is strictly better than EXP-028 on every column:** 21% fewer false
+alarms (264 → 209), 16% less load (0.93 → 0.78 shown/frame), **+2 drone #1 frames**
+(60 → 62), and top-3 recall unchanged at 69. 12 is nearly as good; 30 begins costing recall
+and 45 is clearly past the knee — the same shape the standalone sweep found, and the same
+20 px optimum.
+
+The `#1` jump rate is marginally worse in proportion (45 of 150 pairs, 30%, against 43 of
+165, 26%) because the factor removes frames that had a `#1` at all. Absolute jumps are
+within two.
+
+**Why this works where `overlay_moving.py` did not.** That script rebuilt the sky branch to
+measure the factor in isolation and so threw away the merge, the OSD grid veto, the
+sky/ground split, c-keep and above all **evidence ranking** — without which it reproduced
+EXP-027's weaker `#1` column (36 of 224 against EXP-028's 60) and then lost on it. The
+factor was never the problem; the pipeline around it was. Standalone numbers below are kept
+because they are what isolates the statistic.
+
+Artifact: `stacked_top3_merge20_osdgrid_kinematic_m20_catch_2_441_800.mp4` (+ `.csv`,
+`_drone.csv`, `_frames.csv` with a `too_still` column, and `stacked_m{12,20,30,45}.log`).
+
+## Standalone result (overlay_moving.py) — catch_2 441-800, 224 labelled frames
 
 Recall is quoted on the **224 labelled frames** of the span; EXP-024's 174 is a motion
 front-end ceiling, not a denominator.

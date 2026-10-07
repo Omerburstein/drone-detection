@@ -402,6 +402,22 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-07 — [algo] **The moving factor stacked on EXP-028's gate: strictly better on
+  every column.** The user pointed out the stages are meant to come one on top of the other.
+  `--min-move` is now a flag on `experiments/exp025_top3/overlay_split.py` (default 0 and
+  **inert** — at 0 the shown and drone CSVs are byte-identical to EXP-028's), and
+  `experiments/exp029_moving_factor/overlay_stacked.py` runs EXP-028's defaults plus
+  `--min-move 20`: one `KinematicTracker` with the speed limit bounding motion from above
+  and the moving factor from below. On catch_2 441-800, top 3, against EXP-028: **false
+  alarms 264 -> 209 (-21%), load 0.93 -> 0.78 shown/frame (-16%), drone #1 60 -> 62, drone in
+  top 3 unchanged at 69 of 224.** 12 is nearly as good, 30 starts costing recall, 45 is past
+  the knee. This retires EXP-029's earlier conclusion that the factor only pays above ~12
+  candidates/frame and cannot reach EXP-028's load — both were properties of
+  `overlay_moving.py`'s standalone rebuild, which discarded the merge, the OSD veto, c-keep
+  and evidence ranking, and so reproduced EXP-027's weaker #1 column (36 of 224) before
+  losing on it. Video and three CSVs in `runs/sofa_analog/exp029_moving_factor/`; ledger
+  entry has the dated addendum and its recommendation replaced.
+
 - [x] 2026-10-07 — [algo] **EXP-029's moving factor defaulted to 20 px, and the direction
   test's verdict corrected.** At the user's suggestion `--min-move` went from 8 to 20:
   **940 fewer false alarms (5626 -> 4686) for one drone frame** (105 -> 104 of 224), load

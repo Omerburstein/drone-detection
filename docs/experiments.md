@@ -4794,6 +4794,44 @@ this is not an improvement at any load the project wants.**
   hopping 99–127 px. Pooling might rescue the direction test, but it would have to beat a
   statistic that already costs nothing to compute.
 
+### Added 2026-10-07: stacked on EXP-028's gate, and now it wins
+
+The user pointed out the stages are meant to come one on top of the other, not to compete.
+`--min-move` is now a flag on `overlay_split.py` (default 0, **inert** — the shown and drone
+CSVs at 0 are byte-identical to EXP-028's, the check EXP-028 used on itself), and
+`experiments/exp029_moving_factor/overlay_stacked.py` runs EXP-028's defaults plus
+`--min-move 20`. One `KinematicTracker`, the speed limit bounding motion from above and the
+moving factor from below — the gap EXP-028's own docstring named.
+
+| `--min-move` | shown/frame | FA shown | drone in top 3 | drone #1 | too-still/frame |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 (= EXP-028) | 0.93 | 264 | 69 (30.8%) | 60 (26.8%) | 0.00 |
+| 12 | 0.82 | 224 | 69 (30.8%) | 62 (27.7%) | 0.12 |
+| **20** | **0.78** | **209** | **69 (30.8%)** | **62 (27.7%)** | 0.17 |
+| 30 | 0.74 | 197 | 66 (29.5%) | 59 (26.3%) | 0.21 |
+| 45 | 0.67 | 186 | 52 (23.2%) | 45 (20.1%) | 0.28 |
+
+**At `--min-move 20` this is strictly better than EXP-028 on every column:** false alarms
+264 → **209** (-21%), load 0.93 → **0.78** shown/frame (-16%), drone `#1` 60 → **62**, and
+the drone in the top 3 unchanged at 69 of 224. 30 starts costing recall, 45 is well past the
+knee — the same knee the standalone sweep found, at the same 20 px.
+
+**This is the first EXP-029 configuration that improves the shipping pipeline**, and it
+retires the entry's earlier conclusion that the moving factor only pays above ~12
+candidates/frame. That conclusion was about `overlay_moving.py`, which rebuilt the sky
+branch and in doing so discarded the merge, the OSD veto, c-keep and **evidence ranking**;
+without the last of those it reproduced EXP-027's `#1` column (36 of 224 against EXP-028's
+60) and lost on it. The statistic was fine; the pipeline around it was not. The standalone
+measurements stay in this entry because they are what isolates the statistic from
+everything else.
+
+The `#1` jump rate is fractionally worse in proportion — 45 of 150 pairs (30%) against 43 of
+165 (26%) — because the factor removes frames that had a `#1` at all; absolute jumps move by
+two. Artifacts in `runs/sofa_analog/exp029_moving_factor/`:
+`stacked_top3_merge20_osdgrid_kinematic_m20_catch_2_441_800.mp4` with its three CSVs (the
+`_frames.csv` carries a new `too_still` column) and `stacked_m{12,20,30,45}.log`.
+
+
 ### Standing recommendation
 
 **Keep the moving factor. Run it at `--min-move 20 --mode veto`** (both are now the
@@ -4802,11 +4840,15 @@ Superseded 2026-10-07 — the first version of this line said `--mode off`, from
 at `--min-move 8` only, where the veto is genuinely worth nothing. It is worth +4 frames at
 20 and +18 at 30.
 
-**It is still not usable at the project's operating loads, and that has not changed.**
-EXP-029 wins against plain EXP-023 thresholding only above ~10-11 candidates/frame; below
-that EXP-023 wins outright (73 against 89 at 9.97/frame). The **5.42/frame floor** of
-unjudged tracks means EXP-029 cannot reach EXP-023's shipping 5.59/frame or EXP-028's 0.93
-at all. The gain is real and lives in a band above where anything ships.
+**Superseded 2026-10-07 by the stacked run above: `overlay_stacked.py --min-move 20` is
+strictly better than EXP-028 on every column and is the configuration to ship.**
+
+The paragraph this replaces said the gain was unusable because it lived above ~10-11
+candidates/frame, and that the 5.42/frame floor of unjudged tracks kept EXP-029 away from
+EXP-028's 0.93 shown/frame. Both were properties of `overlay_moving.py`'s standalone
+rebuild, not of the moving factor: stacked inside EXP-028's pipeline the factor *lowers*
+load to 0.78/frame. The standalone comparison against plain EXP-023 thresholding still
+stands as written — it is simply the wrong pipeline to judge the statistic by.
 
 **The next lever is the chain, not the statistic.** Clutter accumulates travel because
 association is permissive; tightening it — a smaller reach, or requiring consistent
