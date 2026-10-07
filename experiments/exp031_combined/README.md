@@ -43,6 +43,17 @@ in `runs/sofa_analog/exp031_combined/run_all.log`.
 py -3.13 experiments/exp031_combined/run_field_raw.py            # 4128 wide; --width, --jobs 5
 ```
 
+```bash
+py -3.13 experiments/exp031_combined/run_field_raw.py --merge 120          # the episodes at merge 120
+py -3.13 experiments/exp031_combined/run_field_raw.py --merge 120 --full   # the whole clip, one video
+```
+
+`--spans all` adds the gaps 181–1089 and 1554–3129, so the five spans tile frames 2–3600.
+`--full` joins their dumps and renders one overlay over 2–3600, written to `raw<W>/full/`, so
+the kinematic tracker runs through the clip without restarting. The window still restarts at
+each span's first frame. Merge 120 at 4128 wide is merge 30 in mp4 pixels: the radius is in
+absolute pixels and does not scale with width.
+
 `all` on the FIELD capture's `.raw`: 4128x3008 Bayer, the same 3600 frames as the mp4 at 4x
 the resolution (`src/data/raw_bayer.py`). There are no EXP-030 dumps for it, so the driver
 builds the sky-branch and window dumps first. It runs over the three episodes in

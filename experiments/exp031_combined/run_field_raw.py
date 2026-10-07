@@ -1,6 +1,6 @@
-"""EXP-031 `all` on the FIELD `.raw` -- the sensor's 4128x3008 pixels -- over the drone episodes.
+"""EXP-031 `all` on the FIELD `.raw` -- the sensor's 4128x3008 pixels.
 
-    py -3.13 experiments/exp031_combined/run_field_raw.py [--width 4128] [--jobs 5]
+    py -3.13 experiments/exp031_combined/run_field_raw.py [--merge 120] [--spans all] [--full]
 
 The analog runs in `run_all.py` reuse EXP-030's dumps; there are none for the raw, so this
 builds them first. Per span:
@@ -11,13 +11,20 @@ builds them first. Per span:
      carries a window across frames, so it is not chunked);
   3. `overlay_split` with `run_all.py`'s `all` flags -- top 3, OSD grid, kinematic gate,
      moving factor, summed c, c-keep 6 -- at each `--merge` radius;
-  4. an H.264 copy of each overlay at 1080 rows, `_1080p.mp4`, the one a Windows player opens.
+  4. an H.264 copy of each overlay at 1080 rows, `_1080p.mp4`, the one a Windows player opens;
+     the full-size `mp4v` is deleted after it unless `--keep-full-size`.
 
-Every step is skipped when its output exists, so a killed batch resumes. The spans are the
-three episodes in `data/raw/FIELD/PROVENANCE.md`, with a lead-in for the gate to confirm a
-track before the drone is known to be there; they are where the detector was right on the
-mp4, not where the drone is, so a quiet stretch outside them is not a negative.
-Outputs: `runs/field/exp031_combined/raw<W>/<a>_<b>/`.
+`--spans episodes` (default) runs the three episodes in `data/raw/FIELD/PROVENANCE.md`, with a
+lead-in for the gate to confirm a track; they are where the detector was right on the mp4,
+not where the drone is, so a quiet stretch outside them is not a negative. `--spans all`
+adds the two gaps between them, so the five spans tile frames 2-3600. `--full` (implies
+`all`) joins the five spans' dumps and runs step 3 once over 2-3600 instead of per span, so
+the kinematic tracker runs unbroken through the clip. The window dumps are still per span,
+so the window restarts at 181, 1090, 1554 and 3130 -- its first 3 frames there have a short
+history; the sky dumps are exact.
+
+Every step is skipped when its output exists, so a killed batch resumes.
+Outputs: `runs/field/exp031_combined/raw<W>/<a>_<b>/`, and `full/` for `--full`.
 """
 from __future__ import annotations
 
@@ -32,7 +39,9 @@ import cv2
 sys.path.insert(0, "experiments/exp031_combined")
 from run_all import BASE, VARIANTS  # noqa: E402
 
-SPANS = ((2, 180), (1090, 1553), (3130, 3600))
+EPISODES = ((2, 180), (1090, 1553), (3130, 3600))
+GAPS = ((181, 1089), (1554, 3129))
+FULL = (2, 3600)
 SKY_CHUNK = 60
 PLAY_HEIGHT = 1080
 CFG = "experiments/exp031_combined/field_raw"
@@ -91,15 +100,25 @@ def chunks(a: int, b: int) -> list[tuple[int, int]]:
 
 
 def join(parts: list[str], dst: str) -> None:
-    """CSV parts into one file, the header kept once; the parts are removed after."""
+    """CSV parts into one file, the header kept once; the parts are left in place."""
     with open(dst + ".tmp", "w", encoding="utf-8", newline="") as out:
         for i, p in enumerate(parts):
             with open(p, encoding="utf-8", newline="") as src:
                 lines = src.readlines()
             out.writelines(lines if i == 0 else lines[1:])
     os.replace(dst + ".tmp", dst)
-    for p in parts:
-        os.remove(p)
+
+
+def split(span: tuple[int, int], merge: int, sky: str, seeds: str, out: str, width: int,
+          keep: bool) -> None:
+    """Step 3 and 4 for one span and radius: the `all` overlay, then its playable copy."""
+    step("split", ["overlay_split", "--start", str(span[0]), "--end", str(span[1]), *BASE,
+                   "--merge", str(merge), *VARIANTS["all"], "--sky-dump", sky,
+                   "--window-dump", seeds, "--out", out + ".mp4"],
+         out + "_frames.csv", out + ".log", width)
+    playable(out + ".mp4")
+    if not keep and os.path.exists(out + ".mp4"):
+        os.remove(out + ".mp4")
 
 
 def main() -> None:
@@ -108,21 +127,27 @@ def main() -> None:
     ap.add_argument("--width", type=int, default=4128)
     ap.add_argument("--merge", type=int, nargs="+", default=[20, 30])
     ap.add_argument("--jobs", type=int, default=5)
+    ap.add_argument("--spans", choices=("episodes", "all"), default="episodes")
+    ap.add_argument("--full", action="store_true",
+                    help="one overlay over 2-3600 from every span's dumps (implies --spans all)")
+    ap.add_argument("--keep-full-size", action="store_true",
+                    help="keep the 4128-wide mp4v next to its _1080p copy")
     a = ap.parse_args()
+    spans = sorted(EPISODES + GAPS) if a.spans == "all" or a.full else list(EPISODES)
     root = f"runs/field/exp031_combined/raw{a.width}"
-    dirs = {s: f"{root}/{s[0]}_{s[1]}/" for s in SPANS}
+    dirs = {s: f"{root}/{s[0]}_{s[1]}/" for s in spans}
     for d in dirs.values():
         os.makedirs(d, exist_ok=True)
-    sky = {s: f"{dirs[s]}sky_candidates.csv" for s in SPANS}
-    seeds = {s: f"{dirs[s]}window_seeds_k4.csv" for s in SPANS}
+    sky = {s: f"{dirs[s]}sky_candidates.csv" for s in spans}
+    seeds = {s: f"{dirs[s]}window_seeds_k4.csv" for s in spans}
 
     # Windows first: one long job per span, the sky chunks fill the pool around them.
     jobs = [("window", ["overlay_window", "--start", str(a0), "--end", str(b0), "--k", "4",
                         "--min-appear", "2", "--appear-radius", "9", "--no-video",
                         "--dump", seeds[s]], seeds[s], f"{dirs[s]}window.log")
-            for s in SPANS for a0, b0 in [s]]
-    parts = {s: [] for s in SPANS}
-    for s in SPANS:
+            for s in spans if not os.path.exists(seeds[s]) for a0, b0 in [s]]
+    parts = {s: [] for s in spans}
+    for s in spans:
         if os.path.exists(sky[s]):
             continue
         for c0, c1 in chunks(*s):
@@ -133,18 +158,26 @@ def main() -> None:
     with ThreadPoolExecutor(a.jobs) as pool:
         for f in [pool.submit(step, *j, a.width) for j in jobs]:
             f.result()
-    for s in SPANS:
+    for s in spans:
         if parts[s]:
             join(parts[s], sky[s])
+            for p in parts[s]:
+                os.remove(p)
 
-    for s in SPANS:
+    if a.full:
+        d = f"{root}/full/"
+        os.makedirs(d, exist_ok=True)
+        for name, per in (("sky_candidates.csv", sky), ("window_seeds_k4.csv", seeds)):
+            if not os.path.exists(d + name):
+                join([per[s] for s in spans], d + name)
         for m in a.merge:
-            out = f"{dirs[s]}all_merge{m}_{s[0]}_{s[1]}"
-            step("split", ["overlay_split", "--start", str(s[0]), "--end", str(s[1]), *BASE,
-                           "--merge", str(m), *VARIANTS["all"], "--sky-dump", sky[s],
-                           "--window-dump", seeds[s], "--out", out + ".mp4"],
-                 out + "_frames.csv", out + ".log", a.width)
-            playable(out + ".mp4")
+            split(FULL, m, d + "sky_candidates.csv", d + "window_seeds_k4.csv",
+                  f"{d}all_merge{m}_{FULL[0]}_{FULL[1]}", a.width, a.keep_full_size)
+    else:
+        for s in spans:
+            for m in a.merge:
+                split(s, m, sky[s], seeds[s], f"{dirs[s]}all_merge{m}_{s[0]}_{s[1]}", a.width,
+                      a.keep_full_size)
     print(f"done -> {root}", flush=True)
 
 
