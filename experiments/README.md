@@ -1,4 +1,4 @@
-# experiments/ — the scripts behind EXP-011 to EXP-027
+# experiments/ — the scripts behind EXP-015 to EXP-031
 
 One folder per experiment, holding the code that produced its ledger entry in
 `docs/experiments.md`. Until 2026-10-01 these lived inside the gitignored run folders
@@ -11,12 +11,17 @@ non-O4 run folder is now a subfolder named after its clip:
 | --- | --- |
 | `runs/sofa_analog/exp023_sky_branch/{,catch_4/,catch_5/}clipcfg.py` | `exp023_sky_branch/analog_catch_{2,4,5}/clipcfg.py` |
 | `runs/sofa_analog/exp017_motion_first/clipcfg.py` | `exp017_motion_first/analog_catch_2/clipcfg.py` |
-| `runs/sofa_analog/exp016_multiframe/clipcfg.py`, `interlace_check.py` | `exp016_multiframe/analog_catch_2/clipcfg.py`, `exp016_multiframe/interlace_check.py` |
-| `runs/field/exp017_multiframe/clipcfg.py` | `exp016_multiframe/field/clipcfg.py` (EXP-016's machinery on the field clip) |
-| `runs/field/exp011_field_glad_scaled/*.py`, `runs/field/exp012_field_glad_inverted/*.py` | `exp011_field_glad_scaled/`, `exp012_field_glad_inverted/` |
 
 Clip configs still write their outputs to `runs/<clip>/expNNN_*/`. The O4 run folders'
 outputs (videos, CSVs, stills) were deleted; re-run a script to regenerate them.
+
+**Removed 2026-10-07:** the script folders no current `PYTHONPATH` stack imports —
+`exp011_field_glad_scaled`, `exp012_field_glad_inverted`, `exp012b_motion_check` and
+`exp016_multiframe` (with its `analog_catch_2/` and `field/` configs) — and every run
+output before EXP-023. Restore a folder from git if a ledger entry needs re-running:
+`git checkout 861dd08 -- experiments/exp016_multiframe`. `exp015` and `exp017` stay: every
+stack from EXP-023 on builds on them. **`runs/sofa_analog/exp017_motion_first/` keeps its
+`prop_mask.npy` and `ladder_mask.npy`** — every analog clip config reads them from there.
 
 These are experiment scripts, not the `src/` package: no tests, no CLI contract, and an
 experiment's code is frozen once its numbers are in the ledger. A later experiment that

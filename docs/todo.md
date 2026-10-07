@@ -403,6 +403,14 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 
 ## Done
 
+- [x] 2026-10-07 — [algo] **Removed old experiment files.** `git rm` of
+  `experiments/exp011_field_glad_scaled`, `exp012_field_glad_inverted`, `exp012b_motion_check`
+  and `exp016_multiframe` — checked first that no other folder imports them; restorable from
+  `861dd08`. Deleted the gitignored run outputs before EXP-023 (EXP-010 to EXP-022 under
+  `runs/field`, `runs/sofa_analog`, `runs/sofa_o4`), except the analog `prop_mask.npy` /
+  `ladder_mask.npy` in `runs/sofa_analog/exp017_motion_first/`, which every live analog clip
+  config reads. `experiments/README.md` records it. No code changed, so no tests.
+
 - [x] 2026-10-07 — [algo] **EXP-031: every stage at once, and EXP-030 at matched load.**
   `experiments/exp031_combined/run_all.py` runs EXP-025d to EXP-030 together on catch_2/4/5
   at merge 20 and 30, with c-keep swept 6–15. The `exp028`/`exp030` rows match EXP-030's CSVs
