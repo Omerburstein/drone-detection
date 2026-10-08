@@ -51,7 +51,8 @@ dataset work and model work do not collide. Four packages, each owning one decis
 src/data/    getting pixels and labels in: source classification, video decode and
              striding, crops, HUD masks, the annotation tools, dataset preparation
 src/algo/    the detection path: configuration, tiling, masking, duty-cycle
-             schedules, the kinematic gate (answers held to a drone's top speed), and
+             schedules, the kinematic gate (answers held to a drone's top speed), the
+             drone selector (which confirmed track is the drone), pixel scaling, and
              `glad/` -- the ported GLAD pipeline and its motion module
 src/output/  everything a run emits: the JSONL record, annotated video and stills,
              the scored overlay, the contact sheet, the live window
@@ -116,6 +117,12 @@ Load-bearing points:
   `matching.criterion_from_args` builds it for both CLIs that take `--match`, so a
   criterion cannot be assembled two ways — the flags stay local to each parser, since
   two help strings cannot disagree about a number but two builders can.
+- `algo.scale.PixelScale` — **a pixel constant is quoted at 1440 px wide** and read at the
+  clip's width, never used raw. `kinematics.SpeedLimit` carries its own reference width;
+  `overlay_split` takes `--ref-width`, and the analog drivers pass 960 because their numbers
+  were tuned there. `px()` multiplies before dividing, so a number comes back exact at the
+  width it was tuned at and the old analog CSVs reproduce byte for byte. Absolute pixels
+  made merge 20 and 30 identical on the 4128-wide `.raw` (EXP-031).
 - `eval/matching.py` vs `eval/metrics.py` — matching decides *which prediction claims
   which target*; metrics counts and averages the result. The split is what lets
   `output/overlay.py` colour a box by its outcome without importing the AP machinery.

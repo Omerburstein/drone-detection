@@ -40,7 +40,7 @@ import numpy as np
 sys.path.insert(0, "experiments/exp030_merge_sum")
 import run_clips as exp030  # noqa: E402
 
-BASE = ["--top", "3", "--min-draw", "20", "--osd-grid", "--kinematic"]
+BASE = ["--top", "3", "--min-draw", "20", "--osd-grid", "--kinematic", "--ref-width", "960"]
 MOVE = ["--min-move", "20"]
 SUM = ["--merge-score", "sum"]
 C_KEEP = (8, 10, 12, 15)

@@ -81,8 +81,16 @@ TWIN_SCORE = 0.7
 # same trap measured in `src.data.annotate` -- so featureless boxes never twin.
 TWIN_MIN_STD = 8.0
 TWIN_REACH = (0.5, 2.5)  # in columns: nearest and farthest twin searched for
-TWIN_ROWS = 16  # vertical slack, in pixels, for a horizon tilted by roll
-TWIN_PAD = 2  # context kept around the box, in pixels
+# The OSD is drawn into the picture, so its geometry scales with the picture: every length
+# below is a fraction of one character column, measured at 960 wide (a 32 px column) and
+# exact there. TWIN_ROWS is 16 px and TWIN_PAD 2 px at 960 wide.
+TWIN_ROWS = 0.5  # vertical slack for a horizon tilted by roll, in columns
+TWIN_PAD = 0.0625  # context kept around the box, in columns
+
+
+def _cols(fraction: float, column: float) -> int:
+    """A length given in OSD columns, in whole pixels of this picture."""
+    return int(round(fraction * column))
 
 
 def twin_score(gray: np.ndarray,
@@ -96,17 +104,18 @@ def twin_score(gray: np.ndarray,
     """
     height, width = gray.shape[:2]
     column = width / columns
+    pad, slack = _cols(TWIN_PAD, column), _cols(TWIN_ROWS, column)
     x, y, w, h = (float(v) for v in box)
-    x1 = max(int(round(x)) - TWIN_PAD, 0)
-    y1 = max(int(round(y)) - TWIN_PAD, 0)
-    x2 = min(int(round(x + w)) + TWIN_PAD, width)
-    y2 = min(int(round(y + h)) + TWIN_PAD, height)
+    x1 = max(int(round(x)) - pad, 0)
+    y1 = max(int(round(y)) - pad, 0)
+    x2 = min(int(round(x + w)) + pad, width)
+    y2 = min(int(round(y + h)) + pad, height)
     template = gray[y1:y2, x1:x2].astype(np.float32)
     if template.size == 0 or template.std() < TWIN_MIN_STD:
         return 0.0
 
     near, far = (int(column * reach) for reach in TWIN_REACH)
-    rows = slice(max(y1 - TWIN_ROWS, 0), min(y2 + TWIN_ROWS, height))
+    rows = slice(max(y1 - slack, 0), min(y2 + slack, height))
     best = 0.0
     for lo, hi in ((x1 - far, x2 - near), (x1 + near, x2 + far)):
         strip = gray[rows, max(lo, 0):min(hi, width)].astype(np.float32)
@@ -136,8 +145,9 @@ def has_twin(gray: np.ndarray,
 # false alarms the dashes made.
 
 GRID_STEPS = (-2, -1, 1, 2)  # in columns
-GRID_SLACK = 3  # horizontal slack around each grid position, in pixels
-GRID_ROWS = 8  # vertical slack per column stepped, in pixels, for roll
+# Fractions of a column, as TWIN_ROWS: 3 px and 8 px at 960 wide.
+GRID_SLACK = 0.09375  # horizontal slack around each grid position, in columns
+GRID_ROWS = 0.25  # vertical slack per column stepped, for roll, in columns
 GRID_MATCHES = 2  # grid positions that must hold a copy
 
 
@@ -148,16 +158,18 @@ def grid_twins(gray: np.ndarray,
     """How many of the positions +-1 and +-2 OSD columns away hold a copy of the box.
 
     A copy is a normalised correlation of at least `threshold` within
-    `GRID_SLACK` px of the grid position horizontally and `GRID_ROWS` px per
-    column stepped vertically. Featureless boxes count none, as in `twin_score`.
+    `GRID_SLACK` columns of the grid position horizontally and `GRID_ROWS`
+    columns per column stepped vertically. Featureless boxes count none, as in
+    `twin_score`.
     """
     height, width = gray.shape[:2]
     column = width / columns
+    pad, slack = _cols(TWIN_PAD, column), _cols(GRID_SLACK, column)
     x, y, w, h = (float(v) for v in box)
-    x1 = max(int(round(x)) - TWIN_PAD, 0)
-    y1 = max(int(round(y)) - TWIN_PAD, 0)
-    x2 = min(int(round(x + w)) + TWIN_PAD, width)
-    y2 = min(int(round(y + h)) + TWIN_PAD, height)
+    x1 = max(int(round(x)) - pad, 0)
+    y1 = max(int(round(y)) - pad, 0)
+    x2 = min(int(round(x + w)) + pad, width)
+    y2 = min(int(round(y + h)) + pad, height)
     template = gray[y1:y2, x1:x2].astype(np.float32)
     if template.size == 0 or template.std() < TWIN_MIN_STD:
         return 0
@@ -165,9 +177,9 @@ def grid_twins(gray: np.ndarray,
     copies = 0
     for step in GRID_STEPS:
         dx = int(round(step * column))
-        dy = GRID_ROWS * abs(step)
+        dy = _cols(GRID_ROWS, column) * abs(step)
         strip = gray[max(y1 - dy, 0):min(y2 + dy, height),
-                     max(x1 + dx - GRID_SLACK, 0):min(x2 + dx + GRID_SLACK, width)]
+                     max(x1 + dx - slack, 0):min(x2 + dx + slack, width)]
         if strip.shape[0] < template.shape[0] or strip.shape[1] < template.shape[1]:
             continue
         match = cv2.matchTemplate(strip.astype(np.float32), template,

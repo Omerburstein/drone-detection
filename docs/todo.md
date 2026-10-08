@@ -15,12 +15,18 @@ dates, not priorities.
 
 ## Open
 
-- [ ] 2026-10-07 — [algo] **Scale `overlay_split`'s pixel constants with frame width.**
-  `--merge`, `--kinematic`'s 25 px/frame ceiling, `--min-move` and `--min-draw` are absolute
-  pixels. The detectors' constants scale by width/1440, but these do not. On the FIELD `.raw`
-  at 4128 wide this made merge 20 and 30 identical, and made the speed ceiling 4x stricter
-  in mp4 terms. Quote them at 1440 like the rest before comparing runs across resolutions,
-  and before re-running the `.raw` at another width. EXP-031 FIELD addendum.
+- [ ] 2026-10-09 — [algo] **Re-run the FIELD `.raw` with the scaled constants.** EXP-031's
+  `.raw` runs used absolute pixels: merge 30 px and a 25 px/frame ceiling at 4128 wide. Now
+  `run_field_raw.py --full` gives 129 px and 107.5. The window dumps must be rebuilt at the
+  scaled radius, 38.7 px, at about 9 s/frame; the sky dumps are reused. That is several
+  hours, so background it. Add `--rank-by drone` for a side-by-side on the ridge-top tree
+  that held #1 for 71 frames. That tree is the colour case EXP-032 could not test on analog.
+
+- [ ] 2026-10-09 — [data] [algo] **Test EXP-032's colour cue on labelled colour footage.**
+  On analog CVBS the selector compared lightness only and lost to evidence ranking (#1 149
+  against 153). Whether colour separates the drone from trees needs labels on FIELD; see
+  the FIELD annotation item. Retune nothing on catch_2/4/5: they are every labelled analog
+  clip, so a tuned weight would have no held-out test.
 
 - [ ] 2026-10-05 — [algo] **Tighten the chain, then re-run EXP-029 at EXP-028's operating
   point.** EXP-029 measured the moving factor working as designed and still not helping below
@@ -409,6 +415,17 @@ The tooling landed on 2026-09-17 (see Done). What is left is the measurement.
 - [ ] 2026-09-29 — [algo] **Score a HUD mask against labels, not against its coverage percentage.** EXP-020: the tool prints `7.71% of the frame`, which is the wrong number — 13.15% sounded acceptable and was 20% of the ground truth. Add `--labels <dir>` to `src.data.hud_mask` so the build reports how many labelled boxes the mask would veto at `HUD_VETO_FRACTION`, and refuse silently-expensive masks. Cheap: the scoring loop is `overlap_fraction` over YOLO txt files, ~20 lines, and it is the only check that would have caught this.
 
 ## Done
+
+- [x] 2026-10-09 — [algo] **Pixel constants scale with resolution; EXP-032's drone selector.**
+  The user asked for every magic number to follow the video's resolution, and for the drone
+  to be picked from tracked candidates by colour, closeness to past #1s, consistency and
+  speed. `src/algo/scale.py` quotes every pixel constant at 1440 wide. Covered:
+  `overlay_split`'s flags (`--ref-width`), `SpeedLimit`'s ceiling and slack, the moving
+  factor, the OSD grid slacks (now in columns), and the drivers' window radius. The analog
+  drivers declare 960, and EXP-031's CSVs reproduce byte for byte.
+  `src/algo/selection.py` is the selector, `--rank-by drone`. Over catch_2/4/5 it is
+  steadier (9% fewer #1 jumps) but puts the drone at #1 slightly less often, 149 against
+  153, so `track` stays the default. Ledger: EXP-032.
 
 - [x] 2026-10-08 — [algo] **EXP-031 `all` over the whole FIELD `.raw`, one pass, merge 30; the
   episodes at merge 120.** `run_field_raw.py --spans all --full` built the gap dumps and

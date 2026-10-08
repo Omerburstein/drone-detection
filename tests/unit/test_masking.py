@@ -12,6 +12,7 @@ The fraction threshold is what separates them, so it is tested from both sides.
 
 from __future__ import annotations
 
+import cv2
 import numpy as np
 import pytest
 
@@ -216,3 +217,37 @@ class TestGridTwins:
         gray = sky()
         dash(gray, 0, 0)
         assert 0 <= grid_twins(gray, (0, 0, 8, 5)) <= len(GRID_STEPS)
+
+
+class TestOsdScale:
+    """The OSD is drawn into the picture, so a bigger picture has a bigger OSD. Every
+    slack is a fraction of a character column; with absolute pixels, a 4x picture of a
+    rolled horizon fell outside the 8 px per column of vertical slack and stopped twinning.
+    """
+
+    @staticmethod
+    def tilted_row(factor: int) -> np.ndarray:
+        """The tilted row of dashes at 960 wide, enlarged `factor` times."""
+        gray = sky()
+        for k in range(-3, 4):
+            dash(gray, 470 + k * COLUMN, 300 + 6 * k)
+        return cv2.resize(gray, (WIDTH * factor, HEIGHT * factor),
+                          interpolation=cv2.INTER_NEAREST)
+
+    @pytest.mark.parametrize("factor", [1, 2, 4])
+    def test_a_tilted_row_is_on_the_grid_at_any_size(self, factor):
+        box = (470 * factor, 300 * factor, 8 * factor, 5 * factor)
+        assert grid_twins(self.tilted_row(factor), box) == 4
+
+    @pytest.mark.parametrize("factor", [1, 4])
+    def test_a_tilted_row_twins_at_any_size(self, factor):
+        box = (470 * factor, 300 * factor, 8 * factor, 5 * factor)
+        assert has_twin(self.tilted_row(factor), box)
+
+    @pytest.mark.parametrize("factor", [1, 4])
+    def test_a_lone_drone_stays_off_the_grid_at_any_size(self, factor):
+        gray = sky()
+        drone(gray, 470, 300)
+        big = cv2.resize(gray, (WIDTH * factor, HEIGHT * factor),
+                         interpolation=cv2.INTER_NEAREST)
+        assert not on_osd_grid(big, (470 * factor, 300 * factor, 10 * factor, 6 * factor))

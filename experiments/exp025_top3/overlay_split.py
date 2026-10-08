@@ -40,6 +40,19 @@ sum of c, so a circle cannot appear somewhere new without a plausible history, a
 jump further than the speed limit allows. Off by
 default; without it every output is byte-identical to EXP-027.
 
+`--rank-by drone` (EXP-032) ranks the gate's survivors by `src.algo.selection.DroneSelector`
+instead of by evidence alone. The cues are evidence, colour against the previous #1s,
+closeness to recent #1s (decaying with age), the track's hit rate and age, how well its
+path is predicted at constant velocity, and its speed against the scene. `--cues` weights
+them.
+
+**Every pixel flag is quoted at `--ref-width` px wide** (default 1440, as every other
+constant in the project) and scaled to the clip's width: `--radius`, `--merge`,
+`--min-move`, `--ceiling`, `--min-draw`, the OSD test's box and the selector's lengths.
+A driver holding numbers tuned on the 960-wide analog clips passes `--ref-width 960`, and
+its outputs are byte-identical to before. Without the scaling, the FIELD `.raw` at 4128 wide
+read merge 20 and 30 identically (EXP-031).
+
 Writes a CSV of every shown blob and one row per frame for the drone (`--hist` input to
 `split_rank_hist.py`): its best rank in the pooled ranking, the section that ranked it, or
 why it was not ranked.
@@ -60,11 +73,15 @@ import skyline
 from clipcfg import CLIP
 from src.algo.kinematics import KinematicTracker, SpeedLimit
 from src.algo.masking import on_osd_grid
+from src.algo.scale import REF_WIDTH, PixelScale
+from src.algo.selection import CUES, CueWeights, DroneSelector
 from overlay_sky import KEPT, MIN_DRAW_DIAMETER, _draw_background
 from overlay_video import load_boxes, px, text_block
 from overlay_window_skyc import confirmed, load_survivors
 
 RUNS = "runs/sofa_analog/"
+RANKED_BY = {"c": "c", "track": "track evidence, decay {decay:g}",
+             "drone": "the drone selector's score"}
 W, H = CLIP["width"], CLIP["height"]
 SECTIONS = ("sky", "ground")
 TAG = {"sky": "sky", "ground": "gnd"}
@@ -76,7 +93,14 @@ FRAME_FIELDS = ["frame", "sky_fraction", "ranked_sky", "ranked_ground", "shown_s
                 "shown_ground", "folded", "osd_vetoed", "osd_vetoed_on_target"]
 KINEMATIC_SHOWN = ["track", "reason", "evidence"]
 KINEMATIC_FRAMES = ["born", "overruled", "continued_weak", "coasting", "too_still"]
-OSD_BOX = (8, 14)  # the grid test's box side, px: blob diameter clamped to a dash's size
+SELECTOR_SHOWN = ["drone_score", *(f"cue_{c}" for c in CUES)]
+# The grid test's box side, blob diameter clamped to a dash's size: 8-14 px at 960 wide,
+# quoted at 1440 like every other length here.
+OSD_BOX = (12.0, 21.0)
+TAG_FONT = 0.675  # the circle tags' font scale at 1440 wide: 0.45 at 960, as before
+# The pixel flags' defaults, quoted at REF_WIDTH whatever `--ref-width` a driver declares:
+# a driver's --ref-width says where *its* numbers come from, not where these do.
+FLAG_DEFAULTS = {"radius": 13.5, "ceiling": 37.5, "min_draw": MIN_DRAW_DIAMETER * 1.5}
 
 
 def _blob(r: dict) -> dict:
@@ -120,11 +144,12 @@ def section_of(sky: np.ndarray, x: float, y: float) -> str:
     return "sky" if sky[yi, xi] else "ground"
 
 
-def osd_vetoed(gray: np.ndarray, blobs: list[dict]) -> list[dict]:
-    """The blobs that sit in a row on the OSD grid, tested on a dash-sized square box."""
+def osd_vetoed(gray: np.ndarray, blobs: list[dict], box: tuple[float, float]) -> list[dict]:
+    """The blobs that sit in a row on the OSD grid, tested on a dash-sized square box whose
+    side is clamped to `box`, in picture px."""
     out = []
     for b in blobs:
-        side = float(np.clip(b["diameter"], *OSD_BOX))
+        side = float(np.clip(b["diameter"], *box))
         if on_osd_grid(gray, (b["x"] - side / 2, b["y"] - side / 2, side, side)):
             out.append(b)
     return out
@@ -200,29 +225,63 @@ def drone_row(f: int, ranked: list[dict], blobs: list[dict], box, sky,
 
 
 def speed_limit(a) -> SpeedLimit:
-    """The `--kinematic` limit from the command line, at this clip's width and fps."""
+    """The `--kinematic` limit from the command line, at this clip's width and fps, with its
+    pixels quoted at `--ref-width`. The slack is not a flag: its default is quoted at 1440
+    whatever `--ref-width` says, as `FLAG_DEFAULTS`."""
     return SpeedLimit(width_px=W, fps=CLIP["fps"], v_max_ms=a.v_max, min_range_m=a.min_range,
-                      hfov_deg=a.hfov, ceiling_px=a.ceiling)
+                      hfov_deg=a.hfov, ceiling_px=a.ceiling, ref_width_px=a.ref_width,
+                      slack_px=SpeedLimit.slack_px * a.ref_width / REF_WIDTH)
+
+
+def selector(a) -> DroneSelector:
+    """The `--rank-by drone` selector from the command line, at this clip's width; its own
+    lengths are quoted at 1440. Colour is compared only where the clip config uses it: CVBS
+    chroma is crawl, not colour."""
+    return DroneSelector(PixelScale(W), CueWeights.parse(a.cues),
+                         memory_decay=a.memory_decay, use_colour=CLIP.get("use_colour", True))
 
 
 def gate(tracker: KinematicTracker, f: int, ranked: list[dict], objs: list[dict],
          c_keep: float, prev_to_cur: np.ndarray,
          rank_by: str = "c") -> tuple[list[dict], list[dict], object]:
     """One frame through the kinematic gate: the objects it passes, best first by `rank_by`
-    (`c`, or `track` for the track's evidence), and the ones it overruled. `ranked` is
-    strong; the rest of `objs` at c >= `c_keep` is weak. Each object is tagged with its
-    `track`, the gate's `reason` and the track's `evidence`."""
+    (`c`, or the track's evidence for `track` and `drone`), and the ones it overruled.
+    `ranked` is strong; the rest of `objs` at c >= `c_keep` is weak. Each object is tagged
+    with its `track`, the gate's `reason`, the track's `evidence` and its `speed` against
+    the scene in px/frame (NaN until the track has two sightings)."""
     pooled = {id(o) for o in ranked}
     cands = ranked + [o for o in objs if id(o) not in pooled and o["c"] >= c_keep]
     xy = np.array([[o["x"], o["y"]] for o in cands], float).reshape(-1, 2)
     res = tracker.step(f, xy, np.array([o["c"] for o in cands], float),
                        np.arange(len(cands)) < len(ranked), prev_to_cur)
-    for o, tid, why, ev in zip(cands, res.track_id, res.reason, res.evidence):
+    for o, tid, why, ev, moved, span in zip(cands, res.track_id, res.reason, res.evidence,
+                                            res.moved, res.move_span):
         o["track"], o["reason"], o["evidence"] = int(tid), why, round(float(ev), 3)
+        o["speed"] = float(moved) / span if span > 0 else float("nan")
     passed = [o for o, ok in zip(cands, res.shown) if ok]
     held = [o for o, ok in zip(cands, res.shown) if not ok]
-    key = "evidence" if rank_by == "track" else "c"
+    key = "c" if rank_by == "c" else "evidence"
     return sorted(passed, key=lambda b: (-b[key], b["on_target"])), held, res
+
+
+def select(sel: DroneSelector, f: int, passed: list[dict], img: np.ndarray,
+           prev_to_cur: np.ndarray) -> list[dict]:
+    """The gate's survivors re-ranked by the drone selector, best first. Each is tagged with
+    its `drone_score` and every cue. Called on every frame, even an empty one, so the
+    selector's memory follows the camera without a gap.
+
+    A merged object's colour is read at its anchor's own size: its merged diameter spans
+    every member and would average the drone with the sky around it."""
+    xy = np.array([[o["x"], o["y"]] for o in passed], float).reshape(-1, 2)
+    looks = sel.look(img, xy, [o["parts"][0]["diameter"] for o in passed])
+    res = sel.step(f, np.array([o["track"] for o in passed], int), xy,
+                   np.array([o["evidence"] for o in passed], float),
+                   np.array([o["speed"] for o in passed], float), looks, prev_to_cur)
+    for k, o in enumerate(passed):
+        o["drone_score"] = round(float(res.score[k]), 4)
+        for c in CUES:
+            o[f"cue_{c}"] = round(float(res.cues[c][k]), 4)
+    return [passed[k] for k in res.order]
 
 
 def top_jumps(rows: list[dict], reach: float) -> tuple[int, int]:
@@ -235,18 +294,23 @@ def top_jumps(rows: list[dict], reach: float) -> tuple[int, int]:
 
 
 def draw(img, shown: list[dict], sl: skyline.Skyline, line: bool, min_draw: float) -> None:
+    """Circles and tags for the shown objects, `min_draw` in picture px. Every stroke and
+    the font scale with the clip's width, so a 4128-wide frame is as legible as a 960 one."""
     if line:
         xs = np.nonzero(sl.horizon >= 0)[0]
         if len(xs):
             pts = np.stack([xs, sl.horizon[xs]], axis=1).astype(np.int32)
             cv2.polylines(img, [pts], False, SPLIT_LINE, max(1, px(1)), cv2.LINE_AA)
+    font = TAG_FONT * W / REF_WIDTH
     for i, b in enumerate(shown, 1):
         p, r = (int(b["x"]), int(b["y"])), int(round(max(b["diameter"], min_draw) / 2))
-        cv2.circle(img, p, r, KEPT, max(1, px(1)) + (1 if i == 1 else 0))
+        cv2.circle(img, p, r, KEPT, max(1, px(1)) + (px(1.5) if i == 1 else 0))
         tag = f"#{i} {b['c']:.1f} {TAG[b['section']]}"
-        org = (p[0] + r + 3, p[1] - r - 2)
-        for colour, thick in (((0, 0, 0), 3), ((255, 255, 255), 1)):
-            cv2.putText(img, tag, org, cv2.FONT_HERSHEY_SIMPLEX, 0.45, colour, thick,
+        if "drone_score" in b:
+            tag += f" {b['drone_score']:.2f}"
+        org = (p[0] + r + px(4.5), p[1] - r - px(3))
+        for colour, thick in (((0, 0, 0), px(4.5)), ((255, 255, 255), px(1.5))):
+            cv2.putText(img, tag, org, cv2.FONT_HERSHEY_SIMPLEX, font, colour, thick,
                         cv2.LINE_AA)
 
 
@@ -258,12 +322,16 @@ def main() -> None:
     ap.add_argument("--k", type=int, default=4, help="window length of the seed dump")
     ap.add_argument("--min-appear", type=int, default=2)
     ap.add_argument("--top", type=int, default=3, help="at most this many per frame, pooled")
-    ap.add_argument("--radius", type=float, default=9.0,
-                    help="seed-to-blob distance that confirms a ground blob, px")
+    ap.add_argument("--ref-width", type=float, default=REF_WIDTH,
+                    help="every pixel flag below is quoted at this width and scaled to the "
+                         "clip's (default 1440, the project's reference). Drivers holding "
+                         "numbers tuned on the 960-wide analog clips pass 960")
+    ap.add_argument("--radius", type=float, default=None,
+                    help="seed-to-blob distance that confirms a ground blob, px at "
+                         "--ref-width (default 13.5 at 1440 wide, 9 on analog)")
     ap.add_argument("--merge", type=float, default=0.0,
-                    help="fold blobs within this many px of a stronger one into it, before "
-                         "the sections' tests "
-                         "(0: off, EXP-025d)")
+                    help="fold blobs within this many px (at --ref-width) of a stronger one "
+                         "into it, before the sections' tests (0: off, EXP-025d)")
     ap.add_argument("--merge-score", choices=("max", "sum"), default="max",
                     help="a merged object's c: its anchor's (the strongest member's), or the "
                          "sum of every member's (EXP-030)")
@@ -279,25 +347,35 @@ def main() -> None:
                     help="--kinematic: the closest range the limit is computed at, m")
     ap.add_argument("--hfov", type=float, default=130.0,
                     help="--kinematic: the camera's horizontal field of view, degrees")
-    ap.add_argument("--ceiling", type=float, default=25.0,
-                    help="--kinematic: the limit never exceeds this, px/frame")
+    ap.add_argument("--ceiling", type=float, default=None,
+                    help="--kinematic: the limit never exceeds this, px/frame at --ref-width "
+                         "(default 37.5 at 1440 wide, 25 on analog)")
     ap.add_argument("--c-keep", type=float, default=6.0,
                     help="--kinematic: the weakest c that may continue a confirmed track")
     ap.add_argument("--confirm", type=int, default=2,
                     help="--kinematic: hits a track needs before it is shown")
     ap.add_argument("--max-coast", type=int, default=5,
                     help="--kinematic: missed frames a confirmed track survives")
-    ap.add_argument("--rank-by", choices=("c", "track"), default="track",
-                    help="--kinematic: rank by this frame's c, or by the track's decayed sum "
-                         "of c (steadier #1)")
+    ap.add_argument("--rank-by", choices=("c", "track", "drone"), default="track",
+                    help="--kinematic: rank by this frame's c, by the track's decayed sum "
+                         "of c (steadier #1), or by the drone selector's score over every "
+                         "cue (EXP-032)")
+    ap.add_argument("--cues", default="",
+                    help="--rank-by drone: cue weights as <cue>=<w>,... over "
+                         f"{', '.join(CUES)}; unnamed cues keep their defaults "
+                         f"({CueWeights().label()})")
+    ap.add_argument("--memory-decay", type=float, default=0.9,
+                    help="--rank-by drone: per-frame decay of a past #1's support, and of "
+                         "the learned drone colour's influence")
     ap.add_argument("--decay", type=float, default=0.8,
                     help="--kinematic: per-frame decay of a track's evidence")
     ap.add_argument("--min-move", type=float, default=0.0,
                     help="--kinematic: the MOVING FACTOR (EXP-029), the limit from below. "
-                         "A confirmed track must have travelled this many px against the "
-                         "static scene over --move-window frames or it is overruled as "
-                         "too-still. 0 disables it, and then nothing here changes. 20 is "
-                         "EXP-029's measured setting on catch_2")
+                         "A confirmed track must have travelled this many px (at "
+                         "--ref-width) against the static scene over --move-window frames "
+                         "or it is overruled as too-still. 0 disables it, and then nothing "
+                         "here changes. 20 at 960 (30 at 1440) is EXP-029's measured "
+                         "setting on catch_2")
     ap.add_argument("--move-window", type=int, default=5,
                     help="--min-move: frames the travel is measured across")
     ap.add_argument("--window-dump", default=None,
@@ -306,20 +384,30 @@ def main() -> None:
                     default=RUNS + "exp023_sky_branch/candidates_catch_2_441_800.csv")
     ap.add_argument("--no-split-line", action="store_true",
                     help="do not draw stage 1's horizon")
-    ap.add_argument("--min-draw", type=float, default=MIN_DRAW_DIAMETER,
-                    help="smallest circle drawn, px across; appearance only, never filters")
+    ap.add_argument("--min-draw", type=float, default=None,
+                    help="smallest circle drawn, px across at --ref-width (default 15 at 1440 "
+                         "wide, 10 on analog); appearance only, never filters")
     ap.add_argument("--fps", type=float, default=10.0)
     ap.add_argument("--out", default=None)
     ap.add_argument("--report-only", action="store_true",
                     help="no run: print the report from --out's existing _frames.csv and "
                          "_drone.csv (how run_clips.py reports chunks it has joined)")
     a = ap.parse_args()
+    for key, quoted in FLAG_DEFAULTS.items():
+        if getattr(a, key) is None:
+            setattr(a, key, quoted * a.ref_width / REF_WIDTH)
+    if a.rank_by == "drone" and not a.kinematic:
+        ap.error("--rank-by drone ranks the kinematic gate's tracks: add --kinematic")
+    try:
+        weights = CueWeights.parse(a.cues)  # refused here, not after hours of work
+    except ValueError as e:
+        ap.error(str(e))
 
     span = f"{CLIP['name']}_{a.start}_{a.end}"
     wdump = a.window_dump or RUNS + f"exp024_window_length/seeds_k{a.k}_{span}.csv"
     out = a.out or RUNS + (f"exp025_top3/split_sky_window{a.min_appear}of{a.k}"
                            f"_top{a.top}{f'_merge{a.merge:g}' if a.merge else ''}"
-                           f"_{span}.mp4")
+                           f"{'_drone' if a.rank_by == 'drone' else ''}_{span}.mp4")
     stem = os.path.splitext(out)[0]
     os.makedirs(os.path.dirname(out), exist_ok=True)
     if a.report_only:
@@ -327,25 +415,36 @@ def main() -> None:
         return
 
     limit = speed_limit(a)
+    scale = PixelScale(W, a.ref_width)
+    radius, merge_px, min_draw = scale.px(a.radius), scale.px(a.merge), scale.px(a.min_draw)
+    own = PixelScale(W)   # this module's own constants are quoted at 1440
+    osd_box = (own.px(OSD_BOX[0]), own.px(OSD_BOX[1]))
     survivors = load_survivors(wdump, a.min_appear)
     blobs = DumpStream(a.sky_dump)
     boxes = load_boxes()
     stage0 = masks.Stage0()
     print("[stage 0] " + ", ".join(f"{k} {v:.2f}%" for k, v in stage0.coverage().items()))
+    print(f"[scale] {W} px wide, pixel flags quoted at {a.ref_width:g}: x{scale.factor:.3f}")
     print(f"[sky section] {a.sky_dump}, c >= 6\n[ground section] {a.min_appear} of {a.k} "
-          f"from {wdump}, blob within {a.radius:g} px, any c\n[rank] pooled by c, top {a.top}"
-          + (f", blobs within {a.merge:g} px merged" if a.merge else "")
+          f"from {wdump}, blob within {radius:.1f} px, any c\n[rank] pooled by c, top {a.top}"
+          + (f", blobs within {merge_px:.1f} px merged" if a.merge else "")
           + ("\n[osd grid] blobs in a row on the OSD grid dropped first" if a.osd_grid else "")
           + (f"\n[kinematic] {limit.v_max_ms:g} m/s at {limit.min_range_m:g} m through "
              f"{limit.hfov_deg:g} deg = {limit.physical_px:.1f} px/frame, ceiling "
-             f"{limit.ceiling_px:g} -> {limit.px_per_frame:.1f} px/frame + {limit.slack_px:g} "
-             f"slack; confirm {a.confirm}, coast {a.max_coast}, weak c >= {a.c_keep:g}; "
-             f"ranked by {'track evidence, decay ' + format(a.decay, 'g') if a.rank_by == 'track' else 'c'}"
-             if a.kinematic else ""))
+             f"{limit.ceiling:.1f} -> {limit.px_per_frame:.1f} px/frame + {limit.slack:.1f} "
+             f"slack; confirm {a.confirm}, coast {a.max_coast}, weak c >= {a.c_keep:g}"
+             + (f"; moving factor {scale.px(a.min_move):.1f} px" if a.min_move else "")
+             + f"; ranked by {RANKED_BY[a.rank_by].format(decay=a.decay)}"
+             if a.kinematic else "")
+          + (f"\n[selector] {weights.label()}; memory decay {a.memory_decay:g}, colour "
+             f"{'on' if CLIP.get('use_colour', True) else 'off'}"
+             if a.rank_by == "drone" else ""))
     tracker = KinematicTracker(limit, a.confirm, a.max_coast, a.decay,
                                min_move=a.min_move, move_window=a.move_window)
+    drone_sel = selector(a) if a.rank_by == "drone" else None
     shown_fields = (SHOWN_FIELDS + (KINEMATIC_SHOWN if a.kinematic else [])
-                    + (["c_max"] if a.merge_score == "sum" else []))
+                    + (["c_max"] if a.merge_score == "sum" else [])
+                    + (SELECTOR_SHOWN if drone_sel else []))
     frame_fields = FRAME_FIELDS + (KINEMATIC_FRAMES if a.kinematic else [])
 
     cap = cv2.VideoCapture(CLIP["video"])
@@ -365,16 +464,18 @@ def main() -> None:
         fb = [dict(b) for b in blobs.get(f, [])]
         gone = []
         if a.osd_grid:
-            gone = osd_vetoed(cv2.cvtColor(cur, cv2.COLOR_BGR2GRAY), fb)
+            gone = osd_vetoed(cv2.cvtColor(cur, cv2.COLOR_BGR2GRAY), fb, osd_box)
             fb = [b for b in fb if not any(b is g for g in gone)]
         for b in fb:
             b["section"] = section_of(sl.sky, b["x"], b["y"])
-        objs = merge(fb, a.merge, a.merge_score)
-        ranked = pool(objs, survivors.get(f), a.radius)
+        objs = merge(fb, merge_px, a.merge_score)
+        ranked = pool(objs, survivors.get(f), radius)
         held, extra = [], {}
         if a.kinematic:
             ranked, held, res = gate(tracker, f, ranked, objs, a.c_keep, np.linalg.inv(hmat),
                                      a.rank_by)
+            if drone_sel:
+                ranked = select(drone_sel, f, ranked, cur, np.linalg.inv(hmat))
             extra = dict(born=res.born, overruled=sum(o["reason"] != "weak-orphan"
                                                       for o in held),
                          too_still=res.too_still,
@@ -390,7 +491,8 @@ def main() -> None:
                             c=b["c"], diameter=b["diameter"], members=b["members"],
                             on_target=b["on_target"],
                             **({k: b[k] for k in KINEMATIC_SHOWN} if a.kinematic else {}),
-                            **({"c_max": b["c_max"]} if a.merge_score == "sum" else {}))
+                            **({"c_max": b["c_max"]} if a.merge_score == "sum" else {}),
+                            **({k: b[k] for k in SELECTOR_SHOWN} if drone_sel else {}))
                        for i, b in enumerate(shown, 1)]
         if f in boxes:
             drone_rows.append(drone_row(f, ranked, objs, boxes[f], sl.sky,
@@ -398,10 +500,11 @@ def main() -> None:
 
         img = cur.copy()
         _draw_background(img, None, stage0, sky=False)
-        draw(img, shown, sl, not a.no_split_line, a.min_draw)
+        draw(img, shown, sl, not a.no_split_line, min_draw)
         text_block(img, [f"frame {f}    sky: sky branch c>=6   ground: {a.min_appear} of "
                          f"{a.k} window    top {a.top} by "
-                         f"{'summed ' if a.merge_score == 'sum' else ''}sky c"
+                         + ("drone score" if drone_sel else
+                            f"{'summed ' if a.merge_score == 'sum' else ''}sky c")
                          + (f"    kinematic {limit.px_per_frame:.0f} px/frame"
                             if a.kinematic else ""),
                          f"ranked  sky {sum(b['section'] == 'sky' for b in ranked)}"
@@ -449,7 +552,8 @@ def report(a, out, stem, frame_rows, drone_rows) -> None:
     print(f"  shown/frame   sky {shown_n['sky'] / n:5.2f}  ground {shown_n['ground'] / n:5.2f}"
           f"  total {sum(shown_n.values()) / n:5.2f}")
     if a.merge:
-        print(f"  merge {a.merge:g} px folded {folded} candidates ({folded / n:.2f}/frame) "
+        print(f"  merge {a.merge:g} px at {a.ref_width:g} wide folded {folded} candidates "
+              f"({folded / n:.2f}/frame) "
               f"into stronger ones, before the sections' tests")
     if a.osd_grid:
         print(f"  osd grid dropped {vetoed['blobs']} candidates ({vetoed['blobs'] / n:.2f}/frame), "
@@ -462,7 +566,8 @@ def report(a, out, stem, frame_rows, drone_rows) -> None:
               f"{k['coasting'] / n:.2f} confirmed tracks coasting/frame. 'ranked' above is "
               f"after the gate")
         if a.min_move > 0:
-            print(f"  moving factor ({a.min_move:g} px over {a.move_window} frames): "
+            print(f"  moving factor ({speed_limit(a).scale.px(a.min_move):.1f} px over "
+                  f"{a.move_window} frames): "
                   f"{k['too_still']} of those overrulings were too-still "
                   f"({k['too_still'] / n:.2f}/frame) -- tracks that moved plausibly but "
                   f"not enough to be flying")

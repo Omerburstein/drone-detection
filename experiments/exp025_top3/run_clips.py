@@ -7,9 +7,10 @@ resumes where it stopped):
 
   1. EXP-023's sky branch, `--no-video`, for its candidate dump -- skipped when the clip
      config names an existing `sky_dump` (EXP-023's own, same settings);
-  2. (alongside 1) EXP-024's window at k=4, 2 appearances, 9 px, `--no-video`, for its seed dump;
-  3. `overlay_split --merge 20 --min-draw 20` from those two dumps -- in `split_chunks`
-     parallel ranges, joined, when the clip config sets it -- then the rank histogram when
+  2. (alongside 1) EXP-024's window at k=4, 2 appearances, 9 px at 960 wide (scaled to the
+     clip's width), `--no-video`, for its seed dump;
+  3. `overlay_split --merge 20 --min-draw 20 --ref-width 960` from those two dumps -- in
+     `split_chunks` parallel ranges, joined, when the clip config sets it -- then the rank histogram when
      the clip is labelled.
 
 Every output, the dumps included, goes to the clip's `out` in `clips/clipcfg.py`
@@ -35,7 +36,9 @@ STACKS = {
     "window": f"{HERE}/clips;experiments/exp024_window_length;{BASE}",
     "split": f"{HERE}/clips;{HERE};experiments/exp023_sky_branch;{BASE}",
 }
-MERGE, MIN_DRAW = 20, 20
+MERGE, MIN_DRAW = 20, 20   # px at REF_WIDTH, the analog clips' width
+REF_WIDTH = 960
+APPEAR_RADIUS = 9.0        # the window's seed radius, px at REF_WIDTH
 
 
 def step(key: str, stack: str, args: list[str], out: str, log: str) -> None:
@@ -157,11 +160,13 @@ def run(key: str) -> str:
         for f in [pool.submit(sky_step, key, c, start, end, sky, out),
                   pool.submit(step, f"{key}:window", "window",
                               ["overlay_window", *se, "--k", "4", "--min-appear", "2",
-                               "--appear-radius", "9", "--no-video", "--dump", seeds],
+                               "--appear-radius", f"{APPEAR_RADIUS * c['width'] / REF_WIDTH:g}",
+                               "--no-video", "--dump", seeds],
                               seeds, f"{out}window_{key}.log")]:
             f.result()
     split_step(key, c, start, end, ["--merge", str(MERGE), "--min-draw", str(MIN_DRAW),
-                                    "--sky-dump", sky, "--window-dump", seeds], video, out)
+                                    "--ref-width", str(REF_WIDTH), "--sky-dump", sky,
+                                    "--window-dump", seeds], video, out)
     if c.get("labels"):
         subprocess.run([sys.executable, f"{HERE}/split_rank_hist.py",
                         video.replace(".mp4", "_drone.csv")], check=True)

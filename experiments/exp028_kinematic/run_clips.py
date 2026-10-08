@@ -32,7 +32,7 @@ from clipcfg import CLIPS  # noqa: E402
 
 STACK = ("experiments/exp025_top3/clips;experiments/exp025_top3;experiments/exp023_sky_branch;"
          "experiments/exp017_motion_first;experiments/exp015_normalised_motion;.")
-BASE = ["--top", "3", "--merge", "20", "--min-draw", "20", "--osd-grid"]
+BASE = ["--top", "3", "--merge", "20", "--min-draw", "20", "--osd-grid", "--ref-width", "960"]
 VARIANTS = {
     "nogate": [],
     "gate": ["--kinematic"],

@@ -5256,3 +5256,92 @@ ridge-and-sky frame. Neither was checked.
 **Read with:** no labels, so everything here is load plus eyeballing. The gap judgements
 cover runs of 5 or more frames only. 95 shorter #1 runs in the gaps (22 + 73) were not looked at,
 and a drone among them would not show up on these sheets.
+
+## EXP-032 — the drone selector: which confirmed track is the drone
+
+- **Date:** 2026-10-09
+- **Question:** the user asked for every candidate to be tracked, and for the drone to be
+  picked as the most reasonable one. The cues they named were colour like the previous #1,
+  closeness to previous detections (decaying over time), consistency and speed. EXP-031
+  ranks the kinematic gate's survivors by one number, the track's decayed sum of c. Does a
+  multi-cue ranking put the drone at #1 more often?
+- **Method:** `src/algo/selection.py`'s `DroneSelector`, `overlay_split --rank-by drone`.
+  It re-ranks the same survivors, so the load and the gate are unchanged within each pair.
+  Six cues in [0, 1], combined as a weighted mean:
+  - evidence, relative to this frame's best (weight 1);
+  - appearance: Lab of the core plus core-minus-ring lightness, against the colour learned
+    from #1s that held two frames (weight 1);
+  - proximity to past #1s, 0.9^age weight and a spread of 30 px at 1440 x sqrt(age)
+    (weight 1);
+  - consistency, hit rate x maturity (weight 0.5);
+  - constant-velocity smoothness, 12 px at 1440 (weight 0.5);
+  - speed against the scene, 3 px/frame at 1440 (weight 0.5).
+
+  The weights were set before any run and not tuned. Colour is compared only where the
+  clip config sets `use_colour`, so on analog CVBS this cue is **lightness only**.
+- **Data:** catch_2 441–800 (224 labelled), catch_4 159–326 (82), catch_5 69–444 (188), at
+  merge 30 analog px, against EXP-031's `all` and `exp030_ck10` rows.
+- **Hardware / cost:** i7-1255U CPU, 24 overlays from EXP-030's dumps, 4 in parallel, about
+  30 min. No detector re-run.
+- **Scripts:** `experiments/exp032_drone_selector/run_clips.py`. Artifacts in
+  `runs/sofa_analog/exp032_drone_selector/merge30/<clip>/`, with the table in
+  `run_clips.log` one level up.
+
+### Result — pooled over the three clips
+
+| run | drone in top 3 (of 494) | drone #1 | #1 on the drone, of labelled frames with a #1 | #1 jumps > 29 px |
+| --- | ---: | ---: | ---: | ---: |
+| `all` (EXP-031) | 180 | **153** | **43%** | 202 / 448 |
+| `all_drone` | 179 | 149 | 42% | **183 / 448** |
+| `exp030_ck10` (EXP-031's recommendation) | 142 | **123** | **47%** | 100 / 262 |
+| `exp030_ck10_drone` | 142 | 116 | 44% | **94 / 262** |
+
+**The selector does not beat evidence ranking.** It puts the drone at #1 in 4 fewer frames
+under `all` and 7 fewer under `exp030_ck10`. It is steadier, with 9% fewer #1 jumps under
+`all`, but the steadiness is not on the drone. Per clip, `all_drone` against `all`: catch_2
+87 against 88, catch_4 35 against 37, catch_5 27 against 28. It loses a little on each
+clip, so this is not one clip's quirk.
+
+**The headroom is small.** Under `all` the drone is in the top 3 in 180 frames and #1 in
+153. Among the top 3, reranking can win at most 27 frames. In the other 314 labelled frames
+the drone is not in the top 3, and in most of those it was never among the survivors. On catch_2 the selector changed the drone's rank in 5 frames: it gained 2 and
+lost 3.
+
+### Ablation — each cue at weight 0, under `all_drone`
+
+| without | drone #1 | change |
+| --- | ---: | ---: |
+| (none) | 149 | |
+| evidence | 134 | −15 |
+| appearance | 146 | −3 |
+| consistency | 146 | −3 |
+| smoothness | 145 | −4 |
+| motion | 145 | −4 |
+| proximity | 151 | +2 |
+
+Every cue but proximity carries some signal: removing it loses #1 frames. Proximity
+*costs* frames. It rewards whatever was #1 last frame, including clutter, and so locks
+in a wrong #1. **Evidence is by far the strongest cue**, and diluting it to one of six is
+what loses. On catch_2's three lost frames the drone's track scored 0 on smoothness: a
+merged object's centre jumps between its fragments, so 8 px (analog) of constant-velocity
+error called the drone jerky. The clutter scored 1.0 on proximity because it had been #1 the
+frame before. Appearance favoured the drone in all three.
+
+### Read with
+
+- **The colour hypothesis is untested.** Analog is CVBS, so the appearance cue compared
+  lightness and ring contrast only. The case the user described, a green tree against a
+  dark drone, needs colour footage with labels. That means FIELD, and FIELD is unlabelled.
+- Not tuned, deliberately. "Proximity off, evidence up" would likely win a few frames, but
+  these three clips are every labelled analog clip, so a tuned setting has no held-out
+  test. `--rank-by track` stays the default, in `run_field_raw.py` too.
+- **Pixel constants now scale with resolution (same change).** `overlay_split`'s
+  `--radius`, `--merge`, `--min-move`, `--ceiling`, `--min-draw`, the speed limit's slack,
+  the OSD box and grid slacks (now fractions of an OSD column), and the drivers' window
+  radius are now quoted at 1440 wide, or at the `--ref-width` a driver declares.
+  - The analog drivers pass 960, and EXP-031's catch_2 `all` CSVs reproduce byte for byte.
+  - A defaults-only run matches the pre-change code byte for byte.
+  - The FIELD `.raw` outputs in EXP-031 used absolute pixels and are **not** reproducible by
+    the current driver. Re-running it puts merge 30 at 129 px and the ceiling at
+    107.5 px/frame at 4128 wide, not 30 and 25.
+  - The FIELD mp4 runs of EXP-025e (1032 wide) move by 7.5% in every pixel threshold.

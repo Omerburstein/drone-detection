@@ -40,31 +40,36 @@ in `runs/sofa_analog/exp031_combined/run_all.log`.
 ## The FIELD `.raw`, at the sensor's resolution
 
 ```bash
-py -3.13 experiments/exp031_combined/run_field_raw.py            # 4128 wide; --width, --jobs 5
-```
-
-```bash
-py -3.13 experiments/exp031_combined/run_field_raw.py --merge 120          # the episodes at merge 120
-py -3.13 experiments/exp031_combined/run_field_raw.py --merge 120 --full   # the whole clip, one video
+py -3.13 experiments/exp031_combined/run_field_raw.py                 # the episodes, merge 30
+py -3.13 experiments/exp031_combined/run_field_raw.py --full          # the whole clip, one video
+py -3.13 experiments/exp031_combined/run_field_raw.py --rank-by drone # EXP-032's selector
 ```
 
 `--spans all` adds the gaps 181–1089 and 1554–3129, so the five spans tile frames 2–3600.
 `--full` joins their dumps and renders one overlay over 2–3600, written to `raw<W>/full/`, so
 the kinematic tracker runs through the clip without restarting. The window still restarts at
-each span's first frame. Merge 120 at 4128 wide is merge 30 in mp4 pixels: the radius is in
-absolute pixels and does not scale with width.
+each span's first frame. `--width` and `--jobs 5` as before.
+
+**Changed 2026-10-09: pixel numbers scale with the width.** The driver's merge, min-draw, min-move and window radius are
+analog pixels, quoted at 960 wide (`--ref-width 960`) and scaled to `--width`. So
+`--merge 30` is 129 px at 4128 wide, the same fraction of the picture as on analog, and the
+speed ceiling is 107.5 px/frame instead of 25. Before this the numbers were absolute, which
+made merge 20 and 30 byte-identical here; the EXP-031 FIELD entries were measured that way.
+New outputs go to `runs/field/exp032_drone_selector/raw<W>/<a>_<b>/` and are named
+`all_merge<R>_<a>_<b>` (`all_drone_merge…` under `--rank-by drone`). The window dumps are
+rebuilt there at the scaled radius, about 9 s/frame at 4128 wide. The sky dumps under
+`runs/field/exp031_combined/raw<W>/` were always scaled, so they are read in place.
 
 `all` on the FIELD capture's `.raw`: 4128x3008 Bayer, the same 3600 frames as the mp4 at 4x
 the resolution (`src/data/raw_bayer.py`). There are no EXP-030 dumps for it, so the driver
 builds the sky-branch and window dumps first. It runs over the three episodes in
-`data/raw/FIELD/PROVENANCE.md`, 2–180, 1090–1553 and 3130–3600, at merge 20 and 30.
-`field_raw/clipcfg.py` is the clip config. It routes the `.raw` path in `cv2.VideoCapture`
-to `RawBayerCapture`, and `FIELD_RAW_WIDTH` sets the working width. Outputs go to
-`runs/field/exp031_combined/raw<W>/<a>_<b>/`: `sky_candidates.csv`, `window_seeds_k4.csv`,
-and `all_merge<R>_<a>_<b>` with `.mp4`, `.csv`, `_frames.csv` and `.log`. **Watch
+`data/raw/FIELD/PROVENANCE.md`, 2–180, 1090–1553 and 3130–3600. `field_raw/clipcfg.py` is
+the clip config. It routes the `.raw` path in `cv2.VideoCapture` to `RawBayerCapture`, and
+`FIELD_RAW_WIDTH` sets the working width. Each span's folder holds `sky_candidates.csv`,
+`window_seeds_k4.csv`, and the overlay's `.csv`, `_frames.csv` and `.log`. **Watch
 `_1080p.mp4`:** the full-size `.mp4` is `mp4v` at 4128x3008, which Windows players will not
-open. The driver writes an H.264 copy at 1080 rows through Media Foundation. The full-size
-copies of the 4128 run were deleted; deleting a `_frames.csv` and re-running rebuilds one.
+open. The driver writes an H.264 copy at 1080 rows through Media Foundation, and deletes the
+full-size one unless `--keep-full-size`. Deleting a `_frames.csv` and re-running rebuilds one.
 
 ## Result
 

@@ -22,6 +22,11 @@ overrules any answer that does not move like one.
 `overlay_split` flag overrides them: `--v-max`, `--min-range`, `--hfov`, `--ceiling`,
 `--c-keep`, `--confirm`, `--max-coast`, `--rank-by` and `--decay`.
 
+Since 2026-10-09 the ceiling, the slack and the moving factor are lengths quoted at a
+reference width and scaled to the clip (`src.algo.scale`). The wrapper passes
+`--ref-width 960`, so its 25 px ceiling is still 25 px on these 960-wide clips, and the
+outputs are unchanged.
+
 ## Running
 
 ```bash

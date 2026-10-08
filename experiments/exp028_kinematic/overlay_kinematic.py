@@ -16,7 +16,8 @@ import sys
 import overlay_split
 from clipcfg import CLIP
 
-DEFAULTS = ["--top", "3", "--merge", "20", "--min-draw", "20", "--osd-grid", "--kinematic"]
+DEFAULTS = ["--top", "3", "--merge", "20", "--min-draw", "20", "--osd-grid", "--kinematic",
+            "--ref-width", "960"]
 
 
 def main() -> None:

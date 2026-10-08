@@ -148,8 +148,10 @@ def main() -> None:
 
     stage0 = masks.Stage0()
     print("[stage 0] " + ", ".join(f"{k} {v:.2f}%" for k, v in stage0.coverage().items()))
+    # EXP-029's numbers are analog pixels: the ceiling and slack are quoted at 960 wide.
     limit = SpeedLimit(width_px=W, fps=CLIP["fps"], v_max_ms=a.v_max,
-                       min_range_m=a.min_range, hfov_deg=a.hfov, ceiling_px=a.ceiling)
+                       min_range_m=a.min_range, hfov_deg=a.hfov, ceiling_px=a.ceiling,
+                       slack_px=4.0, ref_width_px=960)
     print(f"[sky] strong at c >= {a.contrast}, continued at c >= {a.c_keep}")
     print(f"[chain] speed limit {limit.px_per_frame:.1f} px/frame, confirm {a.confirm}, "
           f"coast {a.max_coast}")

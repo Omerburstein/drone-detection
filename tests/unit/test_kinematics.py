@@ -17,15 +17,18 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.algo.kinematics import (NEW, OK, UNCONFIRMED, WEAK_ORPHAN, KinematicTracker,
-                                 SpeedLimit)
+from src.algo.kinematics import (NEW, OK, TOO_STILL, UNCONFIRMED, WEAK_ORPHAN,
+                                 KinematicTracker, SpeedLimit)
 
 ANALOG = SpeedLimit(width_px=960, fps=30.0)
 
 
 def tracker(**kw) -> KinematicTracker:
-    """A gate with a round 10 px/frame limit and no slack, so reaches are easy to read."""
-    limit = SpeedLimit(width_px=960, fps=30.0, ceiling_px=10.0, slack_px=0.0)
+    """A gate with a round 10 px/frame limit and no slack, so reaches are easy to read.
+
+    Quoted at the picture's own width, so every pixel here is a picture pixel."""
+    limit = SpeedLimit(width_px=960, fps=30.0, ceiling_px=10.0, slack_px=0.0,
+                       ref_width_px=960)
     return KinematicTracker(limit, **kw)
 
 
@@ -60,6 +63,46 @@ class TestSpeedLimit:
         """A frame missed is a frame the drone kept flying, not a jump."""
         assert ANALOG.reach(1) == 4.0 + 25.0
         assert ANALOG.reach(3) == 4.0 + 75.0
+
+
+class TestResolution:
+    """The ceiling, the slack and the moving factor are lengths in the picture, quoted at
+    1440 wide. EXP-031's FIELD `.raw` is what this guards: at 4128 wide an absolute 25 px
+    ceiling was 4x stricter than the analog footage it was tuned on."""
+
+    def test_the_analog_numbers_are_exact_at_960(self):
+        """37.5 and 6 at 1440 read as exactly 25 and 4, so analog runs stay byte-identical."""
+        assert ANALOG.ceiling == 25.0 and ANALOG.slack == 4.0
+
+    def test_the_ceiling_scales_with_width(self):
+        raw = SpeedLimit(width_px=4128, fps=30.0)
+        assert raw.ceiling == pytest.approx(25.0 * 4128 / 960)
+        assert raw.reach(1) == pytest.approx(ANALOG.reach(1) * 4128 / 960)
+
+    def test_a_declared_reference_width_reads_the_numbers_there(self):
+        """A caller holding analog-tuned numbers declares 960 instead of converting them."""
+        tuned = SpeedLimit(width_px=1920, fps=30.0, ceiling_px=25.0, slack_px=4.0,
+                           ref_width_px=960)
+        assert tuned.ceiling == 50.0 and tuned.slack == 8.0
+
+    def test_the_physical_limit_already_follows_the_width(self):
+        """Doubling the width doubles the focal length in pixels, and with it the limit."""
+        wide = SpeedLimit(width_px=1920, fps=30.0)
+        assert wide.physical_px == pytest.approx(2 * ANALOG.physical_px)
+        assert wide.px_per_frame == pytest.approx(2 * ANALOG.px_per_frame)
+
+    def test_min_move_is_quoted_like_the_limit(self):
+        """The same 5 px moving factor, quoted at 960, is 10 px on a picture twice as wide:
+        a track that moved 8 px passes at 960 and is too still at 1920."""
+        def run(width: float) -> np.ndarray:
+            limit = SpeedLimit(width_px=width, fps=30.0, ceiling_px=10.0, slack_px=0.0,
+                               ref_width_px=960)
+            t = KinematicTracker(limit, min_move=5.0, move_window=2)
+            for f in range(3):
+                res = step(t, f, (100 + 4 * f, 100))
+            return res.reason
+        assert run(960).tolist() == [OK]
+        assert run(1920).tolist() == [TOO_STILL]
 
 
 class TestConfirmation:

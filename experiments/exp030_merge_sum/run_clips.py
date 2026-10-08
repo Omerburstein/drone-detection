@@ -40,7 +40,7 @@ CATCH_2 = dict(name="catch_2", start=441, end=800,
                sky_dump="runs/sofa_analog/exp023_sky_branch/candidates_catch_2_441_800.csv",
                window_dump="runs/sofa_analog/exp024_window_length/seeds_k4_catch_2_441_800.csv",
                config="experiments/exp023_sky_branch/analog_catch_2")
-BASE = ["--top", "3", "--min-draw", "20", "--osd-grid"]
+BASE = ["--top", "3", "--min-draw", "20", "--osd-grid", "--ref-width", "960"]
 VARIANTS = {
     "max_nogate": [],
     "sum_nogate": ["--merge-score", "sum"],

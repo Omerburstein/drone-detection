@@ -11,7 +11,14 @@ apparent size and the cap was inert, because 53% of the seeds sat at the 120 px 
 clamp. Today's blobs are also 0.05-0.16x the airframe's true size, so a size-based range
 would be wrong by 6-20x. `SpeedLimit` therefore converts the limit at an *assumed minimum
 range* -- a target closer than that may move faster than allowed -- and caps the result at
-an absolute px/frame ceiling, so the limit always bites.
+a px/frame ceiling, so the limit always bites.
+
+**Pixels quoted at a reference width.** The ceiling, the slack and the moving factor are
+lengths in the picture, so a number tuned at one resolution is wrong at another: on the
+FIELD `.raw`, 4128 wide, the analog ceiling of 25 px was 4x stricter than on the 960-wide
+footage it came from. Each is therefore quoted at `ref_width_px` (default 1440, as every
+other constant in the project) and read at `width_px` through `src.algo.scale.PixelScale`.
+The physical limit needs no such care: its focal length already comes from the width.
 
 **Hysteresis, not persistence.** A hard m-of-k gate costs recall on this detector:
 EXP-025b's 4 of 5 took the drone in the top 3 from 61 to 27 of 224 frames, because its
@@ -61,6 +68,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .scale import REF_WIDTH, PixelScale
+
 # Reasons a candidate carries out of `KinematicTracker.step`.
 OK = "ok"                    # on a confirmed track: shown
 NEW = "new"                  # strong, no track within reach: started one, overruled
@@ -74,10 +83,11 @@ class SpeedLimit:
     """How far a drone may move in the picture per frame.
 
     The defaults are the analog intercept rig. They use a 40 m/s closing speed (the
-    `docs/edge-budget.md` assumption) and the R1 Mini CCD's 130 degree lens. The ceiling
-    is 25 px at 960 px wide, about 2x the labelled drone's p90 step of 12.67 px on
-    `catch_2`. The slack absorbs blob-centre jitter, which is present even when the target
-    is still.
+    `docs/edge-budget.md` assumption) and the R1 Mini CCD's 130 degree lens. `ceiling_px`
+    and `slack_px` are quoted at `ref_width_px` and scale with `width_px`. The ceiling is
+    37.5 px at 1440 wide, which is 25 px on the 960-wide analog footage, about 2x the
+    labelled drone's p90 step of 12.67 px on `catch_2`. The slack is 6 px at 1440, 4 px at
+    960. It absorbs blob-centre jitter, which is present even when the target is still.
     """
 
     width_px: int
@@ -85,8 +95,24 @@ class SpeedLimit:
     v_max_ms: float = 40.0
     min_range_m: float = 10.0
     hfov_deg: float = 130.0
-    ceiling_px: float = 25.0
-    slack_px: float = 4.0
+    ceiling_px: float = 37.5
+    slack_px: float = 6.0
+    ref_width_px: float = REF_WIDTH
+
+    @property
+    def scale(self) -> PixelScale:
+        """This picture's width against the width the pixel fields are quoted at."""
+        return PixelScale(self.width_px, self.ref_width_px)
+
+    @property
+    def ceiling(self) -> float:
+        """The ceiling in this picture's pixels per frame."""
+        return self.scale.px(self.ceiling_px)
+
+    @property
+    def slack(self) -> float:
+        """The slack in this picture's pixels."""
+        return self.scale.px(self.slack_px)
 
     @property
     def focal_px(self) -> float:
@@ -101,11 +127,11 @@ class SpeedLimit:
     @property
     def px_per_frame(self) -> float:
         """The enforced limit: the physical one, never above the ceiling."""
-        return min(self.physical_px, self.ceiling_px)
+        return min(self.physical_px, self.ceiling)
 
     def reach(self, gap: int) -> float:
         """How far a track last seen `gap` frames ago may be from its last position."""
-        return self.slack_px + self.px_per_frame * gap
+        return self.slack + self.px_per_frame * gap
 
 
 @dataclass(eq=False)
@@ -161,7 +187,9 @@ class KinematicTracker:
     confirm: int = 2
     max_coast: int = 5
     decay: float = 0.8
-    min_move: float = 0.0   # the moving factor: 0 disables it and nothing below changes
+    # The moving factor, quoted at `limit.ref_width_px` like the limit's own pixels. 0
+    # disables it and nothing below changes.
+    min_move: float = 0.0
     move_window: int = 5
     _tracks: list[_Track] = field(default_factory=list, init=False, repr=False)
     _next_id: int = field(default=0, init=False, repr=False)
@@ -205,6 +233,7 @@ class KinematicTracker:
             | self._match(tentative, xy, score, free & strong, frame)
 
         continued_weak, too_still = 0, 0
+        min_move = self.limit.scale.px(self.min_move)
         for t, j in hit.items():
             # Every anchor has been carried forward by each camera motion since it was
             # taken, so this difference is displacement against the static scene.
@@ -225,9 +254,9 @@ class KinematicTracker:
             reason[j] = OK if t.confirmed else UNCONFIRMED
             # Held to the moving factor only once the history actually spans the window;
             # before that there is no measurement, and refusing would kill every new track.
-            if (reason[j] == OK and self.min_move > 0.0
+            if (reason[j] == OK and min_move > 0.0
                     and move_span[j] >= self.move_window
-                    and moved[j] < self.min_move):
+                    and moved[j] < min_move):
                 reason[j] = TOO_STILL
                 too_still += 1
             continued_weak += t.confirmed and not strong[j]

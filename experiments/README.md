@@ -1,4 +1,4 @@
-# experiments/ — the scripts behind EXP-015 to EXP-031
+# experiments/ — the scripts behind EXP-015 to EXP-032
 
 One folder per experiment, holding the code that produced its ledger entry in
 `docs/experiments.md`. Until 2026-10-01 these lived inside the gitignored run folders
