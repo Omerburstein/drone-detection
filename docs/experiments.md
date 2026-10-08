@@ -5195,3 +5195,64 @@ drone. This is a judgement on sampled runs, not a count of frames.
 **Next:** labelling FIELD (the open todo) would turn this run into a score with no re-run.
 The pixel constants in `overlay_split` (merge, ceiling, min-move, min-draw) should scale with
 width like the detector's do, before any comparison across resolutions.
+
+### Added 2026-10-08: the whole FIELD `.raw` in one pass, merge 30, and the episodes at merge 120
+
+The user asked for the episodes at merge 120, the rest of the clip, and one full video, then
+switched the full video to merge 30. `run_field_raw.py --spans all` built dumps for the gaps
+181–1089 and 1554–3129, and `--full` joined all five spans into one overlay over 2–3600. The
+kinematic tracker runs through the whole clip without a break. The window restarts at 181,
+1090, 1554 and 3130, so the first three frames after each restart have a short history.
+Every other setting is unchanged from the addendum above.
+
+- **Cost:** the gap dumps took 09:51–18:10 on 2026-10-08, 5 jobs, after the laptop's
+  overnight sleep paused the batch. A keep-awake helper held idle sleep off from then on.
+  The full render took 18:11–20:46.
+- **Artifacts:** `runs/field/exp031_combined/raw4128/full/`: `all_merge30_2_3600_1080p.mp4`
+  (H.264, 1482x1080, 3599 frames), `.csv`, `_frames.csv`, `.log`, the joined dumps,
+  `first_gap_runs_{181-1089,1554-3129}.png`, `zoom_2951_2990.png` and `context_2965.jpg`.
+  The episode overlays at merge 120 are `<a>_<b>/all_merge120_<a>_<b>_1080p.mp4`.
+
+**Merge 120 barely moves the episodes.** Episodes 1 and 3 are unchanged: 0.14 and 0.95
+shown/frame, #1 in 25 and 416 frames. On episode 2, load is 0.89 against 0.96, #1 in 388
+frames against 383, and #1 jumps over 29 px rise from 18 to 29 of about 375 pairs. 120 px
+at 4128 wide is 30 px in mp4 pixels, and at this range the drone is bigger than the bubble.
+
+| full pass, merge 30 | frames | shown/frame | #1 frames | #1 runs (≥ 5 frames) |
+| --- | ---: | ---: | ---: | ---: |
+| episode 2–180 | 179 | 0.14 | 25 | 2 |
+| gap 181–1089 | 909 | 0.11 | 87 | 9 |
+| episode 1090–1553 | 464 | 1.04 | 387 | 4 |
+| gap 1554–3129 | 1576 | 0.25 | 324 | 16 |
+| episode 3130–3600 | 471 | 0.95 | 416 | 5 |
+| **whole clip** | **3599** | **0.40** | | |
+
+The episodes match the per-episode runs to within the tracker's warm start.
+
+**Eyeballed: in the gaps, 2 of the 25 runs of 5 or more #1 frames are the drone.** Every
+such run was cut at 4 evenly spaced frames, with no random seed: 100 crops at 256 px from
+the `.raw`. Judged by eye; not a precision.
+
+- **Gap 181–1089, 9 runs.** 1089–1110 is the drone, episode 2 starting one frame early. The
+  other 8 (32 crops) are trees on the skyline at 327–506 and a rock edge at 994–1000.
+- **Gap 1554–3129, 16 runs.** 14 are clutter: tree silhouettes on the ridge against bright
+  sky at 1834–1945 (c 200–260, including the longest run, 1862–1933, 71 frames) and 2363–2381,
+  dark scrub at 2028–2032, skyline slope at 2090–2106 and 2176–2180, white rock and rubble at
+  2184–2257, and empty sky at 2383–2387.
+- **2951–2973 and 2978–2990 are the drone: a fourth episode, against terrain.** Zoomed, it is
+  plainly the hexacopter, with arms, lights and slung payload resolved. It is far off against
+  a dark forested valley, about 15–20 px here and about 4–5 px in the mp4. It is visible from
+  at least 2940, before the run starts, and is gone by 2996. **This sighting is not among
+  PROVENANCE's three episodes**, whose bounds came from EXP-010's boxes. EXP-010's run was
+  deleted on 2026-10-07, so whether it fired here cannot be checked. This is the small,
+  ground-clutter case the project is about, found because the raw has 4x the pixels.
+
+**The kinematic gate keeps static clutter that the camera's motion moves.** A ridge-top tree
+held #1 for 71 frames at c about 230. The moving factor measures travel against the static
+scene and should overrule it, but it does not. Two possible causes: the merged object's
+centre drifts as the silhouette changes against the sky, or the homography fails on a
+ridge-and-sky frame. Neither was checked.
+
+**Read with:** no labels, so everything here is load plus eyeballing. The gap judgements
+cover runs of 5 or more frames only. 95 shorter #1 runs in the gaps (22 + 73) were not looked at,
+and a drone among them would not show up on these sheets.
